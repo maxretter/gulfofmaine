@@ -1,0 +1,10 @@
+{
+  "table": {
+    "columnNames": ["time_modified"],
+    "columnTypes": ["String"],
+    "columnUnits": ["UTC"],
+    "rows": [
+      ["2026-09-28T16:32:11Z"]
+    ]
+  }
+}

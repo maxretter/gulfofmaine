@@ -1,0 +1,54 @@
+# docker compose up -d --build
+# The site is on http://localhost:8000 once the first sync finishes (about a minute).
+name: gom-heatwaves
+
+x-app: &app
+  build: .
+  image: gom-heatwaves
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: postgresql+psycopg://heatwaves:${POSTGRES_PASSWORD:?set it in .env}@db/heatwaves
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heatwaves
+      POSTGRES_DB: heatwaves
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      - db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "heatwaves"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    <<: *app
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      # Fails if the sync job has fallen behind, as well as if the app is down.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 3m
+
+  sync:
+    <<: *app
+    command: ["python", "-m", "heatwaves.sync", "--every", "3600"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  db:

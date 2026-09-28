@@ -1,0 +1,161 @@
+/* Colours are roles, defined once. Category and heat-day ramps were checked
+   with a palette validator: monotone lightness, one hue family, and the light
+   end at 2:1 or better against the chart surface. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --link: #1c5cab;
+  --observed: #2a78d6;
+  --neutral: #f0efec;
+
+  /* Heatwave categories: Moderate, Strong, Severe, Extreme. */
+  --cat-1: #e39200;
+  --cat-2: #e0590f;
+  --cat-3: #b3301a;
+  --cat-4: #5e1606;
+
+  --radius: 10px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.5 var(--font);
+}
+
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+h1, h2 { line-height: 1.2; font-weight: 650; }
+h1 { font-size: clamp(1.6rem, 3.5vw, 2.25rem); margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+code { font-size: 0.9em; background: var(--neutral); padding: 0.05em 0.3em; border-radius: 4px; }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+/* --- Header and footer --- */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
+.site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; min-height: 56px; }
+.wordmark { color: var(--ink); font-weight: 650; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; }
+.wordmark .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cat-2); }
+.site-header nav { display: flex; gap: 1.25rem; font-size: 0.95rem; }
+.site-header nav a { color: var(--ink-2); text-decoration: none; }
+.site-header nav a:hover { color: var(--ink); text-decoration: underline; }
+
+.site-footer { margin-top: 3rem; padding: 1.5rem 0 2.5rem; border-top: 1px solid var(--border); color: var(--ink-2); font-size: 0.875rem; }
+.site-footer p { margin: 0 0 0.5rem; max-width: 70ch; }
+
+/* --- Page sections --- */
+.intro { padding: 2rem 0 1rem; }
+.lead { color: var(--ink-2); font-size: 1.05rem; max-width: 68ch; margin: 0; }
+.crumb { margin: 1.5rem 0 0; font-size: 0.9rem; }
+.code { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--ink); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  min-width: 0;
+}
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.caption { color: var(--ink-2); font-size: 0.9rem; margin: -0.25rem 0 0.75rem; }
+
+.now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.now .card { margin-bottom: 0; }
+.now + .card { margin-top: 1rem; }
+@media (max-width: 860px) { .now { grid-template-columns: 1fr; } }
+
+.map-card { margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.map { flex: 1; min-height: 380px; background: var(--neutral); }
+.map .leaflet-tile-pane { filter: saturate(0.3) brightness(1.04); }
+.map-card .legend { padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+
+/* --- Filters: one row above what they scope --- */
+.filters { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+.filter-label { color: var(--ink-2); font-size: 0.9rem; }
+.segmented { display: inline-flex; background: var(--neutral); border-radius: 8px; padding: 3px; }
+.segmented a { padding: 0.3rem 0.9rem; border-radius: 6px; color: var(--ink-2); text-decoration: none; font-size: 0.95rem; }
+.segmented a:hover { color: var(--ink); }
+.segmented a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(11, 11, 11, 0.12); }
+.select { font: inherit; padding: 0.3rem 0.6rem; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); color: var(--ink); }
+
+.link-button { font: inherit; font-size: 0.9rem; color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+/* --- Tables --- */
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+th, td { text-align: left; padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+thead th { color: var(--ink-2); font-weight: 500; font-size: 0.85rem; border-bottom-color: var(--axis); }
+tbody th { font-weight: 400; }
+tbody th a { color: var(--ink); text-decoration: none; }
+tbody th a:hover { text-decoration: underline; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scroll-x { overflow-x: auto; }
+.events { min-width: 560px; }
+
+/* --- Status: a shaped swatch beside a text label, never colour alone --- */
+.state { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.state.muted { color: var(--ink-2); }
+td .state { white-space: normal; align-items: baseline; }
+td .swatch { position: relative; top: 1px; }
+.buoy-name { display: block; color: var(--ink-2); font-size: 0.85rem; }
+tr.offline td { color: var(--ink-2); }
+.events.collapsed tr.more { display: none; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.swatch.square { border-radius: 2px; }
+.swatch.cat-1 { background: var(--cat-1); }
+.swatch.cat-2 { background: var(--cat-2); }
+.swatch.cat-3 { background: var(--cat-3); }
+.swatch.cat-4 { background: var(--cat-4); }
+.swatch.above { background: var(--surface); box-shadow: inset 0 0 0 2px var(--cat-1); }
+.swatch.normal { background: var(--muted); }
+.swatch.offline { background: transparent; box-shadow: inset 0 0 0 1.5px var(--axis); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.85rem; color: var(--ink-2); }
+.key { display: inline-flex; align-items: center; gap: 0.4rem; }
+.line { width: 18px; height: 0; border-top: 2px solid; }
+.line.observed { border-color: var(--observed); }
+.line.normal { border-color: var(--muted); }
+.line.threshold { border-top: 2px dashed var(--ink-2); }
+
+/* --- Charts --- */
+.chart { overflow-x: auto; }
+.chart svg, .small-multiples svg { display: block; max-width: 100%; height: auto; }
+.small-multiples { display: grid; gap: 0.5rem; transition: opacity 0.15s; }
+.small-multiples.loading, .chart.loading { opacity: 0.45; }
+.panel-title { font-size: 0.85rem; font-weight: 600; color: var(--ink-2); margin: 0.5rem 0 0; }
+.table-view { margin-top: 1rem; max-height: 480px; overflow: auto; }
+.chart-note { color: var(--ink-2); font-size: 0.9rem; }
+
+/* Plot's tooltip, in the page's type. */
+[aria-label="tip"] { font-family: var(--font); }
+
+/* --- Buoy page --- */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.tiles .card { margin: 0; }
+.tile h2 { color: var(--ink-2); font-weight: 500; font-size: 0.9rem; margin-bottom: 0.25rem; }
+.tile p { margin: 0.25rem 0 0; }
+.tile-value { font-size: 2rem; font-weight: 650; line-height: 1.1; }
+.tile-delta { color: var(--ink-2); font-size: 0.9rem; }
+@media (max-width: 700px) { .tiles { grid-template-columns: 1fr; } }
+
+.sources ul { padding-left: 1.2rem; color: var(--ink-2); }
+
+/* --- Methods page --- */
+.prose { max-width: 70ch; padding-top: 1.5rem; }
+.prose h2 { margin-top: 2rem; font-size: 1.2rem; }
+.prose li { margin-bottom: 0.6rem; }
+
+/* --- Leaflet markers and labels --- */
+.buoy-label.leaflet-tooltip { background: var(--surface); border: 1px solid var(--border); box-shadow: none; color: var(--ink); font: 600 12px/1.2 var(--font); padding: 2px 6px; }
+.buoy-label.leaflet-tooltip::before { display: none; }

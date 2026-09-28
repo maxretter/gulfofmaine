@@ -1,0 +1,4 @@
+Error {
+    code=404;
+    message="Not Found: Your query produced no matching results. (No data matches time>=2030-01-01T00:00:00Z because the numeric variable's source min=2001-07-10T02:30:00Z, max=2026-09-28T16:00:00Z, and hasNaN=false.)";
+}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import signed, temp, state_badge %}
+
+{% block title %}{{ buoy.id }} {{ buoy.name }} · Gulf of Maine heatwaves{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="{{ url_for('overview') }}">← All buoys</a></p>
+<section class="intro">
+  <h1><span class="code">{{ buoy.id }}</span> {{ buoy.name }}</h1>
+  {% if buoy.latitude is not none %}
+    <p class="lead">{{ '%.3f'|format(buoy.latitude) }}° N, {{ '%.3f'|format(-buoy.longitude) }}° W.
+    Each chart shows the daily mean temperature against its {{ baseline[0] }}–{{ baseline[1] }} normal and heatwave threshold.</p>
+  {% endif %}
+</section>
+
+<section class="tiles" aria-label="Latest conditions">
+  {% for c in buoy.series %}
+  <div class="card tile">
+    <h2>{{ c.depth }} m</h2>
+    <p class="tile-value">{{ temp(c.temperature) }}</p>
+    <p class="tile-delta">{{ signed(c.anomaly) }} vs normal{% if c.date %} · {{ c.date.strftime('%b %-d') }}{% endif %}</p>
+    <p>{{ state_badge(c) }}</p>
+  </div>
+  {% endfor %}
+</section>
+
+<nav class="filters" aria-label="Period">
+  <label class="filter-label" for="period">Period</label>
+  <select id="period" class="select">
+    <option value="recent">Past 12 months</option>
+    {% for year in years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}
+  </select>
+</nav>
+
+<section class="card">
+  <div class="card-head">
+    <div class="legend" id="series-legend">
+      <span class="key"><span class="line observed" aria-hidden="true"></span>Daily mean</span>
+      <span class="key"><span class="line normal" aria-hidden="true"></span>Normal</span>
+      <span class="key"><span class="line threshold" aria-hidden="true"></span>Heatwave threshold (90th percentile)</span>
+      {% for n, name in categories.items() %}<span class="state"><span class="swatch square cat-{{ n }}" aria-hidden="true"></span>{{ name }}</span>{% endfor %}
+    </div>
+    <button type="button" class="link-button" data-toggle-table="series" aria-expanded="false">Show as table</button>
+  </div>
+  <div id="series-charts" class="small-multiples" data-buoy="{{ buoy.id }}"
+       data-depths="{{ buoy.series|map(attribute='depth')|join(',') }}" data-latest="{{ latest }}"></div>
+  <div id="series-table" class="table-view" hidden></div>
+</section>
+
+<section class="card">
+  <h2>Heatwaves at {{ buoy.id }}</h2>
+  {% if events %}
+  <p class="caption">{{ events|length }} since records began, newest first. Intensity is degrees above the normal for that day.</p>
+  <div class="scroll-x">
+    <table class="events">
+      <thead>
+        <tr>
+          <th scope="col">Depth</th><th scope="col">Start</th><th scope="col">End</th>
+          <th scope="col" class="num">Days</th><th scope="col" class="num">Peak</th><th scope="col" class="num">Mean</th><th scope="col">Category</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr{% if loop.index > 12 %} class="more"{% endif %}>
+          <td>{{ e.depth }} m</td>
+          <td>{{ e.start_date.strftime('%Y-%m-%d') }}</td>
+          <td>{{ e.end_date.strftime('%Y-%m-%d') }}</td>
+          <td class="num">{{ e.duration }}</td>
+          <td class="num">{{ signed(e.max_intensity) }}</td>
+          <td class="num">{{ signed(e.mean_intensity) }}</td>
+          <td><span class="state"><span class="swatch cat-{{ e.category }}" aria-hidden="true"></span>{{ e.category_name }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if events|length > 12 %}<button type="button" class="link-button" id="show-all-events" hidden>Show all {{ events|length }}</button>{% endif %}
+  {% else %}
+  <p>No heatwaves detected yet.</p>
+  {% endif %}
+</section>
+
+<section class="sources">
+  <h2>Data</h2>
+  <ul>
+    {% for c in buoy.series %}
+    <li><a href="{{ c.erddap_url }}">{{ c.dataset_id }}</a> on NERACOOS ERDDAP · <a href="/api/buoys/{{ buoy.id }}/{{ c.depth }}/daily">JSON</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"
+        integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17/dist/plot.umd.min.js"
+        integrity="sha384-JUpn2GgRr0gxU0xOBd8D8P634jhRCwobtG8G2MMEkX1RnGJ7/FJNnuukpfT+H2w1" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', path='charts.js') }}?v={{ asset_version }}"></script>
+<script src="{{ url_for('static', path='buoy.js') }}?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% macro signed(value) -%}
+  {%- if value is none %}–{% elif value|round(1) == 0 %}0.0 °C{% else %}{{ '%+.1f'|format(value)|replace('-', '−') }} °C{% endif -%}
+{%- endmacro %}
+
+{% macro temp(value) -%}
+  {%- if value is none %}–{% else %}{{ '%.1f'|format(value) }} °C{% endif -%}
+{%- endmacro %}
+
+{# Status is never color alone: a shaped swatch plus a text label. #}
+{% macro state_badge(c) -%}
+  {%- if c.state == 'heatwave' -%}
+    <span class="state"><span class="swatch cat-{{ c.category }}" aria-hidden="true"></span>{{ c.category_name }} heatwave · day {{ (c.date - c.event_start).days + 1 }}</span>
+  {%- elif c.state == 'above_threshold' -%}
+    <span class="state"><span class="swatch above" aria-hidden="true"></span>Above threshold · {{ c.days_above }} day{{ 's' if c.days_above != 1 }}</span>
+  {%- elif c.state == 'normal' -%}
+    <span class="state"><span class="swatch normal" aria-hidden="true"></span>No heatwave</span>
+  {%- elif c.state == 'offline' -%}
+    <span class="state muted"><span class="swatch offline" aria-hidden="true"></span>No data since {{ c.date.strftime('%b %-d, %Y') }}</span>
+  {%- else -%}
+    <span class="state muted"><span class="swatch offline" aria-hidden="true"></span>No data yet</span>
+  {%- endif -%}
+{%- endmacro %}
