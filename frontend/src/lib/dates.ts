@@ -19,6 +19,11 @@ export function addDays(value: string, days: number): string {
   return formatDay(new Date(parseDay(value).getTime() + days * DAY_MS));
 }
 
+/** Whole days from `from` to `to`; 0 when they are the same day. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / DAY_MS);
+}
+
 export function minDay(a: string, b: string): string {
   return a < b ? a : b;
 }

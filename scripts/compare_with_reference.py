@@ -21,7 +21,7 @@ import httpx
 import numpy as np
 import pandas as pd
 
-from heatwaves import hobday
+from heatwaves import hobday, qc
 from heatwaves.erddap import Erddap
 from heatwaves.stations import BASELINE
 
@@ -53,11 +53,11 @@ def load_reference(client: httpx.Client, directory: Path):
 
 
 def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
-    raw = erddap.dataset(dataset_id, ["time", "temperature", "temperature_qc", "temperature_qc_agg"])
-    daily = hobday.daily_means(raw)["temperature"]
+    raw = erddap.dataset(dataset_id, qc.columns(["temperature"]))
+    daily = qc.daily_means(raw, "temperature")["value"]
 
-    frame = hobday.align(daily, hobday.climatology(daily, BASELINE))
-    ours = {(e.start, e.end, e.category) for e in hobday.detect_events(frame)}
+    analysis = hobday.analyse(daily, BASELINE)
+    ours = {(e.start, e.end, e.category) for e in analysis.events}
 
     days = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
     ordinals = np.array([day.toordinal() for day in days.date])
@@ -73,7 +73,7 @@ def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
         for s, e, c in zip(found["time_start"], found["time_end"], found["category"], strict=True)
     }
 
-    threshold_gap = np.nanmax(np.abs(clim["thresh"] - frame["threshold"].to_numpy()))
+    threshold_gap = np.nanmax(np.abs(clim["thresh"] - analysis.frame["threshold"].to_numpy()))
     print(
         f"{dataset_id}: {len(ours)} events here, {len(theirs)} in the reference; "
         f"thresholds agree to {threshold_gap:.3f} °C"

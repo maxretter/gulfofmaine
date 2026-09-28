@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { useAnnual } from "../api/queries";
 import type { Buoy, YearSummary } from "../api/types";
 import { colors, heatDayBin, heatDayBins } from "../lib/colors";
+import { daysBetween, formatDay, minDay } from "../lib/dates";
 import { useElementWidth } from "../lib/useElementWidth";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 import { Swatch } from "./StateBadge";
@@ -25,8 +26,7 @@ interface Props {
 
 /** Days in `year` so far: a year counts only if at least half of it was observed. */
 function daysSoFar(year: number): number {
-  const end = Math.min(Date.UTC(year + 1, 0, 1), Date.now());
-  return Math.round((end - Date.UTC(year, 0, 1)) / 86_400_000);
+  return daysBetween(`${year}-01-01`, minDay(`${year + 1}-01-01`, formatDay(new Date())));
 }
 
 export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }: Props) {

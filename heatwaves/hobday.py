@@ -32,12 +32,6 @@ PERCENTILE = 0.9
 MIN_DURATION = 5  # consecutive days above the threshold that make an event
 MAX_GAP = 2  # events this many days apart or closer are joined
 MAX_PAD = 2  # missing-data gaps this long or shorter are interpolated
-MIN_HOURS = 18  # hourly bins a day needs for its mean to count
-
-# UMaine's flag uses 0 for quality_good. The QARTOD aggregate flag uses
-# 3 for suspect and 4 for fail.
-GOOD_UMAINE_FLAG = 0
-BAD_QARTOD_FLAGS = [3, 4]
 
 CATEGORIES = {1: "Moderate", 2: "Strong", 3: "Severe", 4: "Extreme"}
 
@@ -75,29 +69,22 @@ class Status:
     days_above: int  # consecutive days above the threshold, ending on `date`
 
 
-def daily_means(ds: xr.Dataset, min_hours: int = MIN_HOURS) -> pd.DataFrame:
-    """Daily mean temperature from a raw ERDDAP tabledap response.
+@dataclass(frozen=True)
+class Analysis:
+    climatology: xr.Dataset  # from `climatology`
+    frame: pd.DataFrame  # from `align`
+    events: list[Event]
+    status: Status
 
-    `ds` has a single `row` dimension holding `time`, `temperature`,
-    `temperature_qc` and `temperature_qc_agg`. Rows either flag marks as bad
-    are dropped. Readings are averaged into hourly bins before the daily mean,
-    so that a day's value doesn't depend on the sampling rate, which has been
-    hourly and half-hourly over the buoys' history. Days with fewer than
-    `min_hours` hourly bins are left out.
 
-    Returns a frame indexed by UTC day, with `temperature` and `hours` columns.
+def analyse(temperature: pd.Series, baseline: tuple[int, int]) -> Analysis:
+    """The whole method in one call: climatology, aligned frame, events and latest status.
+
+    Raises InsufficientData if the baseline has too little data.
     """
-    ds = ds.set_coords("time").swap_dims(row="time")
-    good = (ds["temperature_qc"] == GOOD_UMAINE_FLAG) & ~ds["temperature_qc_agg"].isin(BAD_QARTOD_FLAGS)
-    temperature = ds["temperature"].where(good).dropna("time").to_series().sort_index()
-
-    # Resampled in pandas: for one long 1-D series it is about a thousand
-    # times faster than xarray's resample without the optional flox package.
-    by_day = temperature.resample("1h").mean().resample("1D")
-    daily = pd.DataFrame({"temperature": by_day.mean(), "hours": by_day.count()})
-    daily = daily[daily["hours"] >= min_hours]
-    daily.index = pd.DatetimeIndex(daily.index, name="date")
-    return daily
+    stats = climatology(temperature, baseline)
+    frame = align(temperature, stats)
+    return Analysis(stats, frame, detect_events(frame), latest_status(frame))
 
 
 def day_of_year(days: pd.DatetimeIndex) -> np.ndarray:

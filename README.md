@@ -35,16 +35,18 @@ data.neracoos.org   hourly   xarray, pandas            JSON API    serves the   
                                                                    /api
 ```
 
-- **Incremental sync.** Every row in these ERDDAP datasets carries a
-  `time_modified` stamp. Each hour the sync job asks ERDDAP for the newest
-  stamp and the span of days touched since its last visit (two tiny requests,
-  reduced server-side with `orderByMax` and `orderByMinMax`), then downloads
-  only those whole days as NetCDF. When UMaine replaces real-time data with
-  post-recovery data, the reprocessed days come in the same way. The first run
-  reads about 25 years for 18 series in under a minute.
-- **Quality control and daily means.** Readings flagged bad by UMaine's own flag,
-  or suspect/failed by the QARTOD aggregate flag, are dropped. The rest are
-  averaged into hourly bins, then into UTC days; a day needs 18 hours of data.
+- **Incremental sync** ([`heatwaves/sources.py`](heatwaves/sources.py)).
+  Every row in these ERDDAP datasets carries a `time_modified` stamp. Each
+  hour the sync job asks ERDDAP for the newest stamp and the span of days
+  touched since its last visit (two tiny requests, reduced server-side with
+  `orderByMax` and `orderByMinMax`), then downloads only those whole days as
+  NetCDF. When UMaine replaces real-time data with post-recovery data, the
+  reprocessed days come in the same way. The first run reads about 25 years
+  for 18 series in under a minute.
+- **Quality control and daily means** ([`heatwaves/qc.py`](heatwaves/qc.py)).
+  Readings flagged bad by UMaine's own flag, or suspect/failed by the QARTOD
+  aggregate flag, are dropped. The rest are averaged into hourly bins, then
+  into UTC days; a day needs 18 hours of data.
 - **Heatwave detection** ([`heatwaves/hobday.py`](heatwaves/hobday.py)) follows
   Hobday et al. (2016) and (2018): a seasonal normal and 90th-percentile threshold
   from an 11-day window pooled over 2003–2022 and smoothed over 31 days;
@@ -134,8 +136,9 @@ cd frontend && npm run lint && npm test && npm run build   # build includes the 
 uv run --with scipy scripts/compare_with_reference.py      # needs network
 ```
 
-The sync tests replay real ERDDAP responses recorded in `tests/data`; the
-climatology and event tests use synthetic series with known answers.
+The sync tests replay real ERDDAP responses recorded in `tests/data` (listed
+by URL pattern in `tests/conftest.py`); the climatology and event tests use
+synthetic series with known answers.
 
 Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT` and `SYNC_STALE_AFTER_HOURS` (see
@@ -146,12 +149,14 @@ Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 
 ```
 heatwaves/
-  hobday.py      heatwave science: daily means, climatology, events (no I/O)
+  hobday.py      heatwave science: climatology, events, status (no I/O)
+  qc.py          quality flags and daily means, for any variable (no I/O)
   erddap.py      the few ERDDAP tabledap requests the app makes
-  sync.py        incremental sync and recompute (python -m heatwaves.sync)
+  sources.py     what changed at each data source since the last sync
+  sync.py        store, recompute, and the sync job (python -m heatwaves.sync)
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
   api.py         JSON API; main.py wires up the FastAPI app
-  stations.py    the buoys, depths and baseline tracked
+  stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
   pages/         explorer, heatwaves list, methods
   components/    map, heatmap, range brush, depth charts, tables

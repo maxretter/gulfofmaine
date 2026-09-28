@@ -11,7 +11,7 @@ import { EventList } from "../components/EventList";
 import { RangeBrush } from "../components/RangeBrush";
 import { StateBadge, StateLegend, Swatch } from "../components/StateBadge";
 import { categories, colors } from "../lib/colors";
-import { addDays, maxDay, minDay, parseDay } from "../lib/dates";
+import { addDays, daysBetween, maxDay, minDay } from "../lib/dates";
 import { eventsInRange } from "../lib/events";
 import { formatDate, formatSigned, formatTemp } from "../lib/format";
 import { DEPTHS, useExplorerState } from "../state/explorer";
@@ -178,7 +178,7 @@ export function ExplorerPage() {
           </div>
           <p className="range-label">
             {formatDate(from)} – {formatDate(to)} ·{" "}
-            {Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / 86_400_000) + 1} days
+            {daysBetween(from, to) + 1} days
           </p>
         </div>
         <RangeBrush

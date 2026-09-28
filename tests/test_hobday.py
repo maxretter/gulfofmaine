@@ -3,52 +3,9 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 import pytest
-import xarray as xr
 
 from heatwaves import hobday
 from tests.conftest import seasonal_temperatures
-
-
-def raw_rows(times, temperatures, umaine_flags, qartod_flags) -> xr.Dataset:
-    """Rows shaped like an ERDDAP tabledap NetCDF response."""
-    return xr.Dataset(
-        {
-            "temperature": ("row", np.asarray(temperatures, dtype="float32")),
-            "temperature_qc": ("row", np.asarray(umaine_flags, dtype="float32")),
-            "temperature_qc_agg": ("row", np.asarray(qartod_flags, dtype="float32")),
-        },
-        coords={"time": ("row", pd.to_datetime(times))},
-    )
-
-
-def test_daily_means_drop_flagged_readings_and_thin_days():
-    # Day one: 48 half-hourly readings of 10 degrees, plus a bad reading from
-    # each flag at the same times as good ones. Day two: 10 hours of data.
-    day_one = pd.date_range("2026-01-01", periods=48, freq="30min")
-    day_two = pd.date_range("2026-01-02", periods=10, freq="1h")
-    times = [*day_one, day_one[0], day_one[1], *day_two]
-    temperatures = [10.0] * 48 + [99.0, -99.0] + [12.0] * 10
-    umaine = [0] * 48 + [2, 0] + [0] * 10
-    qartod = [1] * 48 + [1, 4] + [1] * 10
-
-    daily = hobday.daily_means(raw_rows(times, temperatures, umaine, qartod))
-
-    assert list(daily.index) == [pd.Timestamp("2026-01-01")]
-    assert daily.loc["2026-01-01", "temperature"] == pytest.approx(10.0)
-    assert daily.loc["2026-01-01", "hours"] == 24
-
-
-def test_daily_means_weight_hours_equally_whatever_the_sampling_rate():
-    # Twelve hours at 5 degrees sampled every 10 minutes, twelve at 15 sampled
-    # hourly: the mean of hourly bins is 10, not the 7.9 of the raw readings.
-    fast = pd.date_range("2026-01-01T00:00", "2026-01-01T11:50", freq="10min")
-    slow = pd.date_range("2026-01-01T12:00", "2026-01-01T23:00", freq="1h")
-    times = [*fast, *slow]
-    temperatures = [5.0] * len(fast) + [15.0] * len(slow)
-
-    daily = hobday.daily_means(raw_rows(times, temperatures, [0] * len(times), [1] * len(times)))
-
-    assert daily["temperature"].iloc[0] == pytest.approx(10.0)
 
 
 def test_day_of_year_gives_feb_29_its_own_slot():

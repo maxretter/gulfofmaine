@@ -1,3 +1,5 @@
+import { parseDay } from "./dates";
+
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -18,5 +20,5 @@ export function formatSigned(value: number | null | undefined): string {
 }
 
 export function formatDate(value: string | Date): string {
-  return dateFormat.format(typeof value === "string" ? new Date(`${value}T00:00:00Z`) : value);
+  return dateFormat.format(typeof value === "string" ? parseDay(value) : value);
 }

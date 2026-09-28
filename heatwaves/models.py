@@ -41,15 +41,21 @@ class Buoy(Base):
 
 
 class Series(Base):
-    """Temperature at one depth on one buoy: one ERDDAP dataset."""
+    """One variable at one depth on one buoy, from one source (see heatwaves.stations).
+
+    Series at the same buoy, depth and source are fetched together, in one
+    request for all their variables.
+    """
 
     __tablename__ = "series"
-    __table_args__ = (UniqueConstraint("buoy_id", "depth"),)
+    __table_args__ = (UniqueConstraint("buoy_id", "depth", "variable", "source"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     buoy_id: Mapped[str] = mapped_column(ForeignKey("buoy.id"))
     depth: Mapped[int]  # metres
-    dataset_id: Mapped[str] = mapped_column(unique=True)
+    variable: Mapped[str]  # e.g. temperature
+    source: Mapped[str]  # e.g. buoy
+    dataset_id: Mapped[str]
 
     # Newest ERDDAP time_modified already read; the next sync starts from here.
     modified_through: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
@@ -57,7 +63,7 @@ class Series(Base):
 
     # Conditions on the most recent day with data.
     latest_date: Mapped[dt.date | None]
-    latest_temperature: Mapped[float | None]
+    latest_value: Mapped[float | None]
     latest_climatology: Mapped[float | None]
     latest_threshold: Mapped[float | None]
     days_above: Mapped[int] = mapped_column(default=0)
@@ -70,7 +76,7 @@ class DailyMean(Base):
 
     series_id: Mapped[int] = mapped_column(ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
     date: Mapped[dt.date] = mapped_column(primary_key=True)
-    temperature: Mapped[float]  # degrees C
+    value: Mapped[float]  # in the variable's units: degrees C for temperature
     hours: Mapped[int]  # hourly bins behind the mean
 
 

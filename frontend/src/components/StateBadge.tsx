@@ -1,6 +1,6 @@
 import type { Condition } from "../api/types";
 import { categories, colors } from "../lib/colors";
-import { parseDay } from "../lib/dates";
+import { daysBetween } from "../lib/dates";
 import { formatDate } from "../lib/format";
 import { stateLook, type Variant } from "../lib/state";
 
@@ -17,7 +17,7 @@ export function Swatch({ color, variant = "dot" }: { color: string; variant?: Va
 function label(condition: Condition): string {
   switch (condition.state) {
     case "heatwave": {
-      const day = (parseDay(condition.date!).getTime() - parseDay(condition.event_start!).getTime()) / 86_400_000 + 1;
+      const day = daysBetween(condition.event_start!, condition.date!) + 1;
       return `${condition.category_name} heatwave · day ${day}`;
     }
     case "above_threshold":

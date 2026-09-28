@@ -127,8 +127,8 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
         state = "normal"
 
     anomaly = None
-    if series.latest_temperature is not None and series.latest_climatology is not None:
-        anomaly = series.latest_temperature - series.latest_climatology
+    if series.latest_value is not None and series.latest_climatology is not None:
+        anomaly = series.latest_value - series.latest_climatology
     return Condition(
         depth=series.depth,
         dataset_id=series.dataset_id,
@@ -136,7 +136,7 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
         state=state,
         first_date=first_date,
         date=series.latest_date,
-        temperature=series.latest_temperature,
+        temperature=series.latest_value,
         climatology=series.latest_climatology,
         anomaly=anomaly,
         threshold=series.latest_threshold,
@@ -211,7 +211,7 @@ def daily(
         raise HTTPException(404, f"No climatology yet for {series.dataset_id}")
     temperatures = dict(
         session.execute(
-            select(DailyMean.date, DailyMean.temperature).where(
+            select(DailyMean.date, DailyMean.value).where(
                 DailyMean.series_id == series.id, DailyMean.date.between(start, end)
             )
         ).all()
