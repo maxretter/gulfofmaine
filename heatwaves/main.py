@@ -1,16 +1,14 @@
-"""The web application: the JSON API, the HTML pages and a health check.
+"""The JSON API and a health check. The React frontend in frontend/ is served separately.
 
 uvicorn heatwaves.main:app
 """
 
-from pathlib import Path
-
 from fastapi import FastAPI, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
-from heatwaves import api, pages
+from heatwaves import api
 from heatwaves.api import SessionDep
 from heatwaves.config import settings
 from heatwaves.models import Series
@@ -18,12 +16,12 @@ from heatwaves.models import Series
 app = FastAPI(
     title="Gulf of Maine heatwaves",
     summary="Marine heatwaves at NERACOOS buoys, at 1, 20 and 50 m, from NERACOOS ERDDAP.",
-    version="0.1.0",
+    version="0.2.0",
     redoc_url=None,
 )
 app.include_router(api.router)
-app.include_router(pages.router)
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+# A buoy's full daily record is ~1 MB of JSON; it compresses about tenfold.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.middleware("http")

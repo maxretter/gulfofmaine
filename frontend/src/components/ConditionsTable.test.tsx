@@ -1,0 +1,75 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { Buoy, Condition } from "../api/types";
+import { ConditionsTable } from "./ConditionsTable";
+
+afterEach(cleanup);
+
+function condition(overrides: Partial<Condition>): Condition {
+  return {
+    depth: 1,
+    dataset_id: "A01_ocean_001m",
+    erddap_url: "https://data.neracoos.org/erddap/tabledap/A01_ocean_001m.html",
+    state: "normal",
+    first_date: "2001-07-10",
+    date: "2026-09-27",
+    temperature: 14.9,
+    climatology: 16.2,
+    anomaly: -1.3,
+    threshold: 17.6,
+    days_above: 0,
+    category: null,
+    category_name: null,
+    event_start: null,
+    synced_at: "2026-09-28T16:51:00Z",
+    ...overrides,
+  };
+}
+
+const buoys: Buoy[] = [
+  { id: "A01", name: "Massachusetts Bay", latitude: 42.5, longitude: -70.6, series: [condition({})] },
+  {
+    id: "B01",
+    name: "Western Maine Shelf",
+    latitude: 43.2,
+    longitude: -70.4,
+    series: [
+      condition({
+        state: "heatwave",
+        temperature: 17.6,
+        anomaly: 2.2,
+        category: 1,
+        category_name: "Moderate",
+        event_start: "2026-09-21",
+      }),
+    ],
+  },
+  {
+    id: "M01",
+    name: "Jordan Basin",
+    latitude: 43.5,
+    longitude: -67.9,
+    series: [condition({ state: "offline", date: "2025-09-14", anomaly: 2.1 })],
+  },
+];
+
+describe("ConditionsTable", () => {
+  it("labels every state in words, not just colour", () => {
+    render(<ConditionsTable buoys={buoys} depth={1} selected="A01" onSelect={() => {}} />);
+    expect(screen.getByText("No heatwave")).toBeTruthy();
+    expect(screen.getByText("Moderate heatwave · day 7")).toBeTruthy();
+    expect(screen.getByText("No data since Sep 14, 2025")).toBeTruthy();
+    expect(screen.getByText("−1.3 °C")).toBeTruthy();
+  });
+
+  it("selects a buoy from its row, and marks the selected one", () => {
+    const onSelect = vi.fn();
+    render(<ConditionsTable buoys={buoys} depth={1} selected="A01" onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /B01/ }));
+
+    expect(onSelect).toHaveBeenCalledWith("B01");
+    expect(screen.getByRole("button", { name: /A01/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+});

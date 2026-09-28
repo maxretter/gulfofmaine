@@ -37,6 +37,8 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     assert condition["category"] == ongoing.category
     assert condition["event_start"] == ongoing.start_date.isoformat()
     assert condition["anomaly"] > 1.5
+    assert condition["first_date"] == "2003-01-01"
+    assert condition["synced_at"] is not None
 
 
 def test_daily_series_keeps_gaps_as_nulls(client, heatwave_now):
@@ -63,10 +65,3 @@ def test_health_check_fails_when_sync_stops(client, session, heatwave_now):
     response = client.get("/healthz")
     assert response.status_code == 503
     assert response.json()["status"] == "stale"
-
-
-def test_pages_render(client, heatwave_now):
-    for path in ("/", "/?depth=1", "/buoys/A01", "/about"):
-        response = client.get(path)
-        assert response.status_code == 200, path
-    assert "heatwave · day" in client.get("/").text

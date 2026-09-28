@@ -1,14 +1,14 @@
 # Gulf of Maine heatwaves, below the surface
 
 Live marine heatwave status at 1, 20 and 50 metres on six University of Maine
-buoys in the Gulf of Maine, with the full record back to 2001. It reads
-NERACOOS's ERDDAP server hourly, applies the standard marine heatwave
-definition (Hobday et al. 2016) to each depth, and serves the result as a
-small web app and a JSON API.
+buoys in the Gulf of Maine, with the full record back to 2001. A Python job
+reads NERACOOS's ERDDAP server hourly and applies the standard marine heatwave
+definition (Hobday et al. 2016) to each depth; a FastAPI JSON API serves the
+results to a React app for exploring them.
 
 **Live site:** _coming soon_ · **API docs:** `/docs` on the live site
 
-![Overview: map of buoy status at 50 m and a heatmap of heatwave days per year, 2001–2026](docs/overview.png)
+![Explorer: map of buoy status at 50 m, the latest conditions, and a heatmap of heatwave days per year, 2001–2026](docs/explorer.png)
 
 ## Why
 
@@ -24,14 +24,15 @@ logged 1,046 and 1,033 heatwave days, against 566 at 1 m. The longest event in
 the record ran 163 days at 20 m at F01 (West Penobscot Bay), from June to
 November 2021. (Figures as of 2026-09-28.)
 
-![Buoy page: daily temperature at three depths against the normal and heatwave threshold](docs/buoy.png)
+![Detail panel for F01 in 2021: the full record with a brushed range, and daily temperature at three depths against the normal and heatwave threshold](docs/detail.png)
 
 ## How it works
 
 ```
-NERACOOS ERDDAP ──NetCDF──▶ sync job ──▶ Postgres ──▶ FastAPI ──▶ browser
-data.neracoos.org   hourly   xarray, pandas            JSON API   Leaflet map,
-                                                       + pages    Observable Plot
+NERACOOS ERDDAP ──NetCDF──▶ sync job ──▶ Postgres ──▶ FastAPI ──▶ Caddy ──▶ React app
+data.neracoos.org   hourly   xarray, pandas            JSON API    serves the   Leaflet, Observable Plot,
+                                                                   app, proxies TanStack Query
+                                                                   /api
 ```
 
 - **Incremental sync.** Every row in these ERDDAP datasets carries a
@@ -59,6 +60,31 @@ data.neracoos.org   hourly   xarray, pandas            JSON API   Leaflet map,
   furthest above normal in multiples of the threshold's distance, not from the
   warmest day.)
 
+### Frontend
+
+A React 19 + TypeScript single-page app in [`frontend/`](frontend), built with
+Vite. Everything on screen is linked:
+
+- **Linked views.** Clicking a buoy on the map or in the conditions table, or a
+  cell in the heatwave-days heatmap (say F01 · 2021), updates the detail panel in
+  place. The view lives in the URL (`/?buoy=F01&depth=20&from=2021-05-01&to=2021-12-31`),
+  so any view can be bookmarked or shared and the back button works.
+- **Zoomable time range.** A strip showing a buoy's whole record, with heatwaves
+  shaded, sits above the detailed charts; drag across it to pick any period.
+  Presets and heatmap clicks move the brush too.
+- **Synchronized hover.** One chart per depth shares a time axis; hovering any of
+  them moves a crosshair across all three and reads out every depth's
+  temperature, anomaly and heatwave status for that day.
+- **Heatwaves explorer** (`/events`). All ~690 events, filterable by buoy, depth,
+  year and category and sortable by date, length, intensity or category, with
+  the filters in the URL. Each row opens the explorer zoomed to that event.
+
+TanStack Query caches API responses, and a period that is still loading keeps
+the previous charts on screen, dimmed. Charts use Observable Plot inside a small React
+wrapper; the brush is d3-brush on top of a Plot chart. Every chart has a
+table view. Data colours come from two ordinal ramps checked for lightness
+order, hue spread and contrast.
+
 ### API
 
 | Endpoint | Returns |
@@ -81,26 +107,31 @@ cp .env.example .env        # set POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-Compose runs Postgres, a one-off `alembic upgrade head`, the web app on
-<http://localhost:8000>, and the hourly sync job. Data appears after the first
-sync, about a minute later.
+Compose runs Postgres, a one-off `alembic upgrade head`, the API, the hourly
+sync job, and the frontend: Caddy serving the built app on
+<http://localhost:8000> and forwarding `/api`, `/docs` and `/healthz` to the
+API, so the browser sees a single origin. Data appears after the first sync,
+about a minute later.
 
-Without Docker, using [uv](https://docs.astral.sh/uv/) and SQLite:
+For development, run the backend with [uv](https://docs.astral.sh/uv/) and
+SQLite, and the frontend with Vite, which forwards API requests to uvicorn:
 
 ```sh
 uv sync
 uv run alembic upgrade head
 uv run python -m heatwaves.sync           # add --every 3600 to keep going
 uv run uvicorn heatwaves.main:app --reload
+
+cd frontend && npm install && npm run dev  # http://localhost:5173
 ```
 
-Tests use SQLite by default; set `TEST_DATABASE_URL` to run them against
-Postgres, as CI does:
+Checks, as CI runs them:
 
 ```sh
-uv run pytest
+uv run pytest                                  # SQLite; set TEST_DATABASE_URL for Postgres
 uv run ruff check . && uv run ruff format --check .
-uv run --with scipy scripts/compare_with_reference.py   # needs network
+cd frontend && npm run lint && npm test && npm run build   # build includes the type check
+uv run --with scipy scripts/compare_with_reference.py      # needs network
 ```
 
 The sync tests replay real ERDDAP responses recorded in `tests/data`; the
@@ -119,11 +150,16 @@ heatwaves/
   erddap.py      the few ERDDAP tabledap requests the app makes
   sync.py        incremental sync and recompute (python -m heatwaves.sync)
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
-  api.py         JSON API
-  pages.py       server-rendered pages; templates/ and static/ hold the front end
+  api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the buoys, depths and baseline tracked
+frontend/src/
+  pages/         explorer, heatwaves list, methods
+  components/    map, heatmap, range brush, depth charts, tables
+  api/           typed API client and TanStack Query hooks
+  state/         explorer view <-> URL
+  lib/           dates, formatting, colours, event filtering
 scripts/         comparison with the reference implementation
-tests/
+tests/           backend tests; frontend tests sit beside their code
 ```
 
 ## Decisions and limitations
@@ -136,8 +172,10 @@ tests/
   down, pushing 50 m temperatures well above normal within a day or two. The
   Methods page says so; a heatwave there is still real for anything living at
   that depth.
-- **Tables render on the server; charts are drawn in the browser.** Every number
-  is readable without JavaScript, and every chart has a table view.
+- **A separate frontend, one origin.** The API serves only JSON; the React app is
+  static files behind Caddy, which proxies `/api`. No CORS configuration, and
+  the two can be deployed and scaled independently. The trade-off is that the
+  site needs JavaScript; the API remains usable on its own.
 - **pandas for resampling.** xarray opens the NetCDF and computes the
   climatology, but resampling one long 1-D series is about 1,000× faster in pandas
   than in xarray without the optional `flox` package.

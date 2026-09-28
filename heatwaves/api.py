@@ -31,7 +31,8 @@ class Condition(BaseModel):
     dataset_id: str
     erddap_url: str
     state: State
-    date: dt.date | None
+    first_date: dt.date | None  # first day with data
+    date: dt.date | None  # most recent day with data
     temperature: float | None
     climatology: float | None
     anomaly: float | None  # temperature minus climatology
@@ -40,6 +41,7 @@ class Condition(BaseModel):
     category: int | None  # of the heatwave in progress
     category_name: str | None
     event_start: dt.date | None
+    synced_at: dt.datetime | None  # when the sync job last checked ERDDAP
 
 
 class BuoyOut(BaseModel):
@@ -92,19 +94,27 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
         event.series_id: event
         for event in session.scalars(select(Event).join(Series).where(Event.end_date == Series.latest_date))
     }
+    first_dates = dict(
+        session.execute(
+            select(DailyMean.series_id, func.min(DailyMean.date)).group_by(DailyMean.series_id)
+        ).all()
+    )
     return [
         BuoyOut(
             id=buoy.id,
             name=buoy.name,
             latitude=buoy.latitude,
             longitude=buoy.longitude,
-            series=[describe(series, ongoing.get(series.id), on) for series in buoy.series],
+            series=[
+                describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
+                for series in buoy.series
+            ],
         )
         for buoy in buoys
     ]
 
 
-def describe(series: Series, ongoing: Event | None, on: dt.date) -> Condition:
+def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, on: dt.date) -> Condition:
     if series.latest_date is None:
         state = "no_data"
     elif on - series.latest_date > OFFLINE_AFTER:
@@ -124,6 +134,7 @@ def describe(series: Series, ongoing: Event | None, on: dt.date) -> Condition:
         dataset_id=series.dataset_id,
         erddap_url=f"{settings.erddap_url}/tabledap/{series.dataset_id}.html",
         state=state,
+        first_date=first_date,
         date=series.latest_date,
         temperature=series.latest_temperature,
         climatology=series.latest_climatology,
@@ -133,6 +144,7 @@ def describe(series: Series, ongoing: Event | None, on: dt.date) -> Condition:
         category=ongoing.category if ongoing else None,
         category_name=ongoing.category_name if ongoing else None,
         event_start=ongoing.start_date if ongoing else None,
+        synced_at=series.synced_at,
     )
 
 
