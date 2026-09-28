@@ -29,11 +29,12 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - run: uv run ty check
       - name: Migrations apply cleanly and match the models
         run: |
           uv run alembic upgrade head
           uv run alembic check
-      - run: uv run pytest
+      - run: uv run pytest --cov # fails below the floor in pyproject.toml
 
   frontend:
     runs-on: ubuntu-latest

@@ -58,9 +58,9 @@ class TabledapSource:
 
     def fetch(self, series: Sequence[Series]) -> Download | None:
         dataset_id = series[0].dataset_id
-        stamps = [s.modified_through for s in series]
+        stamps = [s.modified_through for s in series if s.modified_through is not None]
         # A series new to this dataset has no stamp, so the whole dataset is read.
-        seen = None if None in stamps else min(stamps)
+        seen = min(stamps) if len(stamps) == len(series) else None
         since = [f"time_modified>{format_time(seen - self.OVERLAP)}"] if seen is not None else []
 
         newest = self.erddap.rows(dataset_id, ["time_modified"], [*since, 'orderByMax("time_modified")'])

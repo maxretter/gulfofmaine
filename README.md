@@ -130,8 +130,9 @@ cd frontend && npm install && npm run dev  # http://localhost:5173
 Checks, as CI runs them:
 
 ```sh
-uv run pytest                                  # SQLite; set TEST_DATABASE_URL for Postgres
+uv run pytest --cov      # fails under 90% coverage; SQLite unless TEST_DATABASE_URL is set
 uv run ruff check . && uv run ruff format --check .
+uv run ty check
 cd frontend && npm run lint && npm test && npm run build   # build includes the type check
 uv run --with scipy scripts/compare_with_reference.py      # needs network
 ```

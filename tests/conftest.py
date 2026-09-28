@@ -1,6 +1,7 @@
 import datetime as dt
 import os
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -34,14 +35,17 @@ A01_SYNC = [
     ("/A01_ocean_001m.nc?", "A01_ocean_001m.nc"),
 ]
 
+# The buoy positions ensure_catalog reads, recorded 2026-09-28.
+CATALOG = [("/allDatasets.json?", "all_datasets.json")]
+
 # The same days with temperature and salinity, recorded 2026-09-28 up to the
 # end of the recorded span (15:00Z), so the sync fetches both at once.
 A01_SYNC_WITH_SALINITY = [*A01_SYNC[:2], ("/A01_ocean_001m.nc?", "A01_ocean_001m_salinity.nc")]
 
 
-@pytest.fixture
-def session_factory():
-    """A fresh schema per test: in-memory SQLite, or TEST_DATABASE_URL (CI uses Postgres)."""
+@contextmanager
+def fresh_database() -> Iterator[sessionmaker]:
+    """An empty schema: in-memory SQLite, or TEST_DATABASE_URL (CI uses Postgres)."""
     url = os.environ.get("TEST_DATABASE_URL", "sqlite://")
     if url.startswith("sqlite"):
         engine = create_engine(url, poolclass=StaticPool, connect_args={"check_same_thread": False})
@@ -49,9 +53,33 @@ def session_factory():
         engine = create_engine(url)
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
-    yield sessionmaker(engine, expire_on_commit=False)
-    Base.metadata.drop_all(engine)
-    engine.dispose()
+    try:
+        yield sessionmaker(engine, expire_on_commit=False)
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+@contextmanager
+def api_client(session_factory: sessionmaker) -> Iterator[TestClient]:
+    """The app, reading from `session_factory`'s database."""
+
+    def override():
+        with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def session_factory():
+    """A fresh database per test."""
+    with fresh_database() as session_factory:
+        yield session_factory
 
 
 @pytest.fixture
@@ -62,13 +90,8 @@ def session(session_factory):
 
 @pytest.fixture
 def client(session_factory):
-    def override():
-        with session_factory() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with api_client(session_factory) as client:
+        yield client
 
 
 def seasonal_temperatures(start: str, end: str | dt.date, noise: float = 0.5, seed: int = 0) -> pd.Series:
@@ -98,11 +121,12 @@ def add_series(
     )
     session.add(series)
     session.flush()
+    observed = values.dropna()
     session.execute(
         insert(DailyMean),
         [
-            {"series_id": series.id, "date": day.date(), "value": float(value), "hours": 24}
-            for day, value in values.dropna().items()
+            {"series_id": series.id, "date": day, "value": float(value), "hours": 24}
+            for day, value in zip(pd.DatetimeIndex(observed.index).date, observed, strict=True)
         ],
     )
     session.commit()

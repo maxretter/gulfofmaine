@@ -47,6 +47,7 @@ def load_reference(client: httpx.Client, directory: Path):
     path = directory / "marineHeatWaves.py"
     path.write_text(source)
     spec = importlib.util.spec_from_file_location("marineHeatWaves", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -54,6 +55,8 @@ def load_reference(client: httpx.Client, directory: Path):
 
 def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
     raw = erddap.dataset(dataset_id, qc.columns(["temperature"]))
+    if raw is None:
+        raise ValueError(f"{dataset_id} has no data")
     daily = qc.daily_means(raw, "temperature")["value"]
 
     analysis = hobday.analyse(daily, BASELINE)

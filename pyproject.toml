@@ -18,8 +18,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pandas-stubs>=3.0",
     "pytest>=9",
+    "pytest-cov>=7.1",
     "ruff>=0.16",
+    "ty>=0.0.84",
 ]
 
 [tool.pytest.ini_options]
@@ -32,6 +35,20 @@ filterwarnings = [
     # Raised by the netCDF4/cftime wheels' numpy ABI check; harmless.
     "ignore:numpy.ndarray size changed:RuntimeWarning",
 ]
+
+# pytest --cov measures the app package, branches included; CI fails below fail_under.
+[tool.coverage.run]
+source = ["heatwaves"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+exclude_also = ['if __name__ == "__main__":']
+
+[tool.ty.terminal]
+error-on-warning = true
 
 [tool.ruff]
 line-length = 110

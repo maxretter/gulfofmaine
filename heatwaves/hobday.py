@@ -209,7 +209,7 @@ def _true_runs(mask: np.ndarray) -> list[tuple[int, int]]:
 
 def _describe(days: pd.DataFrame) -> Event:
     anomaly = days["temperature"] - days["climatology"]
-    peak = anomaly.idxmax()
+    peak = int(anomaly.argmax())  # position of the day furthest above normal
     # The category comes from the day furthest above normal in multiples of
     # the threshold's distance, which needn't be the warmest day relative to
     # normal: the threshold's distance changes through the year.
@@ -218,8 +218,8 @@ def _describe(days: pd.DataFrame) -> Event:
     return Event(
         start=days.index[0].date(),
         end=days.index[-1].date(),
-        peak=peak.date(),
-        max_intensity=float(anomaly[peak]),
+        peak=days.index[peak].date(),
+        max_intensity=float(anomaly.iloc[peak]),
         mean_intensity=float(anomaly.mean()),
         category=category,
     )

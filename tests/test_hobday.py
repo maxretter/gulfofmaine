@@ -47,6 +47,16 @@ def test_climatology_refuses_a_sparse_baseline():
         hobday.climatology(temperatures, (2003, 2022))
 
 
+@pytest.mark.filterwarnings("ignore:All-NaN slice encountered:RuntimeWarning")  # the empty pools
+def test_climatology_refuses_a_baseline_missing_a_season():
+    # Every summer is missing: most of the baseline has data, but mid-July
+    # has none within its window to pool.
+    days = pd.date_range("2003-01-01", "2022-12-31")
+    temperatures = seasonal_temperatures("2003-01-01", "2022-12-31")[~days.month.isin([6, 7, 8])]
+    with pytest.raises(hobday.InsufficientData, match="without a threshold"):
+        hobday.climatology(temperatures, (2003, 2022))
+
+
 def flat_frame(temperatures: list[float]) -> pd.DataFrame:
     """An `align`-style frame with a normal of 10 and a threshold of 11."""
     days = pd.date_range("2026-06-01", periods=len(temperatures))

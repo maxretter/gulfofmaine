@@ -1,0 +1,15 @@
+{
+  "table": {
+    "columnNames": ["datasetID", "minLatitude", "minLongitude"],
+    "columnTypes": ["String", "double", "double"],
+    "columnUnits": [null, "degrees_north", "degrees_east"],
+    "rows": [
+      ["A01_ocean_001m", 42.5183, -70.5681],
+      ["B01_ocean_001m", 43.1793, -70.4293],
+      ["E01_ocean_001m", 43.7062, -69.3645],
+      ["F01_ocean_001m", 44.0534, -68.9985],
+      ["I01_ocean_001m", 44.1016, -68.1136],
+      ["M01_ocean_001m", 43.4818, -67.9]
+    ]
+  }
+}
