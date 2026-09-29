@@ -217,9 +217,13 @@ td .swatch { position: relative; top: 1px; }
 .range-brush .handle { fill: var(--ink); fill-opacity: 0.35; }
 
 .series-legend { margin: 1rem 0 0.5rem; }
-.depth-charts { display: grid; gap: 0.25rem; }
+/* Charts stacked one per depth: each under its own heading, set apart by space and a rule. */
+.depth-charts, .chart-panels { display: grid; gap: 1rem; }
+.chart-panel + .chart-panel { border-top: 1px solid var(--grid); padding-top: 1rem; }
+.chart-panel-title { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.25rem; font-size: 1rem; font-weight: 650; }
+.chart-panel-title .unit { color: var(--ink-2); font-size: 0.85rem; font-weight: 400; }
 .depth-chart { position: relative; touch-action: pan-y; }
-.crosshair { position: absolute; top: 18px; bottom: 30px; width: 1px; background: var(--ink-2); pointer-events: none; }
+.crosshair { position: absolute; bottom: 30px; width: 1px; background: var(--ink-2); pointer-events: none; }
 
 .readout {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1.25rem;

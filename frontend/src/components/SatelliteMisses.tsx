@@ -1,17 +1,17 @@
 import * as Plot from "@observablehq/plot";
-import { extent, range } from "d3";
+import { extent, max, range } from "d3";
 import { useMemo } from "react";
 
 import { useAgreement } from "../api/queries";
 import { type MissedYear, missedByYear } from "../lib/agreement";
 import { chartDefaults } from "../lib/chart";
-import { colors, satelliteSaw } from "../lib/colors";
+import { satelliteSaw } from "../lib/colors";
 import { Chart } from "./Chart";
 import { PlotFigure } from "./PlotFigure";
 import { Swatch } from "./StateBadge";
 
 const DEPTHS = [20, 50];
-const PANEL_HEIGHT = 110;
+const PANEL_HEIGHT = 140; // px, with its x axis
 const MAX_BAR = 24; // px
 const GAP = 1; // px each side of the 2px surface gap between stacked segments
 
@@ -35,7 +35,7 @@ export function SatelliteMisses({ buoy }: { buoy?: string }) {
       loading={loading}
       error={results.some((r) => r.isError) && "Couldn't load the satellite comparison."}
       empty={!loading && years.length === 0 && "No satellite comparison yet: the satellite record hasn't been loaded."}
-      minHeight={DEPTHS.length * PANEL_HEIGHT + 40}
+      minHeight={DEPTHS.length * (PANEL_HEIGHT + 50)}
       legend={
         <div className="legend">
           <span className="state">
@@ -71,10 +71,33 @@ export function SatelliteMisses({ buoy }: { buoy?: string }) {
   );
 }
 
+/** One panel per depth, on the same years and the same day scale so their bars compare. */
 function Columns({ years, width }: { years: MissedYear[]; width: number }) {
+  const [first, last] = extent(years, (d) => d.year) as [number, number];
+  const most = max(years, (d) => d.missed + d.seen) ?? 0;
+  return (
+    <div className="chart-panels">
+      {DEPTHS.map((depth) => (
+        <section className="chart-panel" key={depth}>
+          <h3 className="chart-panel-title">
+            {depth} m <span className="unit">heatwave days</span>
+          </h3>
+          <Panel years={years.filter((d) => d.depth === depth)} domain={range(first, last + 1)} most={most} width={width} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+interface PanelProps {
+  years: MissedYear[]; // one depth's
+  domain: number[]; // every year shown in either panel
+  most: number; // the tallest bar in either panel
+  width: number;
+}
+
+function Panel({ years, domain, most, width }: PanelProps) {
   const options = useMemo((): Plot.PlotOptions => {
-    const [first, last] = extent(years, (d) => d.year) as [number, number];
-    const domain = range(first, last + 1);
     const inner = width - chartDefaults.marginLeft - chartDefaults.marginRight;
     // Bars stay thin, however wide the chart: the band's leftover is air.
     const padding = Math.max(0.2, 1 - MAX_BAR / (inner / domain.length));
@@ -82,29 +105,16 @@ function Columns({ years, width }: { years: MissedYear[]; width: number }) {
     const describe = (d: MissedYear) =>
       `${d.year} at ${d.depth} m: ${total(d)} heatwave days\n` +
       `${d.missed} with no satellite heatwave\n${d.seen} with one at the surface too`;
-    const bar = { x: "year", fy: "depth" } as const;
+    const bar = { x: "year" } as const;
     return {
       ...chartDefaults,
       width,
-      height: DEPTHS.length * PANEL_HEIGHT + 30,
-      marginTop: 8,
+      height: PANEL_HEIGHT,
+      marginTop: 10,
       x: { domain, padding, label: null, tickFormat: (y: number) => (y % 5 === 0 ? String(y) : "") },
-      y: { label: null, grid: true, nice: true }, // the caption says what's counted
-      fy: { domain: DEPTHS, axis: null },
+      y: { domain: [0, most], label: null, grid: true, nice: true }, // the caption says what's counted
       marks: [
         Plot.ruleY([0], { stroke: "currentColor", strokeOpacity: 0.3 }),
-        // Each panel's depth, at its top left.
-        Plot.text(DEPTHS, {
-          fy: (d: number) => d,
-          text: (d: number) => `${d} m`,
-          frameAnchor: "top-left",
-          dx: 8,
-          dy: 2,
-          fill: colors.ink,
-          fontWeight: 600,
-          stroke: colors.surface, // a halo, so gridlines don't cut through it
-          strokeWidth: 4,
-        }),
         // Missed days sit on the baseline; days the satellite also saw stack on top.
         Plot.barY(
           years.filter((d) => d.missed > 0 && d.seen > 0),
@@ -125,7 +135,7 @@ function Columns({ years, width }: { years: MissedYear[]; width: number }) {
         Plot.tip(years, Plot.pointerX({ ...bar, y: total, title: describe })),
       ],
     };
-  }, [years, width]);
+  }, [years, domain, most, width]);
 
   return <PlotFigure options={options} />;
 }

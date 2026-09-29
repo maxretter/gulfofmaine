@@ -22,6 +22,7 @@ interface Props {
 }
 
 const NO_DAYS: DayPoint[] = [];
+const PLOT_TOP = 10; // px above each panel's plot area, where the crosshair starts
 
 interface Panel {
   depth: number;
@@ -195,10 +196,10 @@ function DepthChart({ panel, from, to, width, hover, onHover }: ChartProps) {
     (): Plot.PlotOptions => ({
       ...chartDefaults,
       width,
-      height: 160,
-      marginTop: 18,
+      height: 150,
+      marginTop: PLOT_TOP,
       x: { type: "utc", domain: [parseDay(from), parseDay(to)], label: null },
-      y: { label: `${panel.depth} m, °C`, grid: true, nice: true },
+      y: { label: null, grid: true, nice: true }, // the panel's heading names it
       marks: [
         Plot.areaY(heatwaveBands(panel.days, panel.events), {
           x: "date",
@@ -220,7 +221,7 @@ function DepthChart({ panel, from, to, width, hover, onHover }: ChartProps) {
         Plot.lineY(panel.days, { x: "date", y: "value", stroke: colors.observed, strokeWidth: 2 }),
       ],
     }),
-    [panel.days, panel.events, panel.depth, panel.satellite, from, to, width],
+    [panel.days, panel.events, panel.satellite, from, to, width],
   );
 
   const onRender = useCallback((plot: PlotElement) => setX(plot.scale("x") ?? null), []);
@@ -229,19 +230,24 @@ function DepthChart({ panel, from, to, width, hover, onHover }: ChartProps) {
   const hoverX = hover && x ? x.apply(hover) : null;
 
   return (
-    <div
-      className="depth-chart"
-      onPointerMove={(event) => {
-        if (!x?.invert) return;
-        const px = event.clientX - event.currentTarget.getBoundingClientRect().left;
-        onHover(px < left || px > right ? null : utcDay.round(x.invert(px)));
-      }}
-      onPointerLeave={() => onHover(null)}
-    >
-      <PlotFigure options={options} onRender={onRender} />
-      {hoverX !== null && hoverX >= left && hoverX <= right && (
-        <div className="crosshair" style={{ left: hoverX }} aria-hidden="true" />
-      )}
-    </div>
+    <section className="chart-panel">
+      <h3 className="chart-panel-title">
+        {panel.depth} m <span className="unit">daily mean, °C</span>
+      </h3>
+      <div
+        className="depth-chart"
+        onPointerMove={(event) => {
+          if (!x?.invert) return;
+          const px = event.clientX - event.currentTarget.getBoundingClientRect().left;
+          onHover(px < left || px > right ? null : utcDay.round(x.invert(px)));
+        }}
+        onPointerLeave={() => onHover(null)}
+      >
+        <PlotFigure options={options} onRender={onRender} />
+        {hoverX !== null && hoverX >= left && hoverX <= right && (
+          <div className="crosshair" style={{ top: PLOT_TOP, left: hoverX }} aria-hidden="true" />
+        )}
+      </div>
+    </section>
   );
 }
