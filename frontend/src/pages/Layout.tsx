@@ -6,6 +6,7 @@ import { useBuoys } from "../api/queries";
 import type { StatusMessage } from "../api/types";
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
 import { LiveIndicator } from "../components/LiveIndicator";
+import { Logo } from "../components/Logo";
 import { latest } from "../lib/dates";
 import { formatDate } from "../lib/format";
 
@@ -27,7 +28,7 @@ export function Layout() {
         <div className="wrap">
           <div className="brand">
             <Link className="wordmark" to="/">
-              <span className="dot" aria-hidden="true" />
+              <Logo />
               Gulf of Maine heatwaves
             </Link>
             <LiveIndicator />
