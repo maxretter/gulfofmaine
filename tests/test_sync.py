@@ -161,18 +161,17 @@ class Stop(Exception):
 
 
 def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_factory):
-    rounds = 0
+    rounds: list[bool] = []
 
-    def sync_all(*args):
-        nonlocal rounds
-        rounds += 1
-        if rounds == 1:
+    def sync_all(session_factory, erddap, sources, everything):
+        rounds.append(everything)
+        if len(rounds) == 1:
             raise httpx.ConnectError("ERDDAP is down")
         return 0
 
     def sleep(seconds):
-        assert seconds == 60
-        if rounds == 2:
+        assert seconds == 600
+        if len(rounds) == 2:
             raise Stop
 
     monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
@@ -180,12 +179,55 @@ def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_facto
     monkeypatch.setattr(sync.time, "sleep", sleep)
 
     with pytest.raises(Stop):
-        sync.main(["--every", "60"])
-    assert rounds == 2
+        sync.main(["--every", "600"])
+    assert rounds == [True, True]  # the failed full round is tried again in full
     # Run once, the job fails instead.
-    rounds = 0
+    rounds.clear()
     with pytest.raises(httpx.ConnectError):
         sync.main([])
+
+
+def test_kept_running_the_job_checks_everything_about_hourly(monkeypatch, session_factory):
+    rounds: list[bool] = []
+
+    def sync_all(session_factory, erddap, sources, everything):
+        rounds.append(everything)
+        return 0
+
+    def sleep(seconds):
+        if len(rounds) == 8:
+            raise Stop
+
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    monkeypatch.setattr(sync, "sync_all", sync_all)
+    monkeypatch.setattr(sync.time, "sleep", sleep)
+
+    with pytest.raises(Stop):
+        sync.main(["--every", "600"])
+
+    assert rounds == [True, False, False, False, False, False, True, False]
+
+
+def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_factory):
+    today = dt.datetime.now(dt.UTC).date()
+    with session_factory() as session:
+        reporting = add_series(session, pd.Series([15.0], index=[pd.Timestamp(today)]))
+        salinity = add_series(session, pd.Series([31.0], index=[pd.Timestamp(today)]), variable="salinity")
+        retired = add_series(session, pd.Series([9.0], index=[pd.Timestamp("2025-09-17")]), "M01", 100)
+        satellite = add_series(session, pd.Series([15.5], index=[pd.Timestamp(today)]), source="satellite")
+        for each in (reporting, salinity, satellite):
+            each.latest_date = today
+        retired.latest_date = dt.date(2025, 9, 17)
+        session.commit()
+    requests: list[str] = []
+    erddap = recorded_erddap([("", NO_MATCH)], requests)
+
+    # No satellite source here: syncing the satellite would count as a failure.
+    assert sync_all(session_factory, erddap, buoy_sources(erddap), everything=False) == 0
+
+    # One small request for A01's 1 m dataset, both variables at once; no catalog, M01 or satellite.
+    [request] = requests
+    assert "/tabledap/A01_ocean_001m.json?time_modified" in request
 
 
 def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_factory, session):

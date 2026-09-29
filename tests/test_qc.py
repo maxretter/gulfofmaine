@@ -29,7 +29,7 @@ def test_daily_means_drop_flagged_readings_and_thin_days():
     umaine = [0] * 48 + [2, 0] + [0] * 10
     qartod = [1] * 48 + [1, 4] + [1] * 10
 
-    daily = qc.daily_means(raw_rows(times, temperatures, umaine, qartod))
+    daily = qc.daily_means(qc.good_readings(raw_rows(times, temperatures, umaine, qartod)))
 
     assert list(daily.index) == [pd.Timestamp("2026-01-01")]
     assert daily.loc["2026-01-01", "value"] == pytest.approx(10.0)
@@ -43,8 +43,9 @@ def test_daily_means_weight_hours_equally_whatever_the_sampling_rate():
     slow = pd.date_range("2026-01-01T12:00", "2026-01-01T23:00", freq="1h")
     times = [*fast, *slow]
     temperatures = [5.0] * len(fast) + [15.0] * len(slow)
+    readings = qc.good_readings(raw_rows(times, temperatures, [0] * len(times), [1] * len(times)))
 
-    daily = qc.daily_means(raw_rows(times, temperatures, [0] * len(times), [1] * len(times)))
+    daily = qc.daily_means(readings)
 
     assert daily["value"].iloc[0] == pytest.approx(10.0)
 
@@ -53,7 +54,7 @@ def test_daily_means_read_each_variable_by_its_own_flags():
     times = pd.date_range("2026-01-01", periods=24, freq="1h")
     salinity = raw_rows(times, [31.0] * 23 + [0.0], [0] * 24, [1] * 23 + [4], variable="salinity")
 
-    daily = qc.daily_means(salinity, "salinity", min_hours=23)
+    daily = qc.daily_means(qc.good_readings(salinity, "salinity"), min_hours=23)
 
     assert qc.columns(["salinity"]) == ["time", "salinity", "salinity_qc", "salinity_qc_agg"]
     assert daily.loc["2026-01-01", "value"] == pytest.approx(31.0)

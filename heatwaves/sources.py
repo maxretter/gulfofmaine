@@ -8,7 +8,7 @@ source (heatwaves.sync).
 
 import datetime as dt
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import httpx
@@ -26,11 +26,19 @@ _EMPTY = pd.DataFrame({"value": pd.Series(dtype=float), "hours": pd.Series(dtype
 
 
 @dataclass(frozen=True)
+class Reading:
+    time: dt.datetime
+    value: float
+
+
+@dataclass(frozen=True)
 class Download:
     first_day: dt.date
     last_day: dt.date  # inclusive; every stored day in the span is replaced
     daily: dict[int, pd.DataFrame]  # by series ID: `value` and `hours`, indexed by day
     modified_through: dt.datetime  # where the next fetch starts
+    # By series ID: the newest good reading, from sources with readings more often than daily.
+    latest: dict[int, Reading] = field(default_factory=dict)
 
 
 class Source(Protocol):
@@ -104,8 +112,17 @@ class TabledapSource:
             qc.columns([s.variable for s in series]),
             [f"time>={format_time(first_day)}", f"time<{format_time(last_day + dt.timedelta(days=1))}"],
         )
-        daily = {s.id: qc.daily_means(raw, s.variable) if raw is not None else _EMPTY for s in series}
-        return Download(first_day, last_day, daily, modified_through)
+        readings = {s.id: qc.good_readings(raw, s.variable) for s in series} if raw is not None else {}
+        daily = {s.id: qc.daily_means(readings[s.id]) if s.id in readings else _EMPTY for s in series}
+        # Rounded to the sensors' resolution, which float32 storage would otherwise pad with noise.
+        latest = {
+            series_id: Reading(
+                values.index[-1].tz_localize(dt.UTC).to_pydatetime(), round(float(values.iloc[-1]), 4)
+            )
+            for series_id, values in readings.items()
+            if not values.empty
+        }
+        return Download(first_day, last_day, daily, modified_through, latest)
 
 
 class GriddapSource:

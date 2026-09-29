@@ -37,9 +37,12 @@ export function MethodsPage() {
         count.
       </p>
       <p>
-        An hourly job asks ERDDAP which rows changed since its last visit, using the <code>time_modified</code> column,
-        and re-reads only the days those rows fall on. When UMaine replaces real-time data with post-recovery data,
-        those days are picked up and recomputed automatically.
+        Every 10 minutes a job asks ERDDAP which rows changed since its last visit, using the{" "}
+        <code>time_modified</code> column, and re-reads only the days those rows fall on: for each buoy still
+        reporting, one small request when nothing has changed. The retired buoys and the satellite are checked hourly.
+        When UMaine replaces real-time data with post-recovery data, those days are picked up and recomputed
+        automatically. Each new reading, and each buoy depth entering or leaving a heatwave, is pushed to open pages
+        over a WebSocket, so the map and tiles update without a reload.
       </p>
 
       <h2>Normal and threshold</h2>
@@ -215,7 +218,9 @@ export function MethodsPage() {
         <a href="/api/origin/rules">
           <code>/api/origin/rules</code>
         </a>{" "}
-        the thresholds above.
+        the thresholds above. The live feed is a WebSocket at <code>/api/live</code>: JSON messages of type{" "}
+        <code>reading</code> (a buoy depth's newest hourly temperature), <code>status</code> (a series entering or
+        leaving a heatwave, or changing category; depth 0 is the satellite) and <code>ping</code>, every 30 seconds.
       </p>
     </article>
   );

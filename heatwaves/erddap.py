@@ -14,8 +14,9 @@ app needs only these few calls.
 """
 
 import datetime as dt
+import re
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Literal
 from urllib.parse import quote
 
@@ -56,6 +57,11 @@ class Erddap:
     def rows(self, dataset_id: str, variables: Sequence[str], constraints: Sequence[str] = ()) -> list[dict]:
         """Matching rows as dicts, or an empty list when nothing matches."""
         return self._table(self.url(dataset_id, variables, constraints, "json"))
+
+    def catalog(self, dataset_ids: Collection[str], variables: Sequence[str]) -> list[dict]:
+        """These datasets' rows in the server's allDatasets table: `datasetID`, then `variables`."""
+        pattern = "|".join(re.escape(dataset_id) for dataset_id in dataset_ids)
+        return self.rows("allDatasets", ["datasetID", *variables], [f'datasetID=~"^({pattern})$"'])
 
     def dataset(
         self, dataset_id: str, variables: Sequence[str], constraints: Sequence[str] = ()

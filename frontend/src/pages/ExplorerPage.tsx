@@ -15,7 +15,7 @@ import { missedShare } from "../lib/agreement";
 import { categories, colors } from "../lib/colors";
 import { addDays, daysBetween, earliest, latest, maxDay, minDay } from "../lib/dates";
 import { eventRange, eventsInRange } from "../lib/events";
-import { formatDate, formatSigned, formatTemp } from "../lib/format";
+import { formatDate, formatSigned, formatTemp, formatTime } from "../lib/format";
 import { DEPTHS, useExplorerState } from "../state/explorer";
 
 /** The requested period clamped to a buoy's record, falling back to its past year. */
@@ -85,7 +85,7 @@ export function ExplorerPage() {
         <p className="lead">
           Daily water temperature at 1, 20 and 50 metres on seven University of Maine buoys, two of them retired and
           kept for their history, compared with each spot's 2003–2022 normal. A marine heatwave is five or more days
-          warmer than the 90th percentile for that time of year. Updated hourly from NERACOOS.
+          warmer than the 90th percentile for that time of year. Updated every 10 minutes from NERACOOS.
         </p>
         <Headline />
       </section>
@@ -221,6 +221,11 @@ function BuoyDetail({ buoy, events, depth, firstDate, lastDate, from, to, onRang
               <p className="tile-delta">
                 {formatSigned(s.anomaly)} vs normal{s.date && ` · ${formatDate(s.date)}`}
               </p>
+              {s.reading_at && (
+                <p className="tile-reading">
+                  Hourly reading {formatTemp(s.reading)} at {formatTime(s.reading_at)}
+                </p>
+              )}
             </div>
           ))}
         </div>

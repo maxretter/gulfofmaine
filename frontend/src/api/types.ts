@@ -19,6 +19,8 @@ export interface Condition {
   category_name: string | null;
   event_start: string | null;
   synced_at: string | null;
+  reading_at: string | null; // newest hourly reading; null for the satellite
+  reading: number | null;
 }
 
 /** Satellite sea surface temperature at a buoy (depth 0), from the nearest grid cell with data. */
@@ -156,3 +158,32 @@ export interface YearSummary {
   heatwave_days: number;
   observed_days: number;
 }
+
+/** Messages on the live feed at /api/live (heatwaves/live.py). */
+export interface ReadingMessage {
+  type: "reading";
+  buoy: string;
+  depth: number;
+  time: string;
+  temperature: number;
+}
+
+/** A series entered or left a heatwave, or its state or category changed. Depth 0 is the satellite. */
+export interface StatusMessage {
+  type: "status";
+  buoy: string;
+  depth: number;
+  date: string | null;
+  state: State;
+  category: number | null;
+  days_above: number;
+  previous_state: State;
+  previous_category: number | null;
+}
+
+export interface PingMessage {
+  type: "ping";
+  time: string;
+}
+
+export type LiveMessage = ReadingMessage | StatusMessage | PingMessage;

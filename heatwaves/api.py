@@ -6,16 +6,17 @@ from typing import Annotated, Literal, cast
 
 import httpx
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
 from pydantic import BaseModel
 from sqlalchemy import extract, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from heatwaves import compare, origin, queries
+from heatwaves import compare, live, origin, queries
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
 from heatwaves.sources import connect
+from heatwaves.state import State, state_of
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -27,11 +28,6 @@ SOURCES = connect(httpx.Client())
 # satellite's are at depth 0, and appear only where named.
 TEMPERATURE = Series.variable == "temperature"
 AT_BUOY = TEMPERATURE & (Series.source == "buoy")
-
-# A series whose newest daily mean is older than this is reported offline.
-OFFLINE_AFTER = dt.timedelta(days=3)
-
-State = Literal["heatwave", "above_threshold", "normal", "offline", "no_data"]
 
 
 class Condition(BaseModel):
@@ -52,6 +48,8 @@ class Condition(BaseModel):
     category_name: str | None
     event_start: dt.date | None
     synced_at: dt.datetime | None  # when the sync job last checked ERDDAP
+    reading_at: dt.datetime | None  # newest hourly reading; null for the satellite
+    reading: float | None
 
 
 class SatelliteCondition(Condition):
@@ -247,17 +245,6 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
 
 
 def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, on: dt.date) -> Condition:
-    if series.latest_date is None:
-        state = "no_data"
-    elif on - series.latest_date > OFFLINE_AFTER:
-        state = "offline"
-    elif ongoing is not None:
-        state = "heatwave"
-    elif series.days_above:
-        state = "above_threshold"
-    else:
-        state = "normal"
-
     anomaly = None
     if series.latest_value is not None and series.latest_climatology is not None:
         anomaly = series.latest_value - series.latest_climatology
@@ -265,7 +252,7 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
         depth=series.depth,
         dataset_id=series.dataset_id,
         erddap_url=SOURCES[series.source].page_url(series),
-        state=state,
+        state=state_of(series, ongoing, on).state,
         first_date=first_date,
         date=series.latest_date,
         temperature=series.latest_value,
@@ -277,6 +264,8 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
         category_name=ongoing.category_name if ongoing else None,
         event_start=ongoing.start_date if ongoing else None,
         synced_at=series.synced_at,
+        reading_at=series.latest_reading_at,
+        reading=series.latest_reading,
     )
 
 
@@ -566,3 +555,9 @@ def agreement(depth: int, session: SessionDep) -> list[Agreement]:
             for year, both, satellite_only, buoy_only, neither in table.itertuples()
         ]
     return rows
+
+
+@router.websocket("/live")
+async def live_feed(websocket: WebSocket) -> None:
+    """New readings and heatwave changes as they are stored (heatwaves.live), as JSON messages."""
+    await live.serve(websocket, live.hub)

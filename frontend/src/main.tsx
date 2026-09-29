@@ -8,7 +8,7 @@ import { RouterProvider } from "react-router";
 
 import { router } from "./router";
 
-// The data changes at most hourly, so cached responses stay fresh for five minutes.
+// The live feed invalidates whatever it changes (api/live.ts), so cached responses otherwise stay fresh for five minutes.
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60_000, refetchOnWindowFocus: false } },
 });

@@ -1,18 +1,37 @@
+import { useCallback, useRef, useState } from "react";
 import { Link, NavLink, Outlet, ScrollRestoration } from "react-router";
 
+import { alertId, enteredHeatwave, LiveContext, useLiveFeed } from "../api/live";
 import { useBuoys } from "../api/queries";
+import type { StatusMessage } from "../api/types";
+import { HeatwaveToasts } from "../components/HeatwaveToasts";
+import { LiveIndicator } from "../components/LiveIndicator";
 import { latest } from "../lib/dates";
 import { formatDate } from "../lib/format";
 
 export function Layout() {
+  const [alerts, setAlerts] = useState<StatusMessage[]>([]);
+  // Each heatwave is announced once: today's mean is recomputed as readings arrive, and one near the threshold can
+  // tip in and out of a heatwave more than once in an evening.
+  const announced = useRef(new Set<string>());
+  const live = useLiveFeed((message) => {
+    if (!enteredHeatwave(message) || announced.current.has(alertId(message))) return;
+    announced.current.add(alertId(message));
+    setAlerts((shown) => [...shown, message]);
+  });
+  const dismiss = useCallback((id: string) => setAlerts((shown) => shown.filter((a) => alertId(a) !== id)), []);
+
   return (
-    <>
+    <LiveContext value={live}>
       <header className="site-header">
         <div className="wrap">
-          <Link className="wordmark" to="/">
-            <span className="dot" aria-hidden="true" />
-            Gulf of Maine heatwaves
-          </Link>
+          <div className="brand">
+            <Link className="wordmark" to="/">
+              <span className="dot" aria-hidden="true" />
+              Gulf of Maine heatwaves
+            </Link>
+            <LiveIndicator />
+          </div>
           <nav aria-label="Site">
             <NavLink to="/" end>
               Explorer
@@ -29,8 +48,9 @@ export function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <HeatwaveToasts alerts={alerts} onDismiss={dismiss} />
       <ScrollRestoration />
-    </>
+    </LiveContext>
   );
 }
 

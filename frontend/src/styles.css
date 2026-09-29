@@ -42,6 +42,9 @@ button { font: inherit; color: inherit; }
 .site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; min-height: 56px; }
 .wordmark { color: var(--ink); font-weight: 650; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; }
 .wordmark .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+.brand { display: flex; align-items: center; gap: 0.25rem 1rem; flex-wrap: wrap; }
+.live-indicator { font-size: 0.85rem; color: var(--ink-2); }
+.live-time { color: var(--ink-2); }
 .site-header nav { display: flex; gap: 1.25rem; font-size: 0.95rem; }
 .site-header nav a { color: var(--ink-2); text-decoration: none; padding: 0.25rem 0; }
 .site-header nav a:hover { color: var(--ink); }
@@ -78,6 +81,13 @@ button { font: inherit; color: inherit; }
 .buoy-label.leaflet-tooltip { background: var(--surface); border: 1px solid var(--border); box-shadow: none; color: var(--ink); font: 600 12px/1.2 var(--font); padding: 2px 6px; }
 .buoy-label.leaflet-tooltip::before { display: none; }
 .leaflet-interactive { cursor: pointer; }
+/* A new reading: the ring spreads and fades once (BuoyMap). */
+.map path.pulse { transform-box: fill-box; transform-origin: center; animation: pulse 1.6s ease-out forwards; pointer-events: none; }
+@keyframes pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(2.8); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .map path.pulse { animation: fade 1.6s ease-out forwards; }
+}
+@keyframes fade { from { opacity: 0.9; } to { opacity: 0; } }
 
 /* --- Filters: one row above what they scope --- */
 .filters { display: flex; align-items: center; gap: 0.75rem 1.25rem; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
@@ -155,6 +165,7 @@ td .swatch { position: relative; top: 1px; }
 .tile-label { color: var(--ink-2); font-size: 0.9rem; }
 .tile-value { font-size: 1.75rem; font-weight: 650; line-height: 1.2; }
 .tile-delta { color: var(--ink-2); font-size: 0.875rem; }
+.tile .tile-reading { color: var(--ink-2); font-size: 0.8rem; margin-top: 0.25rem; }
 @media (max-width: 640px) { .tiles { grid-template-columns: 1fr; } }
 
 .range-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.5rem; }
@@ -221,3 +232,15 @@ td .swatch { position: relative; top: 1px; }
 .prose { max-width: 70ch; padding-top: 1.5rem; }
 .prose h2 { margin-top: 2rem; font-size: 1.2rem; }
 .prose li { margin-bottom: 0.6rem; }
+
+/* --- Live feed notices: bottom right, full width on phones --- */
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 1100; display: grid; gap: 0.5rem; width: min(380px, calc(100vw - 32px)); }
+.toast {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(11, 11, 11, 0.12); padding: 0.75rem 0.75rem 0.75rem 1rem; font-size: 0.9rem;
+}
+.toast .swatch { margin-top: 0.35rem; flex: none; }
+.toast p { margin: 0; flex: 1; }
+.toast-close { border: 0; background: none; cursor: pointer; color: var(--ink-2); font-size: 1.25rem; line-height: 1; padding: 0 0.25rem; }
+.toast-close:hover { color: var(--ink); }

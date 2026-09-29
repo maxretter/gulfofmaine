@@ -57,7 +57,7 @@ def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
     raw = erddap.dataset(dataset_id, qc.columns(["temperature"]))
     if raw is None:
         raise ValueError(f"{dataset_id} has no data")
-    daily = qc.daily_means(raw, "temperature")["value"]
+    daily = qc.daily_means(qc.good_readings(raw, "temperature"))["value"]
 
     analysis = hobday.analyse(daily, BASELINE)
     ours = {(e.start, e.end, e.category) for e in analysis.events}

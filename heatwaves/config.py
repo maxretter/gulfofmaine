@@ -14,6 +14,8 @@ class Settings:
     user_agent: str
     # /healthz fails once the last successful sync is older than this.
     sync_stale_after: dt.timedelta
+    # Browsers the live feed serves at once (heatwaves.live).
+    live_max_clients: int
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -27,6 +29,7 @@ class Settings:
                 "ERDDAP_USER_AGENT", "gom-heatwaves/0.1 (+https://github.com/maxretter/gulfofmaine)"
             ),
             sync_stale_after=dt.timedelta(hours=float(env("SYNC_STALE_AFTER_HOURS", "3"))),
+            live_max_clients=int(env("LIVE_MAX_CLIENTS") or "200"),
         )
 
 

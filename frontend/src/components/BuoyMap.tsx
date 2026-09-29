@@ -2,6 +2,7 @@ import { latLngBounds } from "leaflet";
 import { useState, type ReactNode } from "react";
 import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
 
+import { useLive } from "../api/live";
 import type { Buoy } from "../api/types";
 import { colors } from "../lib/colors";
 import { stateLook } from "../lib/state";
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function BuoyMap({ buoys, depth, selected, onSelect }: Props) {
+  const { pulses } = useLive();
   const located = buoys.filter((buoy) => buoy.latitude !== null && buoy.longitude !== null);
   // Read once: the map frames the buoys on mount, then the view belongs to the user.
   const [bounds] = useState(() => latLngBounds(located.map((buoy) => [buoy.latitude!, buoy.longitude!])));
@@ -45,6 +47,16 @@ export function BuoyMap({ buoys, depth, selected, onSelect }: Props) {
               : { color, weight: 2, fillOpacity: 0 };
         return (
           <Highlight key={buoy.id} selected={buoy.id === selected} center={center}>
+            {pulses[buoy.id] && (
+              // A ring that spreads and fades once when a new reading arrives; a new key replays it.
+              <CircleMarker
+                key={pulses[buoy.id]}
+                center={center}
+                radius={9}
+                interactive={false}
+                pathOptions={{ className: "pulse", color: colors.observed, weight: 2, fillOpacity: 0 }}
+              />
+            )}
             <CircleMarker
               center={center}
               radius={variant === "hollow" ? 7 : 9}

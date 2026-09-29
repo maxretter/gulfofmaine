@@ -31,23 +31,28 @@ def flags(variable: str) -> tuple[str, str]:
     return f"{variable}_qc", f"{variable}_qc_agg"
 
 
-def daily_means(ds: xr.Dataset, variable: str = "temperature", min_hours: int = MIN_HOURS) -> pd.DataFrame:
-    """Daily means of one variable from a raw ERDDAP tabledap response.
+def good_readings(ds: xr.Dataset, variable: str = "temperature") -> pd.Series:
+    """One variable's readings from a raw ERDDAP tabledap response, less those either flag marks as bad.
 
     `ds` has a single `row` dimension holding `time`, the variable and its
-    two flags. Rows either flag marks as bad are dropped. Readings are
-    averaged into hourly bins before the daily mean, so that a day's value
-    doesn't depend on the sampling rate, which has been hourly and
-    half-hourly over the buoys' history. Days with fewer than `min_hours`
-    hourly bins are left out.
-
-    Returns a frame indexed by UTC day, with `value` and `hours` columns.
+    two flags. Returns the readings indexed by time, oldest first.
     """
     umaine, qartod = flags(variable)
     ds = ds.set_coords("time").swap_dims(row="time")
     good = (ds[umaine] == GOOD_UMAINE_FLAG) & ~ds[qartod].isin(BAD_QARTOD_FLAGS)
-    readings = ds[variable].where(good).dropna("time").to_series().sort_index()
+    return ds[variable].where(good).dropna("time").to_series().sort_index()
 
+
+def daily_means(readings: pd.Series, min_hours: int = MIN_HOURS) -> pd.DataFrame:
+    """Daily means of good readings (from `good_readings`).
+
+    Readings are averaged into hourly bins before the daily mean, so that a
+    day's value doesn't depend on the sampling rate, which has been hourly
+    and half-hourly over the buoys' history. Days with fewer than
+    `min_hours` hourly bins are left out.
+
+    Returns a frame indexed by UTC day, with `value` and `hours` columns.
+    """
     # Resampled in pandas: for one long 1-D series it is about a thousand
     # times faster than xarray's resample without the optional flox package.
     by_day = readings.resample("1h").mean().resample("1D")

@@ -31,7 +31,7 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
-  # The JSON API; reached only through the frontend's proxy.
+  # The JSON API and the live feed's WebSocket; reached only through the frontend's proxy.
   api:
     <<: *backend
     depends_on:
@@ -43,9 +43,10 @@ services:
       timeout: 5s
       start_period: 3m
 
+  # Checks the buoys still reporting every 10 minutes, and everything hourly.
   sync:
     <<: *backend
-    command: ["python", "-m", "heatwaves.sync", "--every", "3600"]
+    command: ["python", "-m", "heatwaves.sync", "--every", "600"]
     depends_on:
       migrate: { condition: service_completed_successfully }
 

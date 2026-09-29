@@ -3,7 +3,7 @@ import datetime as dt
 import pytest
 from sqlalchemy import select
 
-from heatwaves.models import Event
+from heatwaves.models import Event, UTCDateTime
 from heatwaves.sync import update_heatwaves
 from tests.conftest import add_series, seasonal_temperatures
 
@@ -28,7 +28,6 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     response = client.get("/api/buoys")
 
     assert response.status_code == 200
-    assert response.headers["cache-control"] == "public, max-age=300"
     [buoy] = response.json()
     [condition] = buoy["series"]
     ongoing = session.scalars(select(Event).where(Event.end_date == TODAY)).one()
@@ -39,6 +38,41 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     assert condition["anomaly"] > 1.5
     assert condition["first_date"] == "2003-01-01"
     assert condition["synced_at"] is not None
+
+
+@pytest.mark.parametrize("path", ["/api/buoys", "/api/events", "/api/buoys/A01/1/daily?start=2003-01-01"])
+def test_responses_are_revalidated_by_etag(client, path, heatwave_now):
+    # The live feed can change any of them at any moment, so no cache may reuse a copy unchecked.
+    first = client.get(path)
+    assert first.headers["cache-control"] == "no-cache"
+
+    unchanged = client.get(path, headers={"If-None-Match": first.headers["etag"]})
+
+    assert unchanged.status_code == 304
+    assert unchanged.content == b""
+    # The ETag is of the JSON, not of the gzipped bytes, which differ every time.
+    assert client.get(path, headers={"Accept-Encoding": "identity"}).headers["etag"] == first.headers["etag"]
+
+
+def test_a_changed_response_gets_a_new_etag(client, session, heatwave_now):
+    first = client.get("/api/buoys")
+
+    heatwave_now.latest_reading = 18.2
+    session.commit()
+    changed = client.get("/api/buoys", headers={"If-None-Match": first.headers["etag"]})
+
+    assert changed.status_code == 200
+    assert changed.headers["etag"] != first.headers["etag"]
+    assert changed.json()[0]["series"][0]["reading"] == 18.2
+
+
+def test_times_come_back_in_utc_whatever_the_database_zone():
+    eastern = dt.datetime(2026, 9, 28, 22, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
+
+    stored = UTCDateTime().process_result_value(eastern, None)
+
+    assert stored == eastern
+    assert stored is not None and stored.tzinfo == dt.UTC
 
 
 def test_daily_series_keeps_gaps_as_nulls(client, heatwave_now):

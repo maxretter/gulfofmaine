@@ -4,9 +4,10 @@ Live marine heatwave status at 1, 20 and 50 metres on seven University of Maine
 buoys in the Gulf of Maine, with the full record back to 2001, set beside the
 satellite record at each buoy, and a label on every heatwave at 20 and 50 m for
 where its heat likely came from. A Python job reads NERACOOS's ERDDAP server
-(and NOAA's, for the satellite) hourly and applies the standard marine heatwave
-definition (Hobday et al. 2016) to each depth; a FastAPI JSON API serves the
-results to a React app for exploring them.
+(and NOAA's, for the satellite) every 10 minutes and applies the standard
+marine heatwave definition (Hobday et al. 2016) to each depth; a FastAPI JSON
+API serves the results to a React app for exploring them, and pushes new
+readings to it over a WebSocket as they're stored.
 
 **Live site:** _coming soon_ · **API docs:** `/docs` on the live site
 
@@ -49,23 +50,36 @@ November 2021. (Figures as of 2026-09-28.)
 ## How it works
 
 ```
-NERACOOS ERDDAP ──NetCDF──▶ sync job ──▶ Postgres ──▶ FastAPI ──▶ Caddy ──▶ React app
-data.neracoos.org   hourly   xarray, pandas            JSON API    serves the   Leaflet, Observable Plot,
-(buoys, tabledap)      ▲                                           app, proxies TanStack Query
-                       │                                           /api
+NERACOOS ERDDAP ──NetCDF──▶ sync job ──▶ Postgres ─NOTIFY─▶ FastAPI ──▶ Caddy ─────▶ React app
+data.neracoos.org   10 min  xarray, pandas                  JSON API,   serves the   Leaflet, Observable Plot,
+(buoys, tabledap)      ▲                                    WebSocket   app, proxies TanStack Query
+                       │                                    /api/live   /api
 CoastWatch ERDDAP ─────┘
 (OISST, griddap)
 ```
 
 - **Incremental sync** ([`heatwaves/sources.py`](heatwaves/sources.py)).
-  Every row in these ERDDAP datasets carries a `time_modified` stamp. Each
-  hour the sync job asks ERDDAP for the newest stamp and the span of days
-  touched since its last visit (two tiny requests, reduced server-side with
-  `orderByMax` and `orderByMinMax`), then downloads only those whole days as
-  NetCDF, every variable of a dataset in one request. When UMaine replaces
+  Every row in these ERDDAP datasets carries a `time_modified` stamp. Every
+  10 minutes the sync job asks ERDDAP for each reporting buoy dataset's newest
+  stamp (one tiny request, reduced server-side with `orderByMax`); when there
+  is a new one, it asks for the span of days touched since its last visit
+  (`orderByMinMax`) and downloads only those whole days as NetCDF, every
+  variable of a dataset in one request. The 15 datasets still reporting make
+  about 90 requests an hour when nothing has changed. Once an hour it checks
+  everything else too: the satellite, and the retired buoys, whose data only
+  changes when it's reprocessed. When UMaine replaces
   real-time data with post-recovery data, the reprocessed days come in the same
   way. The first run reads about 25 years of temperature and salinity for 25
   buoy depths in under a minute and a half.
+- **Live updates** ([`heatwaves/live.py`](heatwaves/live.py)). The sync
+  sends a Postgres `NOTIFY` with each new reading and each change of heatwave
+  state, in the transaction that stores them, so nothing is announced before
+  it's committed. The API holds one `LISTEN` connection and relays each
+  message to browsers over a WebSocket at `/api/live`; no Redis or message
+  queue. Every API response carries an ETag and `Cache-Control: no-cache`, so
+  a refetch prompted by a message is never answered from a stale cache, and an
+  unchanged one costs a 304. A Postgres advisory lock keeps a one-off sync
+  from storing at the same time as the scheduled job.
 - **Satellite sea surface temperature** (`GriddapSource` in the same file).
   NOAA OISST v2.1 from CoastWatch's ERDDAP, in the nearest quarter-degree cell
   with data to each buoy (OISST masks coastal cells as land). One request
@@ -132,6 +146,13 @@ Vite. Everything on screen is linked:
   addresses it). Its origin, with each of the five signals as a small chart
   over the onset window, its vote and a sentence on what it measured, and a
   temperature–salinity diagram of the water before and after the onset.
+- **Live.** The page keeps a WebSocket open to `/api/live` and writes each
+  new reading into TanStack Query's cache, so the tiles show the latest hourly
+  reading and the map marker pulses as it arrives; a status change refetches
+  what depends on heatwaves, and a buoy depth entering one gets a notice. The
+  header says whether the feed is connected. The connection reconnects with
+  backoff, drops itself if the server's 30-second pings stop, and refetches
+  everything on screen once it's back, to cover what it missed.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
   stacked by origin with Unclear kept in view; click a year to map it. The map
   plays the year day by day, each buoy coloured by its anomaly and ringed while
@@ -161,6 +182,7 @@ scale.
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
 | `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
+| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series entering or leaving a heatwave, or changing category) and `ping` every 30 s |
 | `GET /healthz` | 200 while the sync job is current, 503 once it falls behind |
 
 Interactive documentation (OpenAPI) is served at `/docs`.
@@ -174,8 +196,8 @@ cp .env.example .env        # set POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-Compose runs Postgres, a one-off `alembic upgrade head`, the API, the hourly
-sync job, and the frontend: Caddy serving the built app on
+Compose runs Postgres, a one-off `alembic upgrade head`, the API, the sync
+job, and the frontend: Caddy serving the built app on
 <http://localhost:8000> and forwarding `/api`, `/docs` and `/healthz` to the
 API, so the browser sees a single origin. Buoy data appears after the first
 sync, about a minute later, and the satellite's a few minutes after that.
@@ -186,7 +208,7 @@ SQLite, and the frontend with Vite, which forwards API requests to uvicorn:
 ```sh
 uv sync
 uv run alembic upgrade head
-uv run python -m heatwaves.sync           # add --every 3600 to keep going
+uv run python -m heatwaves.sync           # add --every 600 to keep going
 uv run uvicorn heatwaves.main:app --reload
 
 cd frontend && npm install && npm run dev  # http://localhost:5173
@@ -207,9 +229,10 @@ by URL pattern in `tests/conftest.py`); the climatology and event tests use
 synthetic series with known answers.
 
 Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
-`COASTWATCH_URL`, `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT` and
-`SYNC_STALE_AFTER_HOURS` (see
-[`heatwaves/config.py`](heatwaves/config.py)). After changing the method, run
+`COASTWATCH_URL`, `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT`,
+`SYNC_STALE_AFTER_HOURS` and `LIVE_MAX_CLIENTS` (see
+[`heatwaves/config.py`](heatwaves/config.py)). The live feed needs Postgres,
+for `NOTIFY`; on SQLite its WebSocket only pings. After changing the method, run
 `python -m heatwaves.sync --recompute` to rebuild every series from stored data.
 
 ## Layout
@@ -223,6 +246,8 @@ heatwaves/
   erddap.py      the few ERDDAP tabledap and griddap requests the app makes
   sources.py     what changed at each data source since the last sync
   sync.py        store, recompute, and the sync job (python -m heatwaves.sync)
+  live.py        the live feed: NOTIFY from the sync, LISTEN and WebSocket in the API
+  state.py       a series' state: heatwave, above threshold, normal, offline
   queries.py     reads of the stored record shared by the API and reports
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
   api.py         JSON API; main.py wires up the FastAPI app
@@ -230,7 +255,7 @@ heatwaves/
 frontend/src/
   pages/         explorer, heatwaves list, one heatwave, origins, methods
   components/    map, heatmap, range brush, depth charts, tables
-  api/           typed API client and TanStack Query hooks
+  api/           typed API client, TanStack Query hooks and the live feed
   state/         explorer view <-> URL
   lib/           dates, formatting, colours, event filtering
 scripts/         comparison with the reference implementation
@@ -259,11 +284,25 @@ tests/           backend tests; frontend tests sit beside their code
 - **pandas for resampling.** xarray opens the NetCDF and computes the
   climatology, but resampling one long 1-D series is about 1,000× faster in pandas
   than in xarray without the optional `flox` package.
+- **Polling, not ERDDAP's change feed.** ERDDAP announces dataset changes on
+  an MQTT broker, which NERACOOS's buoy_barn subscribes to, but the broker
+  needs credentials. The public alternative, each dataset's newest time in
+  ERDDAP's `allDatasets` table, turned out to lag: measured on 2026-09-29, a
+  reading could be queried at 02:23, but the table only showed it after
+  ERDDAP's hourly reload at 02:52. So the sync asks each reporting dataset
+  directly, every 10 minutes: a new reading reaches open pages within about
+  10 minutes of reaching ERDDAP, at about 90 tiny requests an hour.
+- **Postgres as the message bus.** The sync runs in another process than the
+  API, so something has to carry "this changed" across. `NOTIFY` in the
+  sync's own transaction does it with no new service, and a message can never
+  describe data that didn't commit. The cost: a message sent while the API's
+  `LISTEN` connection is down is lost, so the API disconnects every browser
+  when it reconnects, and they refetch.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
-  attack surface to a GET-only API.
+  attack surface to a GET-only API and a WebSocket that only sends.
 
-Possible next steps: marine cold spells, and refreshing on ERDDAP's MQTT
-change notifications instead of polling.
+Possible next steps: marine cold spells, and subscribing to ERDDAP's MQTT
+change feed instead of polling, given credentials from NERACOOS.
 
 ## Data and credits
 

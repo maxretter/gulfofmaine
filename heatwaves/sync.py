@@ -1,13 +1,18 @@
 """Bring the database up to date with ERDDAP, then recompute heatwaves.
 
-    python -m heatwaves.sync               # once
-    python -m heatwaves.sync --every 3600  # hourly, until stopped
+    python -m heatwaves.sync              # once
+    python -m heatwaves.sync --every 600  # every 10 minutes, until stopped
+
+Kept running, most rounds check only the buoy datasets still reporting,
+the only ones that get new readings within the hour; about once an hour, a
+round checks everything (sync_all).
 
 Each fetch covers every series in one dataset: all the variables of a
 buoy's dataset, or every buoy's cell of the satellite grid. heatwaves.sources
 says how each source finds what changed. Storing is the same for all of
 them: the fetched days replace the stored ones, then each series' heatwaves
-are recomputed from its full record.
+are recomputed from its full record. What changed goes out on the live feed
+(heatwaves.live) when the transaction commits.
 """
 
 import argparse
@@ -22,14 +27,20 @@ import pandas as pd
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import hobday, origin, queries
+from heatwaves import hobday, live, origin, queries, state
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, Source, connect
+from heatwaves.state import SeriesState
 from heatwaves.stations import BASELINE, BUOYS, SERIES
 
 log = logging.getLogger(__name__)
+
+# A Postgres advisory lock held by whichever process is syncing (any number unique to this app).
+SYNC_LOCK = 0x68656174
+# How often, kept running, a round checks every series rather than only the buoys still reporting.
+FULL_ROUND = dt.timedelta(hours=1)
 
 
 def ensure_catalog(session: Session, erddap: Erddap) -> None:
@@ -40,12 +51,7 @@ def ensure_catalog(session: Session, erddap: Erddap) -> None:
         if spec.source == "buoy" and spec.buoy not in surface.values():
             surface[spec.dataset_id] = spec.buoy
     positions = {
-        surface[row["datasetID"]]: row
-        for row in erddap.rows(
-            "allDatasets",
-            ["datasetID", "minLatitude", "minLongitude"],
-            [f'datasetID=~"^({"|".join(surface)})$"'],
-        )
+        surface[row["datasetID"]]: row for row in erddap.catalog(surface, ["minLatitude", "minLongitude"])
     }
     for code, name in BUOYS.items():
         buoy = session.get(Buoy, code) or Buoy(id=code)
@@ -75,27 +81,43 @@ def sync_series(session: Session, sources: Mapping[str, Source], series: Series)
 
     True if anything was read.
     """
+    one_sync_at_a_time(session)
     together = session.scalars(
         select(Series)
         .where(Series.source == series.source, Series.dataset_id == series.dataset_id)
         .order_by(Series.id)
+        # Another process may have synced them while this one waited.
+        .execution_options(populate_existing=True)
     ).all()
     download = sources[series.source].fetch(together)
     synced_at = dt.datetime.now(dt.UTC)
     for each in together:
         each.synced_at = synced_at
     if download is not None:
-        store(session, together, download)
+        live.publish(session, store(session, together, download))
     session.commit()
     return download is not None
 
 
-def store(session: Session, series: Sequence[Series], download: Download) -> None:
+def one_sync_at_a_time(session: Session) -> None:
+    """Wait until no other process is syncing, then keep it that way until this transaction ends.
+
+    A one-off run (after a deploy, say) can overlap the scheduled job, and
+    every sync rewrites every heatwave's origin. On Postgres only; SQLite
+    allows one writer anyway.
+    """
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(select(func.pg_advisory_xact_lock(SYNC_LOCK)))
+
+
+def store(session: Session, series: Sequence[Series], download: Download) -> list[live.Message]:
     """Replace each series' daily means over the downloaded span, then recompute its heatwaves.
 
     Every heatwave's origin is then judged again, since the evidence for one
-    comes from other series too.
+    comes from other series too. Returns the live feed's messages: each
+    newer temperature reading, and each temperature series whose state changed.
     """
+    messages: list[live.Message] = []
     for each in series:
         daily = download.daily[each.id]
         session.execute(
@@ -118,7 +140,14 @@ def store(session: Session, series: Sequence[Series], download: Download) -> Non
                 ],
             )
         each.modified_through = download.modified_through
-        update_heatwaves(session, each)
+        reading = download.latest.get(each.id)
+        if reading is not None and (each.latest_reading_at is None or reading.time > each.latest_reading_at):
+            each.latest_reading_at, each.latest_reading = reading.time, reading.value
+            if each.variable == "temperature":
+                messages.append(live.reading_message(each))
+        before, after = update_heatwaves(session, each)
+        if each.variable == "temperature" and after != before:
+            messages.append(live.status_message(each, before, after))
         log.info(
             "%s: re-read %s to %s (%d days)",
             each.label,
@@ -127,27 +156,31 @@ def store(session: Session, series: Sequence[Series], download: Download) -> Non
             len(daily),
         )
     update_origins(session)
+    return messages
 
 
-def update_heatwaves(session: Session, series: Series) -> None:
+def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, SeriesState]:
     """Recompute a series' climatology, events and latest status from its daily means.
 
-    Every variable gets a climatology, as its normal; only temperature gets events.
+    Every variable gets a climatology, as its normal; only temperature gets
+    events. Returns the series' state today, before and after.
     """
+    today = dt.datetime.now(dt.UTC).date()
+    before = state.current(session, series, today)
     rows = session.execute(
         select(DailyMean.date, DailyMean.value)
         .where(DailyMean.series_id == series.id)
         .order_by(DailyMean.date)
     ).all()
     if not rows:
-        return
+        return before, before
     daily = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
 
     try:
         analysis = hobday.analyse(daily, BASELINE)
     except hobday.InsufficientData as error:
         log.warning("%s: can't compute heatwaves: %s", series.label, error)
-        return
+        return before, before
 
     session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
     session.execute(
@@ -190,6 +223,7 @@ def update_heatwaves(session: Session, series: Series) -> None:
     series.latest_climatology = status.climatology
     series.latest_threshold = status.threshold
     series.days_above = status.days_above
+    return before, state.current(session, series, today)
 
 
 def update_origins(session: Session) -> None:
@@ -229,20 +263,30 @@ def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], serie
     return True
 
 
-def sync_all(session_factory: sessionmaker, erddap: Erddap, sources: Mapping[str, Source]) -> int:
-    """Sync every series, one fetch at a time. Returns the number of fetches that failed.
+def sync_all(
+    session_factory: sessionmaker, erddap: Erddap, sources: Mapping[str, Source], everything: bool = True
+) -> int:
+    """Sync series, one fetch at a time. Returns the number of fetches that failed.
 
-    `erddap` is the NERACOOS server, which lists the buoys' positions.
+    Without `everything`, only the buoy datasets still reporting (not
+    offline): all that gets new readings within the hour. The satellite adds
+    a day once a day, and a retired buoy's data changes only when it's
+    reprocessed. `erddap` is the NERACOOS server, which lists the buoys' positions.
     """
     with session_factory() as session:
-        ensure_catalog(session, erddap)
+        if everything:
+            ensure_catalog(session, erddap)
         # One series from each fetch; sync_one brings the rest along.
-        series_ids = session.scalars(
+        query = (
             select(func.min(Series.id))
             .group_by(Series.source, Series.dataset_id)
             # "buoy" before "satellite", so the satellite's first backfill doesn't hold the buoys up.
             .order_by(Series.source, Series.dataset_id)
-        ).all()
+        )
+        if not everything:
+            reporting_since = dt.datetime.now(dt.UTC).date() - state.OFFLINE_AFTER
+            query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
+        series_ids = session.scalars(query).all()
     return sum(not sync_one(session_factory, sources, series_id) for series_id in series_ids)
 
 
@@ -250,7 +294,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--every", type=float, metavar="SECONDS", help="keep running, syncing this often")
+    parser.add_argument(
+        "--every",
+        type=float,
+        metavar="SECONDS",
+        help="keep running, a round this often; about hourly, a round checks everything",
+    )
     parser.add_argument(
         "--recompute",
         action="store_true",
@@ -276,9 +325,13 @@ def main(argv: list[str] | None = None) -> int:
     with httpx.Client(timeout=settings.erddap_timeout, headers=headers, follow_redirects=True) as client:
         erddap = Erddap(settings.erddap_url, client)
         sources = connect(client)
+        full_every = max(1, round(FULL_ROUND.total_seconds() / args.every)) if args.every else 1
+        quick_rounds = 0  # left before the next full round
         while True:
+            everything = quick_rounds == 0
             try:
-                failures = sync_all(SessionLocal, erddap, sources)
+                failures = sync_all(SessionLocal, erddap, sources, everything)
+                quick_rounds = full_every - 1 if everything else quick_rounds - 1
             except httpx.HTTPError:
                 if args.every is None:
                     raise

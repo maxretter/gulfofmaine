@@ -14,15 +14,16 @@ from heatwaves.hobday import CATEGORIES
 
 
 class UTCDateTime(TypeDecorator):
-    """A timezone-aware datetime on every backend; SQLite would drop the zone."""
+    """A datetime in UTC on every backend; SQLite would drop the zone, and Postgres
+    returns the session's time zone, which JSON would then carry."""
 
     impl = DateTime(timezone=True)
     cache_ok = True
 
     def process_result_value(self, value: dt.datetime | None, dialect) -> dt.datetime | None:
-        if value is not None and value.tzinfo is None:
-            value = value.replace(tzinfo=dt.UTC)
-        return value
+        if value is None:
+            return None
+        return value.replace(tzinfo=dt.UTC) if value.tzinfo is None else value.astimezone(dt.UTC)
 
 
 class Base(DeclarativeBase):
@@ -73,6 +74,10 @@ class Series(Base):
     latest_climatology: Mapped[float | None]
     latest_threshold: Mapped[float | None]
     days_above: Mapped[int] = mapped_column(default=0)
+    # The newest reading that passed quality control, for sources that report
+    # more often than daily: a buoy's hourly value, in the variable's units.
+    latest_reading_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
+    latest_reading: Mapped[float | None]
 
     buoy: Mapped[Buoy] = relationship(back_populates="series")
 

@@ -23,6 +23,8 @@ function condition(overrides: Partial<Condition>): Condition {
     category_name: null,
     event_start: null,
     synced_at: "2026-09-28T16:51:00Z",
+    reading_at: "2026-09-28T16:00:00Z",
+    reading: 15.1,
     ...overrides,
   };
 }
