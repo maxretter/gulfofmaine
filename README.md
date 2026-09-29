@@ -193,8 +193,7 @@ works:
   stacked by origin with Unclear kept in view; click a year to see it below:
   every buoy's year from east to west, in the order slope water reaches them,
   with each heatwave a bar colored by its origin under a strip of the daily
-  anomaly. A small map beside it joins the buoys in that order, and a
-  heatwave opens its page.
+  anomaly. A heatwave opens its page.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one

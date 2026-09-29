@@ -256,16 +256,7 @@ td .swatch { position: relative; top: 1px; }
 .sources { color: var(--ink-2); font-size: 0.85rem; margin: 1.25rem 0 0; }
 
 /* --- Origins page --- */
-.year-by-buoy { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem 1.5rem; align-items: start; }
-.map.path-map { flex: none; height: 268px; min-height: 0; border-radius: 8px; }
-.path-map .leaflet-control-attribution { font-size: 10px; }
-.path-label.leaflet-tooltip { font-size: 11px; padding: 1px 4px; }
-.path-arrow path { fill: none; stroke: var(--ink-2); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .anomaly-legend svg { display: block; }
-@media (max-width: 760px) {
-  .year-by-buoy { grid-template-columns: minmax(0, 1fr); }
-  .map.path-map { order: -1; height: 200px; }
-}
 
 /* --- A heatwave's page --- */
 .crumbs { margin: 0 0 0.5rem; font-size: 0.9rem; }

@@ -90,10 +90,11 @@ export function OriginsPage() {
           </label>
         </div>
         <p className="caption">
-          Each buoy's year, east to west in the order slope water reaches them, as on the map. Bars are heatwaves,
-          colored by where their heat came from, under a strip of the temperature against normal. Heat from offshore
-          should reach the eastern buoys first, but neighboring buoys mostly warm and cool together, so that order is
-          one clue among five. Click a heatwave for its evidence, or{" "}
+          Each buoy's year, top to bottom in the order slope water reaches them: in through the Northeast Channel, then
+          west along the coast to Massachusetts Bay. Bars are heatwaves, colored by where their heat came from, under a
+          strip of the temperature against normal. Heat from offshore should reach the eastern buoys first, but
+          neighboring buoys mostly warm and cool together, so that order is one clue among five. Click a heatwave for its
+          evidence, or{" "}
           <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
         {buoys.data ? (

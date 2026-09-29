@@ -12,17 +12,17 @@ import { formatDate, formatSigned } from "../lib/format";
 import { eastToWest } from "../lib/origin";
 import { Chart } from "./Chart";
 import { Label } from "./Label";
-import { PathMap } from "./PathMap";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 
 const ORIGINS: Origin[] = ["offshore", "surface", "unclear"];
 const DAY = 86_400_000;
 // Each buoy's row: the temperature strip on top, its heatwaves in a bar under it, centered on the row's label, and air
 // before the next row.
-const ROW = 34;
-const STRIP = [1, 8]; // px from the top of the row
-const BAR = [10, 24];
+const ROW = 44;
+const STRIP = [1, 10]; // px from the top of the row
+const BAR = [12, 32];
 const AXIS = 30;
+const NAMED = 640; // px: from this wide, rows are labeled with the buoy's name too
 
 interface Props {
   year: number;
@@ -33,13 +33,14 @@ interface Props {
 
 /**
  * Every buoy's year at one depth, east to west: its heatwaves as bars colored by origin, under a strip of the
- * temperature against normal, beside a map of the buoys in the same order. A heatwave opens its page.
+ * temperature against normal. A heatwave opens its page.
  */
 export function YearByBuoy({ year, depth, buoys, events }: Props) {
   const onsets = useOnsets(year, depth);
   const order = useMemo(() => eastToWest(buoys, depth), [buoys, depth]);
   const data = onsets.data;
   const rows = useMemo(() => order.map((b) => b.id), [order]);
+  const names = useMemo(() => new Map(order.map((b) => [b.id, b.name])), [order]);
   const shown = useMemo(
     () =>
       events
@@ -49,46 +50,41 @@ export function YearByBuoy({ year, depth, buoys, events }: Props) {
   );
 
   return (
-    <div className="year-by-buoy">
-      <div>
-        <Chart
-          loading={onsets.isPlaceholderData}
-          error={onsets.isError && "Couldn't load that year."}
-          minHeight={rows.length * ROW + AXIS}
-          legend={
-            <div className="legend">
-              {ORIGINS.map((origin) => (
-                // Square swatches, filled like the bars (a tag draws Unclear hollow).
-                <Label key={origin} color={origins[origin].color} variant="square">
-                  {origins[origin].name}
-                </Label>
-              ))}
-              <AnomalyLegend />
-            </div>
-          }
-          table={{
-            columns: [
-              { label: "Buoy" },
-              { label: "Began" },
-              { label: "Ended" },
-              { label: "Days", numeric: true },
-              { label: "Origin" },
-            ],
-            rows: () =>
-              shown.map((e) => [
-                e.buoy_id,
-                formatDate(e.start_date),
-                formatDate(e.end_date),
-                e.duration,
-                e.origin ? origins[e.origin].name : "–",
-              ]),
-          }}
-        >
-          {(width) => data && <Rows data={data} rows={rows} events={shown} width={width} />}
-        </Chart>
-      </div>
-      <PathMap buoys={order} />
-    </div>
+    <Chart
+      loading={onsets.isPlaceholderData}
+      error={onsets.isError && "Couldn't load that year."}
+      minHeight={rows.length * ROW + AXIS}
+      legend={
+        <div className="legend">
+          {ORIGINS.map((origin) => (
+            // Square swatches, filled like the bars (a tag draws Unclear hollow).
+            <Label key={origin} color={origins[origin].color} variant="square">
+              {origins[origin].name}
+            </Label>
+          ))}
+          <AnomalyLegend />
+        </div>
+      }
+      table={{
+        columns: [
+          { label: "Buoy" },
+          { label: "Began" },
+          { label: "Ended" },
+          { label: "Days", numeric: true },
+          { label: "Origin" },
+        ],
+        rows: () =>
+          shown.map((e) => [
+            e.buoy_id,
+            formatDate(e.start_date),
+            formatDate(e.end_date),
+            e.duration,
+            e.origin ? origins[e.origin].name : "–",
+          ]),
+      }}
+    >
+      {(width) => data && <Rows data={data} rows={rows} names={names} events={shown} width={width} />}
+    </Chart>
   );
 }
 
@@ -102,11 +98,12 @@ interface Cell {
 interface RowsProps {
   data: Onsets;
   rows: string[]; // buoys east to west
+  names: Map<string, string>;
   events: HeatwaveEvent[]; // at this depth, overlapping the year
   width: number;
 }
 
-function Rows({ data, rows, events, width }: RowsProps) {
+function Rows({ data, rows, names, events, width }: RowsProps) {
   const navigate = useNavigate();
   const options = useMemo((): Plot.PlotOptions => {
     const first = data.dates[0];
@@ -124,7 +121,7 @@ function Rows({ data, rows, events, width }: RowsProps) {
     const next = (c: Cell) => new Date(c.date.getTime() + DAY);
     const describe = (c: Cell) =>
       [
-        `${c.buoy}, ${formatDate(c.date)}: ${c.anomaly === null ? "no data" : `${formatSigned(c.anomaly)} vs normal`}`,
+        `${c.buoy} ${names.get(c.buoy)}, ${formatDate(c.date)}: ${c.anomaly === null ? "no data" : `${formatSigned(c.anomaly)} vs normal`}`,
         ...(c.event
           ? [
               `Heatwave of ${c.event.duration} days from ${formatDate(c.event.start_date)}`,
@@ -133,14 +130,23 @@ function Rows({ data, rows, events, width }: RowsProps) {
           : []),
       ].join("\n");
 
+    const named = width >= NAMED;
+
     return {
       ...chartDefaults,
       width,
       height: rows.length * ROW + AXIS,
+      marginLeft: named ? 170 : chartDefaults.marginLeft,
       marginTop: 0,
       marginBottom: AXIS,
       x: { type: "utc", domain: [parseDay(first), new Date(parseDay(last).getTime() + DAY)], label: null, tickFormat: "%b" },
-      y: { domain: rows, label: null, padding: 0, tickSize: 0 },
+      y: {
+        domain: rows,
+        label: null,
+        padding: 0,
+        tickSize: 0,
+        tickFormat: (buoy: string) => (named ? `${buoy}  ${names.get(buoy)}` : buoy),
+      },
       marks: [
         Plot.rect(
           cells.filter((c) => c.anomaly !== null),
@@ -163,7 +169,7 @@ function Rows({ data, rows, events, width }: RowsProps) {
         Plot.tip(cells, Plot.pointer({ x: (c: Cell) => new Date(c.date.getTime() + DAY / 2), y: "buoy", title: describe })),
       ],
     };
-  }, [data, rows, events, width]);
+  }, [data, rows, names, events, width]);
 
   const onRender = useCallback(
     (plot: PlotElement) => {
