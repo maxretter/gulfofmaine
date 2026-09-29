@@ -52,12 +52,14 @@ export function BuoyPage() {
   return (
     <>
       <section className="intro">
-        <p className="crumbs">
-          <Link to="/buoys">All buoys</Link>
+        <p className="kicker">
+          <Link to="/buoys">Buoys</Link>
+          <span className="kicker-sep" aria-hidden="true">
+            ·
+          </span>
+          {buoy.id}
         </p>
-        <h1>
-          <span className="code">{buoy.id}</span> {buoy.name}
-        </h1>
+        <h1>{buoy.name}</h1>
         <p className="lead">
           Daily water temperature at {formatList(buoy.series.map((s) => s.depth))} m
           {firstDate && lastDate && `, recorded from ${formatDate(firstDate)} to ${formatDate(lastDate)}`}.
@@ -66,7 +68,7 @@ export function BuoyPage() {
 
       <Tiles buoy={buoy} />
 
-      <section className="card">
+      <section className="card figure">
         {range ? (
           <Record
             buoy={buoy}
@@ -84,7 +86,7 @@ export function BuoyPage() {
       </section>
 
       {buoy.satellite && (
-        <section className="card">
+        <section className="card figure">
           <h2>What the satellite misses here</h2>
           <p className="caption">
             Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the

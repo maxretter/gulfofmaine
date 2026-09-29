@@ -8,6 +8,7 @@ import type {
   Day,
   EventDetail,
   HeatwaveEvent,
+  MonthAnomaly,
   Onsets,
   OriginRules,
   Variable,
@@ -30,6 +31,7 @@ export const keys = {
   daily: ["daily"],
   event: ["event"],
   onsets: ["onsets"],
+  stripes: ["stripes"],
   originRules: ["origin-rules"],
 } as const;
 
@@ -87,6 +89,14 @@ export function useAgreement(depth: number) {
   return useQuery({
     queryKey: [...keys.agreement, depth],
     queryFn: () => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`),
+  });
+}
+
+/** Each month's temperature against normal at `depth`, averaged over the buoys: the stripes across the header. */
+export function useStripes(depth: number) {
+  return useQuery({
+    queryKey: [...keys.stripes, depth],
+    queryFn: () => getJSON<MonthAnomaly[]>(`/api/stripes?depth=${depth}`),
   });
 }
 

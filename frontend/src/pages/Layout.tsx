@@ -7,6 +7,7 @@ import type { StatusMessage } from "../api/types";
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
 import { LiveIndicator } from "../components/LiveIndicator";
 import { Logo } from "../components/Logo";
+import { StripesBand } from "../components/Stripes";
 import { latest } from "../lib/dates";
 import { formatDate } from "../lib/format";
 
@@ -25,6 +26,7 @@ export function Layout() {
   return (
     <LiveContext value={live}>
       <header className="site-header">
+        <StripesBand />
         <div className="wrap">
           <div className="brand">
             <Link className="wordmark" to="/">

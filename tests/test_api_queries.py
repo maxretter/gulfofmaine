@@ -2,8 +2,10 @@
 
 import datetime as dt
 
+import pandas as pd
 import pytest
 
+from heatwaves import queries
 from heatwaves.models import Series
 from heatwaves.sync import update_heatwaves
 from tests.conftest import add_series, api_client, fresh_database, seasonal_temperatures
@@ -109,6 +111,39 @@ def test_annual_counts_heatwave_and_observed_days(client):
 
     assert (years["B01", 2021]["heatwave_days"], years["B01", 2021]["observed_days"]) == (10, 365)
     assert years["A01", TODAY.year]["heatwave_days"] >= 8
+
+
+def test_monthly_anomaly_needs_enough_days_from_each_series():
+    def days(start: str, count: int, value: float) -> pd.Series:
+        return pd.Series(value, index=pd.date_range(start, periods=count))
+
+    months = queries.monthly_anomaly(
+        [
+            # January in full at +1; ten days of February, too few to count; March in full at +2.
+            pd.concat(
+                [days("2021-01-01", 31, 1.0), days("2021-02-01", 10, 3.0), days("2021-03-01", 31, 2.0)]
+            ),
+            # Twenty days of January at -1.
+            days("2021-01-05", 20, -1.0),
+        ]
+    )
+
+    assert pd.DatetimeIndex(months.index).strftime("%Y-%m").tolist() == ["2021-01", "2021-03"]
+    assert months["anomaly"].tolist() == [0.0, 2.0]
+    assert months["series"].tolist() == [2, 1]
+    assert queries.monthly_anomaly([]).empty
+
+
+def test_stripes_average_each_month_over_the_buoys(client):
+    months = client.get("/api/stripes?depth=1").json()
+
+    assert months[0]["month"] == "2003-01-01"
+    assert [m["month"] for m in months] == sorted(m["month"] for m in months)
+    by_month = {m["month"]: m for m in months}
+    # Both buoys measure 1 m through 2021; B01's heatwave that July warms the month.
+    assert by_month["2021-07-01"]["buoys"] == 2
+    assert by_month["2021-07-01"]["anomaly"] > by_month["2021-06-01"]["anomaly"]
+    assert client.get("/api/stripes?depth=7").status_code == 404
 
 
 def test_buoys_report_the_satellite_apart_from_the_depths(client):

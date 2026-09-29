@@ -2,7 +2,7 @@
 
 import datetime as dt
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 
 import pandas as pd
 from sqlalchemy import select
@@ -69,6 +69,25 @@ def heatwave_days(session: Session, series_ids: Collection[int]) -> dict[int, pd
         series_id: pd.concat(spans[series_id]).sort_index() if spans[series_id] else _NO_DAYS
         for series_id in series_ids
     }
+
+
+def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.DataFrame:
+    """Each month's anomaly averaged over the series, from each series' daily anomalies.
+
+    A series counts toward a month with at least `min_days` days of data in
+    it; months no series counts toward are left out. Indexed by each month's
+    first day, with the mean `anomaly` and the number of `series` behind it.
+    """
+    means = []
+    for daily_anomaly in anomalies:
+        months = daily_anomaly.dropna().resample("MS")
+        means.append(months.mean()[months.count() >= min_days])
+    if not means:
+        return pd.DataFrame({"anomaly": [], "series": []}, index=pd.DatetimeIndex([], name="month"))
+    table = pd.concat(means, axis=1)
+    frame = pd.DataFrame({"anomaly": table.mean(axis=1), "series": table.count(axis=1)})
+    frame.index.name = "month"
+    return frame[frame["series"] > 0].sort_index()
 
 
 def observed_days(session: Session, series_ids: Collection[int]) -> dict[int, pd.DatetimeIndex]:

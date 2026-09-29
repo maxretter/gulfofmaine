@@ -151,6 +151,13 @@ export interface Agreement {
   neither: number;
 }
 
+/** One month's temperature against normal at a depth, averaged over the buoys (/api/stripes). */
+export interface MonthAnomaly {
+  month: string; // its first day
+  anomaly: number; // °C
+  buoys: number;
+}
+
 export interface YearSummary {
   buoy_id: string;
   depth: number;

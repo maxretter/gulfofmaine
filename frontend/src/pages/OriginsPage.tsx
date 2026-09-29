@@ -42,6 +42,7 @@ export function OriginsPage() {
   return (
     <>
       <section className="intro">
+        <p className="kicker">Origins</p>
         <h1>Where the heat came from</h1>
         <p className="lead">
           Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty slope water enters through the
@@ -62,7 +63,7 @@ export function OriginsPage() {
         </div>
       </div>
 
-      <section className="card">
+      <section className="card figure">
         <h2>Heatwaves at {depth} m each year, by origin</h2>
         <p className="caption">
           By the year each began. Unclear is kept in view: it is where the signals disagree or the data are too thin.
@@ -75,7 +76,7 @@ export function OriginsPage() {
         )}
       </section>
 
-      <section className="card">
+      <section className="card figure">
         <div className="detail-head">
           <h2>Every heatwave at {depth} m in {year}</h2>
           <label>

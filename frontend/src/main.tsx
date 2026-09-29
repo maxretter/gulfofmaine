@@ -1,3 +1,5 @@
+import "@fontsource-variable/newsreader/opsz.css";
+import "@fontsource-variable/public-sans";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 

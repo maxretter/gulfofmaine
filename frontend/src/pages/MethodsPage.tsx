@@ -11,6 +11,7 @@ export function MethodsPage() {
   const rules = useOriginRules();
   return (
     <article className="prose">
+      <p className="kicker">Reference</p>
       <h1>Methods</h1>
 
       <h2>What a heatwave means here</h2>

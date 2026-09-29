@@ -42,11 +42,15 @@ export function EventPage() {
   return (
     <>
       <section className="intro">
-        <p className="crumbs">
-          <Link to="/events">Every heatwave</Link>
+        <p className="kicker">
+          <Link to="/events">Heatwaves</Link>
+          <span className="kicker-sep" aria-hidden="true">
+            ·
+          </span>
+          {detail.buoy_id}
         </p>
         <h1>
-          <span className="code">{detail.buoy_id}</span> {buoy?.name}, {detail.depth} m
+          {buoy?.name ?? detail.buoy_id}, {detail.depth} m
         </h1>
         <p className="lead">
           {/^[aeiou]/.test(kind) ? "An" : "A"} {kind} heatwave from {formatDate(detail.start_date)} to{" "}
@@ -70,7 +74,7 @@ export function EventPage() {
       <EventFigures event={detail} events={events.data} />
 
       {buoy && (
-        <section className="card">
+        <section className="card figure">
           <h2>Through the heatwave, at every depth</h2>
           <p className="caption">
             {detail.buoy_id}'s daily temperature from {formatDate(period.from)} to {formatDate(period.to)}, against the
@@ -120,7 +124,7 @@ function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
   const onset = parseDay(detail.start_date);
 
   return (
-    <section className="card">
+    <section className="card figure">
       <div className="detail-head">
         <h2>Where the heat came from</h2>
         <OriginLabel origin={detail.origin!} />
@@ -402,7 +406,7 @@ function TSCard({ detail, rules }: CardProps) {
   ]);
 
   return (
-    <section className="card">
+    <section className="card figure">
       <h2>Temperature and salinity at {detail.depth} m</h2>
       <p className="caption">
         Each dot is a day, from {rules.before} days before the onset to {rules.after} after. Water arriving from

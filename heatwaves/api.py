@@ -176,6 +176,12 @@ class Onsets(BaseModel):
     buoys: list[BuoyYear]
 
 
+class MonthAnomaly(BaseModel):
+    month: dt.date  # its first day
+    anomaly: float  # degrees C against normal, averaged over the buoys
+    buoys: int  # buoys with at least 15 days of data in the month
+
+
 class YearSummary(BaseModel):
     buoy_id: str
     depth: int
@@ -551,6 +557,27 @@ def annual(depth: int, session: SessionDep) -> list[YearSummary]:
             observed_days=count,
         )
         for buoy_id, year, count in sorted(observed)
+    ]
+
+
+@router.get("/stripes")
+def stripes(depth: int, session: SessionDep) -> list[MonthAnomaly]:
+    """Each month's temperature against normal at one depth, averaged over the buoys.
+
+    A buoy counts toward a month with at least 15 days of data in it, against
+    its own 2003-2022 normal. Months no buoy counts toward are left out. The
+    site draws these as the stripes across its header.
+    """
+    series = session.scalars(select(Series).where(AT_BUOY, Series.depth == depth)).all()
+    if not series:
+        raise HTTPException(404, f"No buoy measures {depth} m")
+    frames = (queries.daily(session, each.id) for each in series)
+    months = queries.monthly_anomaly(frame["anomaly"] for frame in frames if frame is not None)
+    return [
+        MonthAnomaly(month=month.date(), anomaly=round(anomaly, 3), buoys=int(count))
+        for month, anomaly, count in zip(
+            pd.DatetimeIndex(months.index), months["anomaly"], months["series"], strict=True
+        )
     ]
 
 

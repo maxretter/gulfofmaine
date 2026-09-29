@@ -14,6 +14,7 @@ export function DataPage() {
 
   return (
     <article className="prose">
+      <p className="kicker">Reference</p>
       <h1>Data</h1>
       <p className="lead">
         Everything on this site as files: each buoy depth's daily record and every heatwave, as NetCDF and as CSV.

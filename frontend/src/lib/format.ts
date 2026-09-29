@@ -7,6 +7,8 @@ const dateFormat = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+const monthFormat = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
 const timeFormat = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
@@ -36,6 +38,11 @@ export function formatBytes(bytes: number): string {
 
 export function formatDate(value: string | Date): string {
   return dateFormat.format(typeof value === "string" ? parseDay(value) : value);
+}
+
+/** A month, YYYY-MM, as "Nov 2021". */
+export function formatMonth(month: string): string {
+  return monthFormat.format(parseDay(`${month.slice(0, 7)}-01`));
 }
 
 /** A UTC timestamp as "14:00 UTC", with its date unless that's today's (UTC). */

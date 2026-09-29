@@ -4,6 +4,7 @@ import {
   formatBytes,
   formatDate,
   formatList,
+  formatMonth,
   formatOrdinal,
   formatPercent,
   formatSigned,
@@ -29,6 +30,11 @@ describe("formatting", () => {
     expect(formatTemp(14.87)).toBe("14.9 °C");
     // A UTC day must not shift to the previous day in western time zones.
     expect(formatDate("2021-06-15")).toBe("Jun 15, 2021");
+  });
+
+  it("formats a month", () => {
+    expect(formatMonth("2021-11")).toBe("Nov 2021");
+    expect(formatMonth("2001-01-01")).toBe("Jan 2001");
   });
 
   it("gives a reading's time in UTC, with its date unless it's from today", () => {

@@ -81,6 +81,7 @@ export function EventsPage() {
   return (
     <>
       <section className="intro">
+        <p className="kicker">Heatwaves</p>
         <h1>Every heatwave on record</h1>
         <p className="lead">
           All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001. See which years were
@@ -171,7 +172,7 @@ export function EventsPage() {
       </div>
 
       {buoys.data && (
-        <section className="card">
+        <section className="card figure">
           <h2>Heatwave days per year {filters.depth === null ? "at any depth" : `at ${filters.depth} m`}</h2>
           <p className="caption">
             Days inside a heatwave that matches the filters above, by buoy and year

@@ -22,7 +22,7 @@ interface Props {
 }
 
 const HEIGHT = 84;
-const MARGIN = { top: 4, bottom: 20, left: 40, right: 12 };
+const MARGIN = { top: 4, bottom: 20, left: chartDefaults.marginLeft, right: chartDefaults.marginRight };
 
 interface Brush {
   behavior: BrushBehavior<unknown>;

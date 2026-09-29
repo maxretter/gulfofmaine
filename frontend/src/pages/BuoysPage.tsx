@@ -24,7 +24,8 @@ export function BuoysPage() {
   return (
     <>
       <section className="intro">
-        <h1>Buoys</h1>
+        <p className="kicker">University of Maine moorings</p>
+        <h1>The buoys</h1>
         <p className="lead">
           Every University of Maine buoy this site follows, including those no longer reporting, kept for their
           history. Choose one for its whole record and every heatwave in it.

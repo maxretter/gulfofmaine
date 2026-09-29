@@ -12,7 +12,7 @@ published as CF NetCDF and CSV files, ready for ERDDAP.
 
 **Live site:** _coming soon_ · **API docs:** `/docs` on the live site
 
-![Now: the buoys' heatwave status at 50 m on a map and in a table, with a line saying how many are in a heatwave](docs/now.png)
+![Now: the record at 50 m as warming stripes, a month to a stripe, over the buoys' heatwave status at 50 m on a map and in a table](docs/now.png)
 
 ## Why
 
@@ -149,7 +149,8 @@ works:
 
 - **Now** (`/?depth=50`). Every buoy's latest daily mean at one depth, on a map
   and in a table, with a line saying how many are in a heatwave. Each buoy
-  leads to its own page.
+  leads to its own page. Above them, the whole record at 50 m as warming
+  stripes, a month to a stripe; hover one for its month.
 - **Buoys** (`/buoys`). Every buoy, retired ones included: its depths, the span
   of its record, how many heatwaves it has logged and whether it's in one now.
 - **A page per buoy** (`/buoys/F01?depth=20&from=2021-05-01&to=2021-12-31`).
@@ -204,6 +205,12 @@ contrast, and the satellite's and the origins' colors were checked the same
 way against the ones beside them; anomalies use a blue–gray–orange diverging
 scale.
 
+The look is editorial: Newsreader for titles, figures and long text, Public
+Sans for everything else (both self-hosted through Fontsource, since the
+content security policy allows no other origins), sections set open under
+rules rather than in boxes, and charts numbered as figures. The same stripes
+run across the top of every page as the site's mark.
+
 ### API
 
 | Endpoint | Returns |
@@ -216,6 +223,7 @@ scale.
 | `GET /api/onsets?year=&depth=` | Each buoy's first heatwave of a year, and its daily anomaly and heatwave days |
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
 | `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
+| `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
 | `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series entering or leaving a heatwave, or changing category) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |

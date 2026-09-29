@@ -33,6 +33,7 @@ export function SatellitePage() {
   return (
     <>
       <section className="intro">
+        <p className="kicker">Satellite gap</p>
         <h1>What the satellite misses</h1>
         <p className="lead">
           Most heatwave monitoring in the Gulf of Maine uses satellite sea surface temperature, which sees only the top
@@ -68,7 +69,7 @@ export function SatellitePage() {
             })}
           </div>
 
-          <section className="card">
+          <section className="card figure">
             <h2>Heatwave days at 20 and 50 m, every buoy together</h2>
             <p className="caption">
               Each year's heatwave days at depth, summed over the buoys and split by whether the satellite record also
