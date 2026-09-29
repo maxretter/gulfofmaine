@@ -13,6 +13,11 @@
 		reverse_proxy {$API_UPSTREAM:api:8000}
 	}
 
+	# Only with Compose's erddap profile; a 502 without it.
+	handle /erddap* {
+		reverse_proxy {$ERDDAP_UPSTREAM:erddap:8080}
+	}
+
 	handle {
 		root * /srv
 		header {

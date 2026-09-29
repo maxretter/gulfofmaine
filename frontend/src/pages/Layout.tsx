@@ -38,6 +38,7 @@ export function Layout() {
             </NavLink>
             <NavLink to="/events">Heatwaves</NavLink>
             <NavLink to="/origins">Origins</NavLink>
+            <NavLink to="/data">Data</NavLink>
             <NavLink to="/methods">Methods</NavLink>
             <a href="/docs">API</a>
             <a href="https://github.com/maxretter/gulfofmaine">Source</a>

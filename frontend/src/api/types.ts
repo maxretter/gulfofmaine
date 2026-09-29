@@ -187,3 +187,32 @@ export interface PingMessage {
 }
 
 export type LiveMessage = ReadingMessage | StatusMessage | PingMessage;
+
+/** A product file the sync job writes, from GET /api/data. */
+export interface DataFile {
+  format: "nc" | "csv";
+  url: string;
+  size: number; // bytes
+  modified: string; // ISO datetime, UTC
+}
+
+export interface DataProduct {
+  name: string; // file name without extension, e.g. A01_heatwaves_020m
+  buoy_id: string | null; // null for the events table
+  depth: number | null;
+  files: DataFile[];
+}
+
+/** A variable of the daily series files, from its NetCDF attributes. */
+export interface DataVariable {
+  name: string;
+  long_name: string;
+  units: string | null;
+  standard_name: string | null;
+  flag_meanings: string | null; // space-separated, for flag values 0, 1, 2 ...
+}
+
+export interface DataCatalog {
+  products: DataProduct[];
+  variables: DataVariable[];
+}

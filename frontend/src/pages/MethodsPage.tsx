@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import { useBuoys, useOriginRules } from "../api/queries";
 import type { OriginRules } from "../api/types";
 import { OriginLabel } from "../components/Label";
@@ -221,6 +223,10 @@ export function MethodsPage() {
         the thresholds above. The live feed is a WebSocket at <code>/api/live</code>: JSON messages of type{" "}
         <code>reading</code> (a buoy depth's newest hourly temperature), <code>status</code> (a series entering or
         leaving a heatwave, or changing category; depth 0 is the satellite) and <code>ping</code>, every 30 seconds.
+      </p>
+      <p>
+        The same record is published as files, NetCDF following the CF and ACDD conventions and CSV, with an ERDDAP
+        configuration to serve them; the <Link to="/data">Data page</Link> lists them and shows how to open one.
       </p>
     </article>
   );

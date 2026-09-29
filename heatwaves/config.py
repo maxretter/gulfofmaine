@@ -3,6 +3,7 @@
 import datetime as dt
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,8 @@ class Settings:
     sync_stale_after: dt.timedelta
     # Browsers the live feed serves at once (heatwaves.live).
     live_max_clients: int
+    # Where the sync job writes the NetCDF and CSV products (heatwaves.products) and the API reads them.
+    products_dir: Path
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -30,6 +33,7 @@ class Settings:
             ),
             sync_stale_after=dt.timedelta(hours=float(env("SYNC_STALE_AFTER_HOURS", "3"))),
             live_max_clients=int(env("LIVE_MAX_CLIENTS") or "200"),
+            products_dir=Path(env("PRODUCTS_DIR", "products")),
         )
 
 

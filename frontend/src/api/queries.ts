@@ -4,6 +4,7 @@ import { parseDay } from "../lib/dates";
 import type {
   Agreement,
   Buoy,
+  DataCatalog,
   Day,
   EventDetail,
   HeatwaveEvent,
@@ -110,6 +111,11 @@ export function useOnsets(year: number, depth: number) {
     queryFn: () => getJSON<Onsets>(`/api/onsets?year=${year}&depth=${depth}`),
     placeholderData: keepPreviousData,
   });
+}
+
+/** The downloadable products and the variables of the daily files. */
+export function useDataCatalog() {
+  return useQuery({ queryKey: ["data"], queryFn: () => getJSON<DataCatalog>("/api/data") });
 }
 
 export function useOriginRules() {

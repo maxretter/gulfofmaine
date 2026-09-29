@@ -19,6 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "compliance-checker>=6.1",
     "pandas-stubs>=3.0",
     "pytest>=9",
     "pytest-cov>=7.1",

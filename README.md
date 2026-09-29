@@ -7,7 +7,8 @@ where its heat likely came from. A Python job reads NERACOOS's ERDDAP server
 (and NOAA's, for the satellite) every 10 minutes and applies the standard
 marine heatwave definition (Hobday et al. 2016) to each depth; a FastAPI JSON
 API serves the results to a React app for exploring them, and pushes new
-readings to it over a WebSocket as they're stored.
+readings to it over a WebSocket as they're stored. The whole record is also
+published as CF NetCDF and CSV files, ready for ERDDAP.
 
 **Live site:** _coming soon_ · **API docs:** `/docs` on the live site
 
@@ -52,10 +53,11 @@ November 2021. (Figures as of 2026-09-28.)
 ```
 NERACOOS ERDDAP ──NetCDF──▶ sync job ──▶ Postgres ─NOTIFY─▶ FastAPI ──▶ Caddy ─────▶ React app
 data.neracoos.org   10 min  xarray, pandas                  JSON API,   serves the   Leaflet, Observable Plot,
-(buoys, tabledap)      ▲                                    WebSocket   app, proxies TanStack Query
-                       │                                    /api/live   /api
-CoastWatch ERDDAP ─────┘
-(OISST, griddap)
+(buoys, tabledap)      ▲       │                            WebSocket,  app, proxies TanStack Query
+                       │       │                            downloads   /api, /erddap
+CoastWatch ERDDAP ─────┘       ▼                               ▲          │
+(OISST, griddap)        CF NetCDF + CSV ───────────────────────┴────────▶ ERDDAP (optional)
+                        products volume                                   EDDTableFromNcCFFiles
 ```
 
 - **Incremental sync** ([`heatwaves/sources.py`](heatwaves/sources.py)).
@@ -109,6 +111,25 @@ CoastWatch ERDDAP ─────┘
   before any UI existed, and their thresholds are served at
   `/api/origin/rules` so the Methods page can't drift from the code. Labels and
   their evidence are stored on each event and recomputed with it.
+- **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
+  After a sync round that stores new data, the job rewrites one NetCDF file
+  per buoy and depth (the daily temperature, normal, threshold, anomaly and
+  heatwave category, each heatwave's origin, salinity, and the satellite's
+  record at the buoy) and an events table, each also as CSV. They follow the
+  CF conventions 1.11 as discrete sampling geometries, one time series per
+  file, with ACDD 1.3 metadata, and are built from the same reads as the JSON
+  API; tests check that a download matches the API exactly and run the IOOS
+  compliance checker on every file.
+  [`erddap/datasets.xml`](erddap/datasets.xml), drafted by ERDDAP's
+  `GenerateDatasetsXml`, serves them from ERDDAP as two datasets. Opening one
+  takes three lines:
+
+  ```python
+  import xarray as xr
+
+  ds = xr.open_dataset("http://localhost:8000/api/data/A01/50.nc#mode=bytes")
+  ds.temperature_anomaly.sel(time="2021").plot()
+  ```
 - **Validated against the reference implementation.** On all 25 buoy/depth
   temperature records, the detected events (856 of them, with their dates and
   categories) are identical to those from Eric Oliver's
@@ -153,6 +174,8 @@ Vite. Everything on screen is linked:
   header says whether the feed is connected. The connection reconnects with
   backoff, drops itself if the server's 30-second pings stop, and refetches
   everything on screen once it's back, to cover what it missed.
+- **Data** (`/data`). Every file with its size, the variables in them, and
+  how to open one in xarray, pandas or curl.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
   stacked by origin with Unclear kept in view; click a year to map it. The map
   plays the year day by day, each buoy coloured by its anomaly and ringed while
@@ -183,6 +206,9 @@ scale.
 | `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
 | `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series entering or leaving a heatwave, or changing category) and `ping` every 30 s |
+| `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
+| `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
+| `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |
 | `GET /healthz` | 200 while the sync job is current, 503 once it falls behind |
 
 Interactive documentation (OpenAPI) is served at `/docs`.
@@ -200,7 +226,16 @@ Compose runs Postgres, a one-off `alembic upgrade head`, the API, the sync
 job, and the frontend: Caddy serving the built app on
 <http://localhost:8000> and forwarding `/api`, `/docs` and `/healthz` to the
 API, so the browser sees a single origin. Buoy data appears after the first
-sync, about a minute later, and the satellite's a few minutes after that.
+sync, about a minute later, and the satellite's a few minutes after that; the
+NetCDF and CSV files follow at the end of that first round.
+
+To serve the files from ERDDAP too, as NERACOOS would, add its profile; it
+runs at <http://localhost:8000/erddap> with the datasets `gom_heatwaves_daily`
+and `gom_heatwaves_events` (see [`erddap/`](erddap)):
+
+```sh
+docker compose --profile erddap up -d --build
+```
 
 For development, run the backend with [uv](https://docs.astral.sh/uv/) and
 SQLite, and the frontend with Vite, which forwards API requests to uvicorn:
@@ -217,7 +252,8 @@ cd frontend && npm install && npm run dev  # http://localhost:5173
 Checks, as CI runs them:
 
 ```sh
-uv run pytest --cov      # fails under 90% coverage; SQLite unless TEST_DATABASE_URL is set
+uv run pytest --cov      # fails under 90% coverage; SQLite unless TEST_DATABASE_URL is set;
+                         # includes the IOOS compliance checker's CF and ACDD checks on the files
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
 cd frontend && npm run lint && npm test && npm run build   # build includes the type check
@@ -230,10 +266,12 @@ synthetic series with known answers.
 
 Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 `COASTWATCH_URL`, `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT`,
-`SYNC_STALE_AFTER_HOURS` and `LIVE_MAX_CLIENTS` (see
-[`heatwaves/config.py`](heatwaves/config.py)). The live feed needs Postgres,
-for `NOTIFY`; on SQLite its WebSocket only pings. After changing the method, run
-`python -m heatwaves.sync --recompute` to rebuild every series from stored data.
+`SYNC_STALE_AFTER_HOURS`, `LIVE_MAX_CLIENTS` and `PRODUCTS_DIR`, where the
+files go (see [`heatwaves/config.py`](heatwaves/config.py)). The live feed
+needs Postgres, for `NOTIFY`; on SQLite its WebSocket only pings. After
+changing the method, run `python -m heatwaves.sync --recompute` to rebuild
+every series from stored data and its files; `python -m heatwaves.products`
+rewrites just the files.
 
 ## Layout
 
@@ -250,14 +288,16 @@ heatwaves/
   state.py       a series' state: heatwave, above threshold, normal, offline
   queries.py     reads of the stored record shared by the API and reports
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
+  products.py    the record as CF NetCDF and CSV files, for downloads and ERDDAP
   api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
-  pages/         explorer, heatwaves list, one heatwave, origins, methods
+  pages/         explorer, heatwaves list, one heatwave, origins, data, methods
   components/    map, heatmap, range brush, depth charts, tables
   api/           typed API client, TanStack Query hooks and the live feed
   state/         explorer view <-> URL
   lib/           dates, formatting, colours, event filtering
+erddap/          datasets.xml and an image that serves the files from ERDDAP
 scripts/         comparison with the reference implementation
 tests/           backend tests; frontend tests sit beside their code
 ```
@@ -298,6 +338,14 @@ tests/           backend tests; frontend tests sit beside their code
   describe data that didn't commit. The cost: a message sent while the API's
   `LISTEN` connection is down is lost, so the API disconnects every browser
   when it reconnects, and they refetch.
+- **Files in the formats ERDDAP serves.** The products are NetCDF-3 rather
+  than compressed NetCDF-4: twice the size on disk (about 1 MB a file), but
+  it is what ERDDAP itself serves, any netCDF library reads it, and the
+  netCDF4 package from pip can open one straight from a URL with
+  `#mode=bytes`, which it can't do for NetCDF-4. Daily values are timed at
+  the middle of the UTC day, as OISST's are. CF has no standard names for a
+  normal, a threshold or a salinity anomaly, so those variables carry a
+  `long_name` only, and the ACDD check notes their absence.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
 

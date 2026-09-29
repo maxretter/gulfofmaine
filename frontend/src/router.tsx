@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 
+import { DataPage } from "./pages/DataPage";
 import { EventPage } from "./pages/EventPage";
 import { EventsPage } from "./pages/EventsPage";
 import { ExplorerPage } from "./pages/ExplorerPage";
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
       { path: "events", element: <EventsPage /> },
       { path: "events/:buoy/:depth/:start", element: <EventPage /> },
       { path: "origins", element: <OriginsPage /> },
+      { path: "data", element: <DataPage /> },
       { path: "methods", element: <MethodsPage /> },
       { path: "*", element: <NotFound /> },
     ],

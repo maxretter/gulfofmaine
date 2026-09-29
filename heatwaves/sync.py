@@ -12,7 +12,8 @@ buoy's dataset, or every buoy's cell of the satellite grid. heatwaves.sources
 says how each source finds what changed. Storing is the same for all of
 them: the fetched days replace the stored ones, then each series' heatwaves
 are recomputed from its full record. What changed goes out on the live feed
-(heatwaves.live) when the transaction commits.
+(heatwaves.live) when the transaction commits, and after a round that stored
+anything the NetCDF and CSV products (heatwaves.products) are rewritten.
 """
 
 import argparse
@@ -21,13 +22,15 @@ import logging
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Literal
 
 import httpx
 import pandas as pd
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import hobday, live, origin, queries, state
+from heatwaves import hobday, live, origin, products, queries, state
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
@@ -36,6 +39,9 @@ from heatwaves.state import SeriesState
 from heatwaves.stations import BASELINE, BUOYS, SERIES
 
 log = logging.getLogger(__name__)
+
+# What a sync of one fetch came to: new data stored, nothing new, or an error.
+Outcome = Literal["updated", "unchanged", "failed"]
 
 # A Postgres advisory lock held by whichever process is syncing (any number unique to this app).
 SYNC_LOCK = 0x68656174
@@ -247,24 +253,42 @@ def update_origins(session: Session) -> None:
         )
 
 
-def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], series_id: int) -> bool:
-    """Sync one series, and the others fetched with it, in a session of its own. False if it failed."""
+def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], series_id: int) -> Outcome:
+    """Sync one series, and the others fetched with it, in a session of its own."""
     with session_factory() as session:
         series = session.get_one(Series, series_id)
         try:
-            if not sync_series(session, sources, series):
-                log.info("%s: no new data", series.dataset_id)
+            if sync_series(session, sources, series):
+                return "updated"
         except Exception:
             # One bad series (an ERDDAP error, a baseline with too little
             # data) shouldn't stop the others from updating.
             session.rollback()
             log.exception("%s: sync failed", series.dataset_id)
-            return False
-    return True
+            return "failed"
+        log.info("%s: no new data", series.dataset_id)
+        return "unchanged"
+
+
+def publish(session_factory: sessionmaker, directory: Path) -> None:
+    """Rewrite the NetCDF and CSV products from the stored record (heatwaves.products)."""
+    started = time.monotonic()
+    try:
+        with session_factory() as session:
+            products.write(session, directory)
+    except Exception:
+        # The stored record is up to date; the files catch up after the next round that stores something.
+        log.exception("Writing the products to %s failed", directory)
+        return
+    log.info("Wrote the products to %s in %.1f s", directory, time.monotonic() - started)
 
 
 def sync_all(
-    session_factory: sessionmaker, erddap: Erddap, sources: Mapping[str, Source], everything: bool = True
+    session_factory: sessionmaker,
+    erddap: Erddap,
+    sources: Mapping[str, Source],
+    everything: bool = True,
+    products_dir: Path | None = None,
 ) -> int:
     """Sync series, one fetch at a time. Returns the number of fetches that failed.
 
@@ -272,6 +296,10 @@ def sync_all(
     offline): all that gets new readings within the hour. The satellite adds
     a day once a day, and a retired buoy's data changes only when it's
     reprocessed. `erddap` is the NERACOOS server, which lists the buoys' positions.
+
+    The products in `products_dir`, if given, are rewritten at the end when
+    anything new was stored, or when there are none yet: once a round, as
+    a rewrite takes several seconds.
     """
     with session_factory() as session:
         if everything:
@@ -287,7 +315,10 @@ def sync_all(
             reporting_since = dt.datetime.now(dt.UTC).date() - state.OFFLINE_AFTER
             query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
         series_ids = session.scalars(query).all()
-    return sum(not sync_one(session_factory, sources, series_id) for series_id in series_ids)
+    outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
+    if products_dir is not None and ("updated" in outcomes or not products.listing(products_dir)):
+        publish(session_factory, products_dir)
+    return outcomes.count("failed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -319,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
                 log.info("%s: recomputed", series.label)
             update_origins(session)
             session.commit()
+        publish(SessionLocal, settings.products_dir)
         return 0
 
     headers = {"User-Agent": settings.user_agent}
@@ -330,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         while True:
             everything = quick_rounds == 0
             try:
-                failures = sync_all(SessionLocal, erddap, sources, everything)
+                failures = sync_all(SessionLocal, erddap, sources, everything, settings.products_dir)
                 quick_rounds = full_every - 1 if everything else quick_rounds - 1
             except httpx.HTTPError:
                 if args.every is None:

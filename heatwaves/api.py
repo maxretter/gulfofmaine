@@ -2,16 +2,20 @@
 
 import datetime as dt
 from collections import Counter
+from pathlib import Path
 from typing import Annotated, Literal, cast
 
 import httpx
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
+from fastapi import Path as PathParameter
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import extract, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from heatwaves import compare, live, origin, queries
+from heatwaves import compare, live, origin, products, queries
+from heatwaves.config import settings
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
@@ -178,6 +182,37 @@ class YearSummary(BaseModel):
     year: int
     heatwave_days: int
     observed_days: int
+
+
+class DataFile(BaseModel):
+    format: products.Format
+    url: str
+    size: int  # bytes
+    modified: dt.datetime  # when the sync job last wrote it
+
+
+class DataProduct(BaseModel):
+    """One product, as NetCDF and as CSV."""
+
+    name: str  # the files' name without extension, e.g. A01_heatwaves_020m
+    buoy_id: str | None  # null for the events table
+    depth: int | None
+    files: list[DataFile]
+
+
+class DataVariable(BaseModel):
+    """A variable of the daily series files, from its NetCDF attributes."""
+
+    name: str
+    long_name: str
+    units: str | None
+    standard_name: str | None  # from the CF standard name table, where it has one
+    flag_meanings: str | None  # for flags: the meaning of 0, 1, 2 ... in order
+
+
+class DataCatalog(BaseModel):
+    products: list[DataProduct]  # the daily series by buoy and depth, then the events table
+    variables: list[DataVariable]
 
 
 class Agreement(BaseModel):
@@ -561,3 +596,65 @@ def agreement(depth: int, session: SessionDep) -> list[Agreement]:
 async def live_feed(websocket: WebSocket) -> None:
     """New readings and heatwave changes as they are stored (heatwaves.live), as JSON messages."""
     await live.serve(websocket, live.hub)
+
+
+def products_dir() -> Path:
+    """Where the sync job writes the products; a dependency, so tests can point it elsewhere."""
+    return settings.products_dir
+
+
+ProductsDir = Annotated[Path, Depends(products_dir)]
+MEDIA_TYPES: dict[str, str] = {"nc": "application/x-netcdf", "csv": "text/csv; charset=utf-8"}
+
+
+@router.get("/data")
+def data_catalog(directory: ProductsDir) -> DataCatalog:
+    """The downloadable products: each buoy depth's daily series and the events table, as NetCDF and CSV."""
+    grouped: dict[str, DataProduct] = {}
+    for file in products.listing(directory):
+        stem = file.path.stem
+        product = grouped.setdefault(
+            stem, DataProduct(name=stem, buoy_id=file.buoy_id, depth=file.depth, files=[])
+        )
+        url = (
+            f"/api/data/{file.buoy_id}/{file.depth}.{file.format}"
+            if file.buoy_id is not None
+            else f"/api/data/events.{file.format}"
+        )
+        product.files.append(DataFile(format=file.format, url=url, size=file.size, modified=file.modified))
+    return DataCatalog(
+        products=list(grouped.values()),
+        variables=[
+            DataVariable(
+                name=name,
+                long_name=attrs["long_name"],
+                units=attrs.get("units"),
+                standard_name=attrs.get("standard_name"),
+                flag_meanings=attrs.get("flag_meanings"),
+            )
+            for name, attrs in products.DAILY_VARIABLES.items()
+        ],
+    )
+
+
+@router.get("/data/events.{format}", response_class=FileResponse)
+def download_events(format: products.Format, directory: ProductsDir) -> FileResponse:
+    """Every heatwave at the buoys: a CF point file, or a CSV with the fields of /api/events."""
+    return _download(products.events_path(directory, format), format)
+
+
+@router.get("/data/{buoy_id}/{depth}.{format}", response_class=FileResponse)
+def download_daily(
+    buoy_id: Annotated[str, PathParameter(pattern=r"^[A-Za-z0-9]{1,8}$")],
+    depth: int,
+    format: products.Format,
+    directory: ProductsDir,
+) -> FileResponse:
+    """A buoy depth's daily series: a CF time series in NetCDF, or CSV. See /api/data for the variables."""
+    return _download(products.daily_path(directory, buoy_id.upper(), depth, format), format)
+
+
+def _download(path: Path, format: products.Format) -> FileResponse:
+    if not path.is_file():
+        raise HTTPException(404, f"No product {path.name}; it appears after the sync job's next run")
+    return FileResponse(path, media_type=MEDIA_TYPES[format], filename=path.name)

@@ -1,5 +1,8 @@
 # docker compose up -d --build
 # The site is on http://localhost:8000 once the first sync finishes (about a minute).
+#
+# To serve the NetCDF products from ERDDAP as well, at http://localhost:8000/erddap:
+#   docker compose --profile erddap up -d --build
 name: gom-heatwaves
 
 x-backend: &backend
@@ -8,6 +11,9 @@ x-backend: &backend
   restart: unless-stopped
   environment:
     DATABASE_URL: postgresql+psycopg://heatwaves:${POSTGRES_PASSWORD:?set it in .env}@db/heatwaves
+  # The NetCDF and CSV products: written by the sync job, served by the API and ERDDAP.
+  volumes:
+    - products:/data/products
 
 services:
   db:
@@ -31,9 +37,11 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
-  # The JSON API and the live feed's WebSocket; reached only through the frontend's proxy.
+  # The JSON API, the live feed's WebSocket and the product downloads; reached only through the frontend's proxy.
   api:
     <<: *backend
+    volumes:
+      - products:/data/products:ro
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
@@ -50,7 +58,22 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
-  # The React app, served by Caddy, which forwards /api, /docs and /healthz to the API.
+  # The products as ERDDAP datasets (erddap/datasets.xml), for anyone who works in ERDDAP.
+  erddap:
+    build: ./erddap
+    image: gom-heatwaves-erddap
+    profiles: [erddap]
+    restart: unless-stopped
+    environment:
+      # The public address, without /erddap.
+      ERDDAP_baseUrl: ${ERDDAP_BASE_URL:-http://localhost:8000}
+      ERDDAP_baseHttpsUrl: ${ERDDAP_BASE_URL:-http://localhost:8000}
+    volumes:
+      - products:/data/products:ro
+      - erddap:/erddapData
+
+  # The React app, served by Caddy, which forwards /api, /docs and /healthz to the API
+  # and /erddap to ERDDAP.
   frontend:
     build: ./frontend
     image: gom-heatwaves-frontend
@@ -62,3 +85,5 @@ services:
 
 volumes:
   db:
+  products:
+  erddap:

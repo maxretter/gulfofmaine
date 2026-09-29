@@ -5,13 +5,15 @@ import datetime as dt
 import httpx
 import pandas as pd
 import pytest
+import xarray as xr
 from sqlalchemy import select
 
 from heatwaves import sync
+from heatwaves.config import settings
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.sources import TabledapSource
 from heatwaves.stations import SERIES
-from heatwaves.sync import ensure_catalog, sync_all, sync_series
+from heatwaves.sync import ensure_catalog, publish, sync_all, sync_one, sync_series
 from tests.conftest import (
     A01_SYNC,
     A01_SYNC_WITH_SALINITY,
@@ -148,6 +150,46 @@ def test_a_failing_dataset_doesnt_stop_the_others(session_factory):
     assert sorted(synced) == sorted(["A01_ocean_001m", "A01_ocean_020m", "A01_ocean_050m"] * 2)
 
 
+def test_sync_one_says_what_the_fetch_came_to(session_factory, series):
+    for responses, outcome in ((A01_SYNC, "updated"), ([("", NO_MATCH)], "unchanged"), ([], "failed")):
+        assert sync_one(session_factory, buoy_sources(recorded_erddap(responses, [])), series.id) == outcome
+
+
+def test_a_round_rewrites_the_products_when_it_stores_data(monkeypatch, session_factory, session, tmp_path):
+    add_series(session, seasonal_temperatures("2020-01-01", "2020-12-31"))
+    erddap = recorded_erddap(CATALOG, [])
+    csv = tmp_path / "daily" / "A01_heatwaves_001m.csv"
+
+    def round_of(*outcomes):
+        """A round in which the fetches come to these outcomes, in turn."""
+        each = iter(outcomes * len(SERIES))
+        monkeypatch.setattr(sync, "sync_one", lambda *args: next(each))
+        return sync_all(session_factory, erddap, {}, products_dir=tmp_path)
+
+    # Nothing new, but no files yet either, as on a fresh volume: they're written.
+    assert round_of("unchanged") == 0
+    assert sorted(path.name for path in tmp_path.rglob("*.*")) == [csv.name, "A01_heatwaves_001m.nc"]
+    # A year is too short a record for a normal, so no heatwaves either: the values alone.
+    ds = xr.load_dataset(csv.with_suffix(".nc"))
+    assert ds.temperature.notnull().all() and ds.temperature_climatology.isnull().all()
+    # Nothing new: the files stay as they are.
+    csv.unlink()
+    round_of("unchanged")
+    assert not csv.exists()
+    # Something new: they're rewritten, even when other fetches failed.
+    assert round_of("failed", "updated") > 0
+    assert csv.exists()
+
+
+def test_a_failed_write_leaves_the_sync_alone(session_factory, series, tmp_path, caplog):
+    blocked = tmp_path / "products"
+    blocked.write_text("not a directory")
+
+    publish(session_factory, blocked)
+
+    assert "Writing the products" in caplog.text
+
+
 @pytest.mark.parametrize(("failures", "status"), [(0, 0), (2, 1)])
 def test_sync_job_exit_status_reports_failures(monkeypatch, session_factory, failures, status):
     monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
@@ -163,7 +205,7 @@ class Stop(Exception):
 def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_factory):
     rounds: list[bool] = []
 
-    def sync_all(session_factory, erddap, sources, everything):
+    def sync_all(session_factory, erddap, sources, everything, products_dir):
         rounds.append(everything)
         if len(rounds) == 1:
             raise httpx.ConnectError("ERDDAP is down")
@@ -190,8 +232,9 @@ def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_facto
 def test_kept_running_the_job_checks_everything_about_hourly(monkeypatch, session_factory):
     rounds: list[bool] = []
 
-    def sync_all(session_factory, erddap, sources, everything):
+    def sync_all(session_factory, erddap, sources, everything, products_dir):
         rounds.append(everything)
+        assert products_dir == settings.products_dir
         return 0
 
     def sleep(seconds):

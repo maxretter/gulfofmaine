@@ -1,12 +1,15 @@
 import datetime as dt
 import os
+import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import unquote
 
-# Keep imports of heatwaves.db from pointing at a real database file.
+# Keep imports of heatwaves.db from pointing at a real database file, and
+# anything that writes the products from writing them into the repository.
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("PRODUCTS_DIR", tempfile.mkdtemp(prefix="gom-heatwaves-products-"))
 
 import httpx
 import numpy as np

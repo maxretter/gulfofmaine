@@ -27,6 +27,13 @@ export function formatSigned(value: number | null | undefined, unit = "°C", dig
   return `${value > 0 ? "+" : "−"}${rounded.replace("-", "")}${suffix}`;
 }
 
+/** A file size in the units people expect: 940 KB, 2.1 MB. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${Math.round(bytes / 1000)} KB`;
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
 export function formatDate(value: string | Date): string {
   return dateFormat.format(typeof value === "string" ? parseDay(value) : value);
 }

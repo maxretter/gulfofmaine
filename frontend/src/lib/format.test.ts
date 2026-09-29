@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatSigned, formatTemp, formatTime } from "./format";
+import { formatBytes, formatDate, formatSigned, formatTemp, formatTime } from "./format";
 
 describe("formatting", () => {
   it("signs anomalies with a true minus, and none on values that round to zero", () => {
@@ -8,6 +8,12 @@ describe("formatting", () => {
     expect(formatSigned(-1.34)).toBe("−1.3 °C");
     expect(formatSigned(-0.04)).toBe("0.0 °C");
     expect(formatSigned(null)).toBe("–");
+  });
+
+  it("formats file sizes in decimal units", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(941_336)).toBe("941 KB");
+    expect(formatBytes(2_046_307)).toBe("2.0 MB");
   });
 
   it("formats temperatures and UTC dates", () => {
