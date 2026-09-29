@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { Link, useParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
-import type { Buoy, HeatwaveEvent } from "../api/types";
+import type { Buoy, Condition, HeatwaveEvent } from "../api/types";
 import { DepthCharts } from "../components/DepthCharts";
 import { EventList } from "../components/EventList";
 import { RangeBrush } from "../components/RangeBrush";
@@ -111,41 +111,49 @@ function NotFoundBuoy() {
 /** The latest daily mean at each depth, with its status, and the satellite's at the surface when it has one. */
 function Tiles({ buoy }: { buoy: Buoy }) {
   const satellite = buoy.satellite?.temperature != null ? buoy.satellite : null;
+  // The tiles mostly share a day, so it goes by the heading; a tile names its own only when that differs.
+  const day = latest(buoy.series.map((s) => s.date));
   return (
     <section className="latest" aria-labelledby="latest-title">
-      <h2 id="latest-title">Latest daily mean</h2>
+      <div className="detail-head">
+        <h2 id="latest-title">Latest daily mean</h2>
+        {day && <p className="range-label">{formatDate(day)}</p>}
+      </div>
       <div className="tiles">
         {buoy.series.map((s) => (
-          <div className="tile" key={s.depth}>
-            <p className="tile-label">{s.depth} m</p>
-            <p className="tile-value">{formatTemp(s.temperature)}</p>
-            <p className="tile-delta">
-              {formatSigned(s.anomaly)} vs normal{s.date && ` · ${formatDate(s.date)}`}
-            </p>
-            <p className="tile-state">
-              <StateBadge condition={s} />
-            </p>
-            {s.reading_at && (
-              <p className="tile-reading">
-                Hourly reading {formatTemp(s.reading)} at {formatTime(s.reading_at)}
-              </p>
-            )}
-          </div>
+          <Tile key={s.depth} label={`${s.depth} m`} condition={s} day={day} />
         ))}
-        {satellite && (
-          <div className="tile">
-            <p className="tile-label">Surface, by satellite</p>
-            <p className="tile-value">{formatTemp(satellite.temperature)}</p>
-            <p className="tile-delta">
-              {formatSigned(satellite.anomaly)} vs normal{satellite.date && ` · ${formatDate(satellite.date)}`}
-            </p>
-            <p className="tile-state">
-              <StateBadge condition={satellite} />
-            </p>
-          </div>
-        )}
+        {satellite && <Tile label="Surface, by satellite" condition={satellite} day={day} />}
       </div>
     </section>
+  );
+}
+
+function Tile({ label, condition, day }: { label: string; condition: Condition; day: string | null }) {
+  // An offline series' badge already says when its data stopped.
+  const ownDay = condition.date !== day && condition.state !== "offline" ? condition.date : null;
+  return (
+    <div className="tile">
+      <p className="tile-label">{label}</p>
+      <p className="tile-value">{formatTemp(condition.temperature)}</p>
+      <p className="tile-anomaly">
+        <strong>{formatSigned(condition.anomaly)}</strong> vs normal
+      </p>
+      <p className="tile-state">
+        <StateBadge condition={condition} />
+      </p>
+      {(ownDay || condition.reading_at) && (
+        <div className="tile-foot">
+          {ownDay && <p>Daily mean for {formatDate(ownDay)}</p>}
+          {condition.reading_at && (
+            <p>
+              <span className="tile-foot-label">Hourly reading</span>
+              {formatTemp(condition.reading)} at {formatTime(condition.reading_at)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
