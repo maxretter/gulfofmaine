@@ -5,6 +5,7 @@ import { alertId } from "../api/live";
 import { useBuoys } from "../api/queries";
 import type { StatusMessage } from "../api/types";
 import { categories } from "../lib/colors";
+import { buoyPath } from "../state/buoyView";
 import { Swatch } from "./StateBadge";
 
 const SHOWN_MS = 20_000;
@@ -41,7 +42,7 @@ function Toast({ alert, onDismiss }: { alert: StatusMessage; onDismiss: (id: str
       <p>
         <span className="code">{alert.buoy}</span> {name} entered a {category.name.toLowerCase()} heatwave at{" "}
         {alert.depth} m.{" "}
-        <Link to={`/?buoy=${alert.buoy}&depth=${alert.depth}#detail`} onClick={() => onDismiss(id)}>
+        <Link to={buoyPath(alert.buoy, { depth: alert.depth })} onClick={() => onDismiss(id)}>
           See it
         </Link>
       </p>

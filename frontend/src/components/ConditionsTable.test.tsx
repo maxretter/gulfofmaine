@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { Buoy, Condition } from "../api/types";
 import { ConditionsTable } from "./ConditionsTable";
@@ -58,22 +59,39 @@ const buoys: Buoy[] = [
   },
 ];
 
+const pathFor = (buoy: string) => `/buoys/${buoy}`;
+
+function Where() {
+  const location = useLocation();
+  return <p>At {location.pathname}</p>;
+}
+
+function renderTable() {
+  render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="/" element={<ConditionsTable buoys={buoys} depth={1} pathFor={pathFor} />} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("ConditionsTable", () => {
   it("labels every state in words, not just colour", () => {
-    render(<ConditionsTable buoys={buoys} depth={1} selected="A01" onSelect={() => {}} />);
+    renderTable();
     expect(screen.getByText("No heatwave")).toBeTruthy();
     expect(screen.getByText("Moderate heatwave · day 7")).toBeTruthy();
     expect(screen.getByText("No data since Sep 14, 2025")).toBeTruthy();
     expect(screen.getByText("−1.3 °C")).toBeTruthy();
   });
 
-  it("selects a buoy from its row, and marks the selected one", () => {
-    const onSelect = vi.fn();
-    render(<ConditionsTable buoys={buoys} depth={1} selected="A01" onSelect={onSelect} />);
+  it("links each buoy to its page, and opens it from anywhere on the row", () => {
+    renderTable();
+    expect(screen.getByRole("link", { name: /B01/ }).getAttribute("href")).toBe("/buoys/B01");
 
-    fireEvent.click(screen.getByRole("button", { name: /B01/ }));
+    fireEvent.click(screen.getByText("Moderate heatwave · day 7"));
 
-    expect(onSelect).toHaveBeenCalledWith("B01");
-    expect(screen.getByRole("button", { name: /A01/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("At /buoys/B01")).toBeTruthy();
   });
 });

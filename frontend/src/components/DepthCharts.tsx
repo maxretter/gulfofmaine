@@ -38,7 +38,9 @@ interface Panel {
 export function DepthCharts({ buoy, from, to, events }: Props) {
   const depths = buoy.series.map((s) => s.depth);
   const results = useDailyByDepth(buoy.id, depths, from, to);
-  const satellite = useDaily(buoy.id, 0, buoy.satellite ? from : null, to);
+  // Only once the satellite's record has loaded: before that the API has no normal for it and answers 404.
+  const hasSatellite = Boolean(buoy.satellite?.first_date);
+  const satellite = useDaily(buoy.id, 0, hasSatellite ? from : null, to);
   const [hover, setHover] = useState<Date | null>(null);
 
   const satelliteDays = satellite.data ?? NO_DAYS;
@@ -60,7 +62,8 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
     <Chart
       className="depth-charts"
       loading={results.some((r) => r.isPlaceholderData) || satellite.isPlaceholderData}
-      error={(results.some((r) => r.isError) || satellite.isError) && "Couldn't load the temperature series."}
+      // The buoy's own series are the chart; without the satellite's it just loses the dashed line.
+      error={results.some((r) => r.isError) && "Couldn't load the temperature series."}
       table={{
         columns: [
           { label: "Date" },
@@ -70,14 +73,14 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
           { label: "Threshold", numeric: true },
         ],
         rows: () => [
-          ...(buoy.satellite ? rows("Surface (satellite)", satelliteDays) : []),
+          ...(hasSatellite ? rows("Surface (satellite)", satelliteDays) : []),
           ...panels.flatMap((panel) => rows(`${panel.depth} m`, panel.days)),
         ],
       }}
     >
       {(width) => (
         <>
-          <Readout panels={panels} surface={buoy.satellite ? surface : null} hover={hover} />
+          <Readout panels={panels} surface={hasSatellite ? surface : null} hover={hover} />
           {panels.map((panel) => (
             <DepthChart key={panel.depth} panel={panel} from={from} to={to} width={width} hover={hover} onHover={setHover} />
           ))}

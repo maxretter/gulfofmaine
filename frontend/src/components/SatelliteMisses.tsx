@@ -16,10 +16,10 @@ const MAX_BAR = 24; // px
 const GAP = 1; // px each side of the 2px surface gap between stacked segments
 
 /**
- * One buoy's heatwave days per year at 20 m and 50 m, split into days the
- * satellite also saw a heatwave at the surface and days it saw none.
+ * Heatwave days per year at 20 m and 50 m, split into days the satellite also saw a heatwave at the surface and
+ * days it saw none: at one buoy, or without `buoy`, summed over them all.
  */
-export function SatelliteMisses({ buoy }: { buoy: string }) {
+export function SatelliteMisses({ buoy }: { buoy?: string }) {
   const shallow = useAgreement(DEPTHS[0]);
   const deep = useAgreement(DEPTHS[1]);
   const years = useMemo(
@@ -27,12 +27,14 @@ export function SatelliteMisses({ buoy }: { buoy: string }) {
     [shallow.data, deep.data, buoy],
   );
   const results = [shallow, deep];
+  const loading = results.some((r) => r.isPending);
 
   return (
     <Chart
       className="chart"
-      loading={results.some((r) => r.isPending)}
+      loading={loading}
       error={results.some((r) => r.isError) && "Couldn't load the satellite comparison."}
+      empty={!loading && years.length === 0 && "No satellite comparison yet: the satellite record hasn't been loaded."}
       minHeight={DEPTHS.length * PANEL_HEIGHT + 40}
       legend={
         <div className="legend">

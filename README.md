@@ -12,7 +12,7 @@ published as CF NetCDF and CSV files, ready for ERDDAP.
 
 **Live site:** _coming soon_ · **API docs:** `/docs` on the live site
 
-![Explorer: map of buoy status at 50 m, the latest conditions, and a heatmap of heatwave days per year, 2001–2026](docs/explorer.png)
+![Now: the buoys' heatwave status at 50 m on a map and in a table, with a line saying how many are in a heatwave](docs/now.png)
 
 ## Why
 
@@ -46,7 +46,7 @@ events in the record ran 165 days at 150 m in Jordan Basin (M01), from January
 to June 2023, and 163 days at 20 m at F01 (West Penobscot Bay), from June to
 November 2021. (Figures as of 2026-09-28.)
 
-![Detail panel for F01 in 2021: the full record with a brushed range, and daily temperature at three depths against the normal and heatwave threshold](docs/detail.png)
+![F01's page for 2021: the whole record at 20 m with a brushed range, and daily temperature at three depths against the normal, the heatwave threshold and the satellite](docs/buoy.png)
 
 ## How it works
 
@@ -143,26 +143,35 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
 ### Frontend
 
 A React 19 + TypeScript single-page app in [`frontend/`](frontend), built with
-Vite. Everything on screen is linked:
+Vite. It goes from the whole Gulf to one buoy to one heatwave, and each view
+lives in the URL, so any view can be bookmarked or shared and the back button
+works:
 
-- **Linked views.** Clicking a buoy on the map or in the conditions table, or a
-  cell in the heatwave-days heatmap (say F01 · 2021), updates the detail panel in
-  place. The view lives in the URL (`/?buoy=F01&depth=20&from=2021-05-01&to=2021-12-31`),
-  so any view can be bookmarked or shared and the back button works.
-- **Zoomable time range.** A strip showing a buoy's whole record, with heatwaves
-  shaded, sits above the detailed charts; drag across it to pick any period.
-  Presets and heatmap clicks move the brush too.
+- **Now** (`/?depth=50`). Every buoy's latest daily mean at one depth, on a map
+  and in a table, with a line saying how many are in a heatwave. Each buoy
+  leads to its own page.
+- **Buoys** (`/buoys`). Every buoy, retired ones included: its depths, the span
+  of its record, how many heatwaves it has logged and whether it's in one now.
+- **A page per buoy** (`/buoys/F01?depth=20&from=2021-05-01&to=2021-12-31`).
+  Its latest readings and status at each depth, and its record: a strip of the
+  whole record at one depth, with heatwaves shaded, sits above the detailed
+  charts; drag across it to pick any period. Presets and the heatwave list move
+  the brush too. Links into the single-page explorer this replaced
+  (`/?buoy=F01&…`) redirect here.
 - **Synchronized hover.** One chart per depth shares a time axis; hovering any of
   them moves a crosshair across all three and reads out every depth's
   temperature, anomaly and heatwave status for that day.
-- **Satellite comparison.** The 1 m chart carries the satellite's sea surface
-  temperature as a dashed line, and a "What the satellite misses" chart splits
-  each year's heatwave days at 20 and 50 m into days the satellite also saw a
-  heatwave and days it saw none. The explorer leads with the share for 50 m,
-  beside the same share at 1 m as a yardstick.
-- **Heatwaves explorer** (`/events`). All ~860 events, filterable by buoy, depth,
-  year, category and origin and sortable by date, length, intensity or category,
-  with the filters in the URL. Each row opens that heatwave's page.
+- **What the satellite misses** (`/satellite`). The share of heatwave days at
+  50 and 20 m with no satellite heatwave at the surface above, beside the same
+  share at 1 m as a yardstick; each year's heatwave days at depth split into
+  days the satellite also saw a heatwave and days it saw none; and the shares at
+  each buoy. Each buoy's page has its own split, and its 1 m chart carries the
+  satellite's sea surface temperature as a dashed line.
+- **Heatwaves** (`/events`). Heatwave days per buoy and year as a heatmap, over
+  all ~860 events, filterable by buoy, depth, year, category and origin and
+  sortable by date, length, intensity or category, with the filters in the URL.
+  A heatmap cell filters the list to its buoy and year; each row opens that
+  heatwave's page.
 - **A page per heatwave** (`/events/A01/50/2021-04-14`, addressed as the API
   addresses it). Its origin, with each of the five signals as a small chart
   over the onset window, its vote and a sentence on what it measured, and a
@@ -292,10 +301,10 @@ heatwaves/
   api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
-  pages/         explorer, heatwaves list, one heatwave, origins, data, methods
+  pages/         now, buoys, one buoy, heatwaves, one heatwave, origins, satellite, data, methods
   components/    map, heatmap, range brush, depth charts, tables
   api/           typed API client, TanStack Query hooks and the live feed
-  state/         explorer view <-> URL
+  state/         the buoys' view <-> URL
   lib/           dates, formatting, colours, event filtering
 erddap/          datasets.xml and an image that serves the files from ERDDAP
 scripts/         comparison with the reference implementation

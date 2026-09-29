@@ -27,4 +27,12 @@ describe("what the satellite misses", () => {
       { depth: 50, year: 2022, missed: 2, seen: 1 },
     ]);
   });
+
+  it("sums every buoy's days by depth and year when no buoy is given", () => {
+    const rows = [row("A01", 50, 2021, 1, 2), row("B01", 50, 2021, 3, 4), row("B01", 20, 2021, 5, 6)];
+    expect(missedByYear(rows)).toEqual([
+      { depth: 20, year: 2021, missed: 6, seen: 5 },
+      { depth: 50, year: 2021, missed: 6, seen: 4 },
+    ]);
+  });
 });

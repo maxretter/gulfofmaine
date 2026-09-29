@@ -225,7 +225,7 @@ describe("live messages", () => {
     );
 
     expect(screen.getByText(/Western Maine Shelf entered a moderate heatwave at 50 m/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "See it" }).getAttribute("href")).toBe("/?buoy=B01&depth=50#detail");
+    expect(screen.getByRole("link", { name: "See it" }).getAttribute("href")).toBe("/buoys/B01?depth=50");
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismiss).toHaveBeenCalledWith("B01-50-2026-09-28");
     act(() => vi.advanceTimersByTime(20_000));

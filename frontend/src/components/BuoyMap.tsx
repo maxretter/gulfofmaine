@@ -1,5 +1,5 @@
 import { latLngBounds } from "leaflet";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
 
 import { useLive } from "../api/live";
@@ -10,11 +10,10 @@ import { stateLook } from "../lib/state";
 interface Props {
   buoys: Buoy[];
   depth: number;
-  selected: string;
   onSelect: (buoy: string) => void;
 }
 
-export function BuoyMap({ buoys, depth, selected, onSelect }: Props) {
+export function BuoyMap({ buoys, depth, onSelect }: Props) {
   const { pulses } = useLive();
   const located = buoys.filter((buoy) => buoy.latitude !== null && buoy.longitude !== null);
   // Read once: the map frames the buoys on mount, then the view belongs to the user.
@@ -46,7 +45,7 @@ export function BuoyMap({ buoys, depth, selected, onSelect }: Props) {
               ? { color, weight: 3, fillColor: colors.surface, fillOpacity: 1 }
               : { color, weight: 2, fillOpacity: 0 };
         return (
-          <Highlight key={buoy.id} selected={buoy.id === selected} center={center}>
+          <Fragment key={buoy.id}>
             {pulses[buoy.id] && (
               // A ring that spreads and fades once when a new reading arrives; a new key replays it.
               <CircleMarker
@@ -67,34 +66,9 @@ export function BuoyMap({ buoys, depth, selected, onSelect }: Props) {
                 {buoy.id}
               </Tooltip>
             </CircleMarker>
-          </Highlight>
+          </Fragment>
         );
       })}
     </MapContainer>
-  );
-}
-
-/** Draws a halo behind its marker when that's the selected buoy. */
-function Highlight({
-  selected,
-  center,
-  children,
-}: {
-  selected: boolean;
-  center: [number, number];
-  children: ReactNode;
-}) {
-  return (
-    <>
-      {selected && (
-        <CircleMarker
-          center={center}
-          radius={15}
-          interactive={false}
-          pathOptions={{ color: colors.ink, weight: 2, fillOpacity: 0 }}
-        />
-      )}
-      {children}
-    </>
   );
 }

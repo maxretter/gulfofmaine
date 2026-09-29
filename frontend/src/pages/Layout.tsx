@@ -33,15 +33,19 @@ export function Layout() {
             <LiveIndicator />
           </div>
           <nav aria-label="Site">
-            <NavLink to="/" end>
-              Explorer
-            </NavLink>
-            <NavLink to="/events">Heatwaves</NavLink>
-            <NavLink to="/origins">Origins</NavLink>
-            <NavLink to="/data">Data</NavLink>
-            <NavLink to="/methods">Methods</NavLink>
-            <a href="/docs">API</a>
-            <a href="https://github.com/maxretter/gulfofmaine">Source</a>
+            <div className="nav-main">
+              <NavLink to="/" end>
+                Now
+              </NavLink>
+              <NavLink to="/buoys">Buoys</NavLink>
+              <NavLink to="/events">Heatwaves</NavLink>
+              <NavLink to="/origins">Origins</NavLink>
+              <NavLink to="/satellite">Satellite gap</NavLink>
+            </div>
+            <div className="nav-more">
+              <NavLink to="/data">Data</NavLink>
+              <NavLink to="/methods">Methods</NavLink>
+            </div>
           </nav>
         </div>
       </header>
@@ -71,7 +75,10 @@ function Footer() {
           <a href="https://gyre.umeoce.maine.edu">University of Maine Physical Oceanography Group</a>, served by{" "}
           <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP</a>. Not intended for navigation or legal use.
         </p>
-        <p>An independent portfolio project; not affiliated with NERACOOS, GMRI or the University of Maine.</p>
+        <p>
+          An independent portfolio project; not affiliated with NERACOOS, GMRI or the University of Maine.{" "}
+          <a href="/docs">API documentation</a> · <a href="https://github.com/maxretter/gulfofmaine">Source code</a>
+        </p>
       </div>
     </footer>
   );
@@ -82,7 +89,7 @@ export function NotFound() {
     <section className="intro">
       <h1>Page not found</h1>
       <p className="lead">
-        <Link to="/">Back to the explorer</Link>
+        <Link to="/">See every buoy now</Link>
       </p>
     </section>
   );

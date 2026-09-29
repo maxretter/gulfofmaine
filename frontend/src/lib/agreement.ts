@@ -19,10 +19,16 @@ export function missedShare(rows: Agreement[]): number | null {
   return missed + seen > 0 ? missed / (missed + seen) : null;
 }
 
-/** One buoy's rows as missed and seen heatwave days, by depth and year. */
-export function missedByYear(rows: Agreement[], buoy: string): MissedYear[] {
-  return rows
-    .filter((row) => row.buoy_id === buoy)
-    .map((row) => ({ depth: row.depth, year: row.year, missed: row.buoy_only, seen: row.both }))
-    .sort((a, b) => a.depth - b.depth || a.year - b.year);
+/** Missed and seen heatwave days by depth and year, for one buoy or, without `buoy`, summed over every buoy. */
+export function missedByYear(rows: Agreement[], buoy?: string): MissedYear[] {
+  const totals = new Map<string, MissedYear>();
+  for (const row of rows) {
+    if (buoy !== undefined && row.buoy_id !== buoy) continue;
+    const key = `${row.depth}-${row.year}`;
+    const total = totals.get(key) ?? { depth: row.depth, year: row.year, missed: 0, seen: 0 };
+    total.missed += row.buoy_only;
+    total.seen += row.both;
+    totals.set(key, total);
+  }
+  return [...totals.values()].sort((a, b) => a.depth - b.depth || a.year - b.year);
 }

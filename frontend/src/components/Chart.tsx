@@ -9,6 +9,8 @@ interface Props {
   loading?: boolean;
   /** Shown in place of the chart when its data couldn't be loaded. */
   error?: string | false;
+  /** Shown in place of the chart when its data loaded but held nothing to draw. */
+  empty?: string | false;
   /** Height reserved up front, so the page below doesn't jump when the data arrives. */
   minHeight?: number;
   /** Shown under the chart, above its table view. */
@@ -20,17 +22,18 @@ interface Props {
 }
 
 /** The frame every chart sits in: width, loading, errors and the table view. */
-export function Chart({ className, loading, error, minHeight, legend, table, children }: Props) {
+export function Chart({ className, loading, error, empty, minHeight, legend, table, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const width = useElementWidth(ref);
   const classes = [className, loading && "loading"].filter(Boolean).join(" ");
+  const message = error || empty;
   return (
     <>
-      <div ref={ref} className={classes || undefined} style={minHeight ? { minHeight } : undefined}>
-        {error ? <p className="note">{error}</p> : width > 0 && children(width)}
+      <div ref={ref} className={classes || undefined} style={minHeight && !message ? { minHeight } : undefined}>
+        {message ? <p className="note">{message}</p> : width > 0 && children(width)}
       </div>
-      {legend}
-      {table && <TableToggle columns={table.columns} rows={table.rows} />}
+      {!message && legend}
+      {!message && table && <TableToggle columns={table.columns} rows={table.rows} />}
     </>
   );
 }

@@ -13,7 +13,7 @@ import { categories, colors, origins } from "../lib/colors";
 import { addDays, formatDay, isDay, parseDay } from "../lib/dates";
 import { formatDate, formatSigned, formatTemp } from "../lib/format";
 import { eastToWest, reading, SIGNALS, verdict } from "../lib/origin";
-import { explorerPath } from "../state/explorer";
+import { heatwavePeriodPath } from "../state/buoyView";
 
 /** One heatwave: what it was, and the evidence for where its heat came from. /events/A01/50/2021-04-14 */
 export function EventPage() {
@@ -44,7 +44,8 @@ export function EventPage() {
         <p className="lead">
           A {detail.category_name.toLowerCase()} heatwave from {formatDate(detail.start_date)} to{" "}
           {formatDate(detail.end_date)}: {detail.duration} days, peaking {formatSigned(detail.max_intensity)} above
-          normal on {formatDate(detail.peak_date)}. <Link to={explorerPath(detail)}>See it in the explorer</Link>.
+          normal on {formatDate(detail.peak_date)}.{" "}
+          <Link to={heatwavePeriodPath(detail)}>See it on {detail.buoy_id}'s record</Link>.
         </p>
         <div className="event-labels">
           <CategoryLabel category={detail.category} />

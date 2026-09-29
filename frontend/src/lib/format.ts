@@ -44,3 +44,15 @@ export function formatTime(value: string, now: Date = new Date()): string {
   const clock = `${timeFormat.format(time)} UTC`;
   return formatDay(time) === formatDay(now) ? clock : `${dateFormat.format(time)}, ${clock}`;
 }
+
+const listFormat = new Intl.ListFormat("en-US", { type: "conjunction" });
+
+/** "1, 20 and 50": a list in running text, without the serial comma the rest of the site doesn't use. */
+export function formatList(items: (string | number)[]): string {
+  return listFormat.format(items.map(String)).replace(/, and /, " and ");
+}
+
+/** A share as a whole percentage: 0.684 as "68%". */
+export function formatPercent(share: number): string {
+  return `${Math.round(share * 100)}%`;
+}

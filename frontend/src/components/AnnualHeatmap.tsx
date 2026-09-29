@@ -15,12 +15,16 @@ interface Cell extends YearSummary {
   enough: boolean;
 }
 
+/** The buoy, year or both whose cells are outlined; null for any. Nothing is outlined when both are null. */
+export interface HeatmapSelection {
+  buoy: string | null;
+  year: number | null;
+}
+
 interface Props {
   depth: number;
   buoys: Buoy[];
-  selectedBuoy: string;
-  from: string | null; // the period the detail panel shows, outlined; null when it shows none
-  to: string | null;
+  selected: HeatmapSelection;
   onSelect: (buoy: string, year: number) => void;
 }
 
@@ -29,7 +33,7 @@ function daysSoFar(year: number): number {
   return daysBetween(`${year}-01-01`, minDay(`${year + 1}-01-01`, formatDay(new Date())));
 }
 
-export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }: Props) {
+export function AnnualHeatmap({ depth, buoys, selected, onSelect }: Props) {
   const annual = useAnnual(depth);
   const names = useMemo(() => new Map(buoys.map((b) => [b.id, b.name])), [buoys]);
   const cells: Cell[] = useMemo(
@@ -75,9 +79,7 @@ export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }
             width={width}
             buoys={buoys}
             names={names}
-            selectedBuoy={selectedBuoy}
-            from={from}
-            to={to}
+            selected={selected}
             onSelect={onSelect}
           />
         )
@@ -86,23 +88,28 @@ export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }
   );
 }
 
+function isSelected(cell: Cell, { buoy, year }: HeatmapSelection): boolean {
+  if (buoy === null && year === null) return false;
+  return (buoy === null || cell.buoy_id === buoy) && (year === null || cell.year === year);
+}
+
 interface HeatmapProps extends Omit<Props, "depth"> {
   cells: Cell[];
   width: number;
   names: Map<string, string>;
 }
 
-function Heatmap({ cells, width, buoys, names, selectedBuoy, from, to, onSelect }: HeatmapProps) {
+function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProps) {
+  const { buoy: selectedBuoy, year: selectedYear } = selected;
   const options = useMemo((): Plot.PlotOptions => {
     const [first, last] = extent(cells, (d) => d.year) as [number, number];
-    const [fromYear, toYear] = from && to ? [Number(from.slice(0, 4)), Number(to.slice(0, 4))] : [NaN, NaN];
     const chartWidth = Math.max(width, 640);
     const describe = (d: Cell) =>
       `${d.buoy_id} ${names.get(d.buoy_id)}, ${d.year}\n` +
       (d.enough
         ? `${d.heatwave_days} heatwave days\n${d.observed_days} days observed`
         : `Too little data (${d.observed_days} days observed)`) +
-      "\nClick to explore";
+      "\nClick to list its heatwaves";
     return {
       ...chartDefaults,
       width: chartWidth,
@@ -120,15 +127,15 @@ function Heatmap({ cells, width, buoys, names, selectedBuoy, from, to, onSelect 
           cells.filter((d) => !d.enough),
           { x: "year", y: "buoy_id", fill: colors.surface, stroke: colors.axis, inset: 1.5, rx: 3 },
         ),
-        // The buoy and years shown in the detail panel below.
+        // The buoy and year the list below is filtered to.
         Plot.cell(
-          cells.filter((d) => d.buoy_id === selectedBuoy && d.year >= fromYear && d.year <= toYear),
+          cells.filter((d) => isSelected(d, { buoy: selectedBuoy, year: selectedYear })),
           { x: "year", y: "buoy_id", fill: "none", stroke: colors.ink, strokeWidth: 2, rx: 4 },
         ),
         Plot.tip(cells, Plot.pointer({ x: "year", y: "buoy_id", title: describe })),
       ],
     };
-  }, [cells, width, buoys, names, selectedBuoy, from, to]);
+  }, [cells, width, buoys, names, selectedBuoy, selectedYear]);
 
   // Plot's pointer interaction keeps the cell under the cursor in `plot.value`.
   const onRender = useCallback(

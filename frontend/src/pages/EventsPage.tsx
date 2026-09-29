@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
 import type { Origin } from "../api/types";
+import { AnnualHeatmap } from "../components/AnnualHeatmap";
 import { CategoryLabel, OriginLabel } from "../components/Label";
 import { categories, origins } from "../lib/colors";
 import {
@@ -15,6 +16,7 @@ import {
   toEventParams,
 } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
+import { buoyPath, DEPTHS } from "../state/buoyView";
 
 const PAGE = 100;
 
@@ -26,10 +28,33 @@ export function EventsPage() {
   const navigate = useNavigate();
   const [shown, setShown] = useState(PAGE);
 
-  const setFilters = (patch: Partial<EventFilters>) => {
-    setParams(toEventParams({ ...filters, ...patch }, sort), { replace: true, preventScrollReset: true });
-    setShown(PAGE);
-  };
+  // Patches the filters as the URL has them, so callbacks built on this don't change with every filter.
+  const updateFilters = useCallback(
+    (patch: (was: EventFilters) => Partial<EventFilters>) => {
+      setParams(
+        (current) => {
+          const was = parseEventParams(current);
+          return toEventParams({ ...was.filters, ...patch(was.filters) }, was.sort);
+        },
+        { replace: true, preventScrollReset: true },
+      );
+      setShown(PAGE);
+    },
+    [setParams, setShown],
+  );
+  const setFilters = (patch: Partial<EventFilters>) => updateFilters(() => patch);
+  // The heatmap shows one depth: the one filtered to, else the shallowest.
+  const heatmapDepth = filters.depth ?? DEPTHS[0];
+  // A cell filters the list to its buoy and year at that depth; clicking the same cell again clears that.
+  const selectCell = useCallback(
+    (buoy: string, year: number) =>
+      updateFilters((was) =>
+        was.buoy === buoy && was.year === year
+          ? { buoy: null, year: null }
+          : { buoy, year, depth: was.depth ?? DEPTHS[0] },
+      ),
+    [updateFilters],
+  );
   const setSort = (key: SortKey) =>
     setParams(toEventParams(filters, { key, descending: sort.key === key ? !sort.descending : true }), {
       replace: true,
@@ -44,6 +69,7 @@ export function EventsPage() {
   const depths = [...new Set(events.data.map((e) => e.depth))].sort((a, b) => a - b);
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
   const buoyCount = new Set(events.data.map((e) => e.buoy_id)).size;
+  const filteredBuoy = buoys.data?.find((b) => b.id === filters.buoy);
 
   const header = (label: string, key: SortKey, numeric = false) => (
     <th
@@ -63,8 +89,8 @@ export function EventsPage() {
       <section className="intro">
         <h1>Every heatwave on record</h1>
         <p className="lead">
-          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001. Filter and sort them,
-          then open one to see where its heat came from.
+          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001. See which years were
+          worst, filter and sort them, then open one to see where its heat came from.
         </p>
       </section>
 
@@ -150,10 +176,42 @@ export function EventsPage() {
         )}
       </div>
 
+      {buoys.data && (
+        <section className="card">
+          <h2>Heatwave days per year at {heatmapDepth} m</h2>
+          <p className="caption">
+            Days inside a marine heatwave, by buoy and year.{" "}
+            {filters.depth === null && "Choose a depth above to see another. "}
+            Click a cell to list its heatwaves below.
+          </p>
+          <AnnualHeatmap
+            depth={heatmapDepth}
+            buoys={buoys.data}
+            selected={{ buoy: filters.buoy, year: filters.year }}
+            onSelect={selectCell}
+          />
+        </section>
+      )}
+
       <section className="card">
         <p className="caption" aria-live="polite">
           {matching.length} heatwave{matching.length === 1 ? "" : "s"}, {totalDays.toLocaleString()} days in all.
           Intensity is degrees above the normal for that day. Only heatwaves at 20 and 50 m get an origin.
+          {filteredBuoy && (
+            <>
+              {" "}
+              <Link
+                to={buoyPath(filteredBuoy.id, {
+                  depth: filters.depth ?? DEPTHS[0],
+                  ...(filters.year !== null && { from: `${filters.year}-01-01`, to: `${filters.year}-12-31` }),
+                })}
+              >
+                See {filteredBuoy.id} {filteredBuoy.name}
+                {filters.year !== null && ` in ${filters.year}`} on its record
+              </Link>
+              .
+            </>
+          )}
         </p>
         <div className="table-scroll">
           <table className="events">

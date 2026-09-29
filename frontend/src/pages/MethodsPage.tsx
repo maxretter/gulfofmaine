@@ -100,7 +100,7 @@ export function MethodsPage() {
         </li>
       </ul>
 
-      <h2>The satellite comparison</h2>
+      <h2 id="satellite">The satellite comparison</h2>
       <p>
         Each buoy is compared with sea surface temperature from NOAA's{" "}
         <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst">OISST v2.1</a>, the daily, quarter-degree
