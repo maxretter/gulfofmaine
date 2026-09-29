@@ -1,7 +1,7 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
-import type { Buoy, Day, HeatwaveEvent, YearSummary } from "./types";
+import type { Agreement, Buoy, Day, HeatwaveEvent, YearSummary } from "./types";
 
 export interface DayPoint extends Omit<Day, "date"> {
   date: Date;
@@ -30,6 +30,15 @@ export function useAnnual(depth: number) {
   });
 }
 
+/** Each buoy's heatwave days at `depth` against the satellite's, per year. */
+export function useAgreement(depth: number) {
+  return useQuery({
+    queryKey: ["agreement", depth],
+    queryFn: () => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`),
+  });
+}
+
+/** Depth 0 is the satellite. */
 function dailyQuery(buoy: string, depth: number, start: string, end: string) {
   return {
     queryKey: ["daily", buoy, depth, start, end],

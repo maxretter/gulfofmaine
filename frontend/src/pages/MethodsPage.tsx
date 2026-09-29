@@ -1,6 +1,8 @@
+import { useBuoys } from "../api/queries";
 import { categories } from "../lib/colors";
 
 export function MethodsPage() {
+  const buoys = useBuoys();
   return (
     <article className="prose">
       <h1>Methods</h1>
@@ -43,6 +45,67 @@ export function MethodsPage() {
         repository has the script that compares them.
       </p>
 
+      <h2>The satellite comparison</h2>
+      <p>
+        Each buoy is compared with sea surface temperature from NOAA's{" "}
+        <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst">OISST v2.1</a>, the daily, quarter-degree
+        record behind GMRI's Gulf of Maine temperature reports, read from{" "}
+        <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>. History comes from the
+        final product (<code>ncdcOisst21Agg_LonPM180</code>), which runs about two weeks behind; the latest days come
+        from the preliminary one (<code>ncdcOisst21NrtAgg_LonPM180</code>), a day behind. Each new day re-reads the past
+        30, so final values replace preliminary ones as they appear.
+      </p>
+      <p>
+        OISST masks grid cells near the coast as land, so a buoy's own cell can be empty. Each buoy is compared with
+        the nearest cell that has data:
+      </p>
+      {buoys.data && (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Buoy</th>
+                <th scope="col" className="num">
+                  Cell centre
+                </th>
+                <th scope="col" className="num">
+                  Distance from the buoy
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {buoys.data.map((buoy) => (
+                <tr key={buoy.id}>
+                  <td>
+                    {buoy.id} {buoy.name}
+                  </td>
+                  <td className="num">
+                    {buoy.satellite?.latitude != null && buoy.satellite.longitude != null
+                      ? `${buoy.satellite.latitude.toFixed(3)}° N, ${Math.abs(buoy.satellite.longitude).toFixed(3)}° W`
+                      : "–"}
+                  </td>
+                  <td className="num">
+                    {buoy.satellite?.distance_km != null ? `${buoy.satellite.distance_km.toFixed(1)} km` : "–"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p>
+        Satellite heatwaves are found exactly as the buoys' are, against the same 2003–2022 baseline, so the two
+        compare like for like. GMRI's reports use a 1991–2020 baseline, so their anomalies and heatwave days differ from
+        these. The comparison counts only days with data from both the buoy depth and the satellite: each is a heatwave
+        day in both, at depth only, at the surface only, or in neither.
+      </p>
+      <p>
+        As a check, the satellite agrees closely with the buoys' own 1 m sensors: their daily values correlate at
+        0.99 at every buoy, and on average differ by 0.4–0.6 °C on a given day (as of September 2026). Even so, about a
+        third of 1 m heatwave days have no satellite heatwave, because two records of nearly the same water still
+        disagree about days close to the threshold. That share is the yardstick for the ones at 20 and 50 m.
+      </p>
+
       <h2>Things to keep in mind</h2>
       <ul>
         <li>
@@ -64,10 +127,15 @@ export function MethodsPage() {
           when the buoy is recovered and its instruments are checked.
         </li>
         <li>
-          <strong>Different from satellite reports.</strong> GMRI's Gulf of Maine temperature reports describe the
-          whole Gulf using satellite sea-surface temperature and a model for the bottom, against a 1991–2020 baseline.
-          This site measures a handful of fixed points directly, at depth, so the numbers won't match; the two are
-          complementary.
+          <strong>Different from GMRI's reports.</strong> GMRI's Gulf of Maine temperature reports describe the whole
+          Gulf from satellite sea surface temperature and a model for the bottom, against a 1991–2020 baseline. This
+          site measures a handful of fixed points directly, at depth, and sets each beside the same satellite record at
+          that spot; the two views are complementary.
+        </li>
+        <li>
+          <strong>A grid cell is not a buoy.</strong> A satellite cell here averages about 28 km (north to south) by 20 km
+          of sea surface, and the cells used sit up to about 13 km from their buoys, so some difference at the surface is expected even
+          before depth comes into it.
         </li>
       </ul>
 
@@ -81,7 +149,11 @@ export function MethodsPage() {
         <a href="/api/events?min_category=2">
           <code>/api/events?min_category=2</code>
         </a>{" "}
-        lists every heatwave that reached Strong.
+        lists every heatwave that reached Strong, and{" "}
+        <a href="/api/agreement?depth=50">
+          <code>/api/agreement?depth=50</code>
+        </a>{" "}
+        compares the 50 m heatwave days with the satellite's, per buoy and year.
       </p>
     </article>
   );

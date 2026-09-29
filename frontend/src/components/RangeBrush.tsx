@@ -2,11 +2,12 @@ import * as Plot from "@observablehq/plot";
 import { type BrushBehavior, brushX, type D3BrushEvent, select, type Selection, utcDay } from "d3";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { useDaily } from "../api/queries";
+import { type DayPoint, useDaily } from "../api/queries";
 import type { HeatwaveEvent } from "../api/types";
+import { chartDefaults } from "../lib/chart";
 import { categories, colors } from "../lib/colors";
 import { addDays, formatDay, parseDay } from "../lib/dates";
-import { useElementWidth } from "../lib/useElementWidth";
+import { Chart } from "./Chart";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 
 interface Props {
@@ -34,11 +35,30 @@ interface Brush {
  * picks the period the detailed charts show; the brush also follows range
  * changes made elsewhere (the heatmap, presets, events).
  */
-export function RangeBrush({ buoy, depth, firstDate, lastDate, from, to, events, onChange }: Props) {
-  const record = useDaily(buoy, depth, firstDate, lastDate);
-  const ref = useRef<HTMLDivElement>(null);
-  const width = useElementWidth(ref);
+export function RangeBrush({ buoy, depth, ...brush }: Props) {
+  const record = useDaily(buoy, depth, brush.firstDate, brush.lastDate);
+  // Read here, not only inside the render function: TanStack Query re-renders
+  // for the fields a component reads, and that function runs only once the
+  // width is known.
+  const days = record.data;
+  return (
+    <Chart
+      className="range-brush"
+      loading={record.isPlaceholderData}
+      error={record.isError && "Couldn't load the full record."}
+      minHeight={HEIGHT}
+    >
+      {(width) => days && <Brush {...brush} record={days} width={width} />}
+    </Chart>
+  );
+}
 
+interface BrushProps extends Omit<Props, "buoy" | "depth"> {
+  record: DayPoint[];
+  width: number;
+}
+
+function Brush({ record, width, firstDate, lastDate, from, to, events, onChange }: BrushProps) {
   // The brush is built once per render of the plot, so it reads the latest
   // range and callback through refs rather than capturing them.
   const brush = useRef<Brush | null>(null);
@@ -53,19 +73,17 @@ export function RangeBrush({ buoy, depth, firstDate, lastDate, from, to, events,
     current.group.call(current.behavior.move, [current.x.apply(parseDay(start)), current.x.apply(parseDay(end))]);
   }, []);
 
-  const options = useMemo((): Plot.PlotOptions | null => {
-    if (!width || !record.data) return null;
-    return {
+  const options = useMemo(
+    (): Plot.PlotOptions => ({
+      ...chartDefaults,
       width,
       height: HEIGHT,
       marginTop: MARGIN.top,
       marginBottom: MARGIN.bottom,
       marginLeft: MARGIN.left,
       marginRight: MARGIN.right,
-      style: { fontSize: "12px", color: colors.ink2, overflow: "visible" },
       x: { type: "utc", domain: [parseDay(firstDate), parseDay(lastDate)], label: null },
       y: { axis: null },
-      color: { type: "identity" },
       marks: [
         Plot.rectX(events, {
           x1: (e: HeatwaveEvent) => parseDay(e.start_date),
@@ -73,10 +91,11 @@ export function RangeBrush({ buoy, depth, firstDate, lastDate, from, to, events,
           fill: (e: HeatwaveEvent) => categories[e.category].color,
           fillOpacity: 0.55,
         }),
-        Plot.lineY(record.data, { x: "date", y: "temperature", stroke: colors.observed, strokeWidth: 1 }),
+        Plot.lineY(record, { x: "date", y: "temperature", stroke: colors.observed, strokeWidth: 1 }),
       ],
-    };
-  }, [width, record.data, events, firstDate, lastDate]);
+    }),
+    [width, record, events, firstDate, lastDate],
+  );
 
   const onRender = useCallback((plot: PlotElement) => {
     const x = plot.scale("x")!;
@@ -106,10 +125,5 @@ export function RangeBrush({ buoy, depth, firstDate, lastDate, from, to, events,
 
   useEffect(() => moveTo(from, to), [moveTo, from, to]);
 
-  return (
-    <div ref={ref} className="range-brush">
-      {record.isError && <p className="note">Couldn't load the full record.</p>}
-      {options && <PlotFigure options={options} onRender={onRender} />}
-    </div>
-  );
+  return <PlotFigure options={options} onRender={onRender} />;
 }

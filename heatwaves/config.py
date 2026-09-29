@@ -8,7 +8,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    erddap_url: str
+    erddap_url: str  # NERACOOS, for the buoys
+    coastwatch_url: str  # NOAA CoastWatch, for satellite sea surface temperature
     erddap_timeout: float
     user_agent: str
     # /healthz fails once the last successful sync is older than this.
@@ -20,6 +21,7 @@ class Settings:
         return cls(
             database_url=env("DATABASE_URL", "sqlite:///gom-heatwaves.db"),
             erddap_url=env("ERDDAP_URL", "https://data.neracoos.org/erddap"),
+            coastwatch_url=env("COASTWATCH_URL", "https://coastwatch.pfeg.noaa.gov/erddap"),
             erddap_timeout=float(env("ERDDAP_TIMEOUT", "120")),
             user_agent=env(
                 "ERDDAP_USER_AGENT", "gom-heatwaves/0.1 (+https://github.com/maxretter/gom-heatwaves)"

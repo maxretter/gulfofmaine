@@ -11,6 +11,17 @@ export const colors = {
   surface: "#fcfcfb",
   neutral: "#f0efec",
   observed: "#2a78d6",
+  // Validated against `observed` (categorical slots 1 and 7) and drawn dashed.
+  satellite: "#4a3aa7",
+};
+
+/**
+ * Heatwave days at depth, by whether the satellite also saw one: the missed
+ * days are the story, so they take the heat hue and the rest stay grey.
+ */
+export const satelliteSaw = {
+  missed: "#cf5317",
+  seen: colors.muted,
 };
 
 /** Heatwave categories after Hobday et al. (2018). */

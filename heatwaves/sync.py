@@ -3,10 +3,11 @@
     python -m heatwaves.sync               # once
     python -m heatwaves.sync --every 3600  # hourly, until stopped
 
-Each fetch covers the series at one buoy, depth and source, every variable
-at once; heatwaves.sources says how each source finds what changed. Storing
-is the same for all of them: the fetched days replace the stored ones, then
-each series' heatwaves are recomputed from its full record.
+Each fetch covers every series in one dataset: all the variables of a
+buoy's dataset, or every buoy's cell of the satellite grid. heatwaves.sources
+says how each source finds what changed. Storing is the same for all of
+them: the fetched days replace the stored ones, then each series' heatwaves
+are recomputed from its full record.
 """
 
 import argparse
@@ -25,7 +26,7 @@ from heatwaves import hobday
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
-from heatwaves.sources import Download, Source, TabledapSource
+from heatwaves.sources import Download, Source, connect
 from heatwaves.stations import BASELINE, BUOYS, SERIES
 
 log = logging.getLogger(__name__)
@@ -70,13 +71,13 @@ def ensure_catalog(session: Session, erddap: Erddap) -> None:
 
 
 def sync_series(session: Session, sources: Mapping[str, Source], series: Series) -> bool:
-    """Fetch what changed in a series and the others fetched with it, and store it.
+    """Fetch what changed in a series and the rest of its dataset, and store it.
 
     True if anything was read.
     """
     together = session.scalars(
         select(Series)
-        .where(Series.buoy_id == series.buoy_id, Series.depth == series.depth, Series.source == series.source)
+        .where(Series.source == series.source, Series.dataset_id == series.dataset_id)
         .order_by(Series.id)
     ).all()
     download = sources[series.source].fetch(together)
@@ -92,7 +93,7 @@ def sync_series(session: Session, sources: Mapping[str, Source], series: Series)
 def store(session: Session, series: Sequence[Series], download: Download) -> None:
     """Replace each series' daily means over the downloaded span, then recompute its heatwaves."""
     for each in series:
-        daily = download.daily[each.variable]
+        daily = download.daily[each.id]
         session.execute(
             delete(DailyMean).where(
                 DailyMean.series_id == each.id,
@@ -103,16 +104,20 @@ def store(session: Session, series: Sequence[Series], download: Download) -> Non
             session.execute(
                 insert(DailyMean),
                 [
-                    {"series_id": each.id, "date": day.date(), "value": float(value), "hours": int(hours)}
+                    {
+                        "series_id": each.id,
+                        "date": day.date(),
+                        "value": float(value),
+                        "hours": None if pd.isna(hours) else int(hours),
+                    }
                     for day, value, hours in daily.itertuples()
                 ],
             )
         each.modified_through = download.modified_through
         update_heatwaves(session, each)
         log.info(
-            "%s %s: re-read %s to %s (%d days)",
-            each.dataset_id,
-            each.variable,
+            "%s: re-read %s to %s (%d days)",
+            each.label,
             download.first_day,
             download.last_day,
             len(daily),
@@ -133,7 +138,7 @@ def update_heatwaves(session: Session, series: Series) -> None:
     try:
         analysis = hobday.analyse(daily, BASELINE)
     except hobday.InsufficientData as error:
-        log.warning("%s: can't compute heatwaves: %s", series.dataset_id, error)
+        log.warning("%s: can't compute heatwaves: %s", series.label, error)
         return
 
     session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
@@ -205,8 +210,9 @@ def sync_all(session_factory: sessionmaker, erddap: Erddap, sources: Mapping[str
         # One series from each fetch; sync_one brings the rest along.
         series_ids = session.scalars(
             select(func.min(Series.id))
-            .group_by(Series.buoy_id, Series.depth, Series.source)
-            .order_by(Series.buoy_id, Series.depth, Series.source)
+            .group_by(Series.source, Series.dataset_id)
+            # "buoy" before "satellite", so the satellite's first backfill doesn't hold the buoys up.
+            .order_by(Series.source, Series.dataset_id)
         ).all()
     return sum(not sync_one(session_factory, sources, series_id) for series_id in series_ids)
 
@@ -232,14 +238,14 @@ def main(argv: list[str] | None = None) -> int:
         with SessionLocal() as session:
             for series in session.scalars(select(Series)):
                 update_heatwaves(session, series)
-                log.info("%s: recomputed", series.dataset_id)
+                log.info("%s: recomputed", series.label)
             session.commit()
         return 0
 
     headers = {"User-Agent": settings.user_agent}
     with httpx.Client(timeout=settings.erddap_timeout, headers=headers, follow_redirects=True) as client:
         erddap = Erddap(settings.erddap_url, client)
-        sources = {"buoy": TabledapSource(erddap)}
+        sources = connect(client)
         while True:
             try:
                 failures = sync_all(SessionLocal, erddap, sources)

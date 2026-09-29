@@ -28,7 +28,7 @@ function condition(overrides: Partial<Condition>): Condition {
 }
 
 const buoys: Buoy[] = [
-  { id: "A01", name: "Massachusetts Bay", latitude: 42.5, longitude: -70.6, series: [condition({})] },
+  { id: "A01", name: "Massachusetts Bay", latitude: 42.5, longitude: -70.6, series: [condition({})], satellite: null },
   {
     id: "B01",
     name: "Western Maine Shelf",
@@ -44,6 +44,7 @@ const buoys: Buoy[] = [
         event_start: "2026-09-21",
       }),
     ],
+    satellite: null,
   },
   {
     id: "M01",
@@ -51,6 +52,7 @@ const buoys: Buoy[] = [
     latitude: 43.5,
     longitude: -67.9,
     series: [condition({ state: "offline", date: "2025-09-14", anomaly: 2.1 })],
+    satellite: null,
   },
 ];
 

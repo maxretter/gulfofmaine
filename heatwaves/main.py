@@ -15,7 +15,7 @@ from heatwaves.models import Series
 
 app = FastAPI(
     title="Gulf of Maine heatwaves",
-    summary="Marine heatwaves at NERACOOS buoys, at 1, 20 and 50 m, from NERACOOS ERDDAP.",
+    summary="Marine heatwaves at NERACOOS buoys, at 1, 20 and 50 m, compared with NOAA's satellite record.",
     version="0.2.0",
     redoc_url=None,
 )

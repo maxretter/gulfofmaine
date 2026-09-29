@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
-import { useBuoys, useEvents } from "../api/queries";
+import { useAgreement, useBuoys, useEvents } from "../api/queries";
 import type { Buoy, HeatwaveEvent } from "../api/types";
 import { AnnualHeatmap } from "../components/AnnualHeatmap";
 import { BuoyMap } from "../components/BuoyMap";
@@ -9,7 +9,9 @@ import { ConditionsTable } from "../components/ConditionsTable";
 import { DepthCharts } from "../components/DepthCharts";
 import { EventList } from "../components/EventList";
 import { RangeBrush } from "../components/RangeBrush";
+import { SatelliteMisses } from "../components/SatelliteMisses";
 import { StateBadge, StateLegend, Swatch } from "../components/StateBadge";
+import { missedShare } from "../lib/agreement";
 import { categories, colors } from "../lib/colors";
 import { addDays, daysBetween, maxDay, minDay } from "../lib/dates";
 import { eventsInRange } from "../lib/events";
@@ -69,7 +71,9 @@ export function ExplorerPage() {
   if (from >= to) [from, to] = [maxDay(addDays(lastDate, -364), firstDate), lastDate];
 
   const buoyEvents = (events.data ?? []).filter((e) => e.buoy_id === buoy.id);
-  const condition = buoy.series.find((s) => s.depth === state.depth);
+  // The detail follows the chosen depth when this buoy has it, else its shallowest.
+  const condition = buoy.series.find((s) => s.depth === state.depth) ?? buoy.series[0];
+  const detailDepth = condition?.depth ?? state.depth;
   const zoomTo = (event: HeatwaveEvent) => {
     const pad = Math.max(14, Math.round(event.duration / 2));
     update({ from: maxDay(addDays(event.start_date, -pad), firstDate), to: minDay(addDays(event.end_date, pad), lastDate) });
@@ -89,6 +93,7 @@ export function ExplorerPage() {
           2003–2022 normal. A marine heatwave is five or more days warmer than the 90th percentile for that time of
           year. Updated hourly from NERACOOS.
         </p>
+        <Headline />
       </section>
 
       <div className="filters" role="group" aria-label="Depth">
@@ -149,6 +154,16 @@ export function ExplorerPage() {
         </div>
 
         <div className="tiles">
+          {buoy.satellite && (
+            <div className="tile">
+              <p className="tile-label">Surface, by satellite</p>
+              <p className="tile-value">{formatTemp(buoy.satellite.temperature)}</p>
+              <p className="tile-delta">
+                {formatSigned(buoy.satellite.anomaly)} vs normal
+                {buoy.satellite.date && ` · ${formatDate(buoy.satellite.date)}`}
+              </p>
+            </div>
+          )}
           {buoy.series.map((s) => (
             <div className="tile" key={s.depth}>
               <p className="tile-label">{s.depth} m</p>
@@ -183,16 +198,16 @@ export function ExplorerPage() {
         </div>
         <RangeBrush
           buoy={buoy.id}
-          depth={state.depth}
+          depth={detailDepth}
           firstDate={firstDate}
           lastDate={lastDate}
           from={from}
           to={to}
-          events={buoyEvents.filter((e) => e.depth === state.depth)}
+          events={buoyEvents.filter((e) => e.depth === detailDepth)}
           onChange={setRange}
         />
         <p className="caption">
-          The whole record at {state.depth} m, with heatwaves shaded. Drag across it to choose a period.
+          The whole record at {detailDepth} m, with heatwaves shaded. Drag across it to choose a period.
         </p>
 
         <div className="legend series-legend">
@@ -208,6 +223,14 @@ export function ExplorerPage() {
             <span className="line dashed" style={{ borderColor: colors.ink2 }} aria-hidden="true" />
             Heatwave threshold (90th percentile)
           </span>
+          {buoy.satellite && (
+            <span className="key">
+              <svg width="18" height="4" aria-hidden="true">
+                <line x1="0" x2="18" y1="2" y2="2" stroke={colors.satellite} strokeWidth="2" strokeDasharray="6,4" />
+              </svg>
+              Satellite, at the surface (top chart)
+            </span>
+          )}
           {Object.entries(categories).map(([n, c]) => (
             <span className="state" key={n}>
               <Swatch color={c.color} variant="square" />
@@ -230,8 +253,52 @@ export function ExplorerPage() {
               <a href={s.erddap_url}>{s.dataset_id}</a>
             </span>
           ))}
+          {buoy.satellite && (
+            <>
+              {" · "}
+              <a href={buoy.satellite.erddap_url}>NOAA OISST</a> (satellite)
+            </>
+          )}
         </p>
       </section>
+
+      {buoy.satellite && (
+        <section className="card">
+          <h2>
+            What the satellite misses at <span className="code">{buoy.id}</span> {buoy.name}
+          </h2>
+          <p className="caption">
+            Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the
+            surface above. Only days with data from both count.
+          </p>
+          <SatelliteMisses buoy={buoy.id} />
+        </section>
+      )}
     </>
+  );
+}
+
+/**
+ * The share of heatwave days at 50 m, across every buoy, that the satellite record didn't show, beside the
+ * same share at 1 m: two records of nearly the same water still disagree about days near the threshold.
+ */
+function Headline() {
+  const deep = useAgreement(50);
+  const shallow = useAgreement(1);
+  const share = deep.data ? missedShare(deep.data) : null;
+  const surface = shallow.data ? missedShare(shallow.data) : null;
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  // The paragraph holds its place while the numbers load, so the page doesn't jump.
+  if (share === null) return <p className="headline" aria-hidden="true" />;
+  return (
+    <p className="headline">
+      <span className="hero">{percent(share)}</span>
+      <span>
+        of heatwave days at 50 m came with no heatwave at the surface above in NOAA's satellite record, the one
+        GMRI's temperature reports use.
+        {surface !== null &&
+          ` At 1 m, where buoy and satellite see nearly the same water, it's ${percent(surface)}.`}
+      </span>
+    </p>
   );
 }

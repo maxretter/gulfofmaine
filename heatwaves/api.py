@@ -4,19 +4,29 @@ import datetime as dt
 from collections import Counter
 from typing import Annotated, Literal
 
+import httpx
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import extract, func, select
+from sqlalchemy import extract, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from heatwaves.config import settings
+from heatwaves import compare, queries
 from heatwaves.db import get_session
 from heatwaves.hobday import day_of_year
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
+from heatwaves.sources import connect
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+# Each series' source builds its data link; the API makes no requests through them.
+SOURCES = connect(httpx.Client())
+
+# The series behind every endpoint: temperature at a buoy depth. The
+# satellite's are at depth 0, and appear only where named.
+TEMPERATURE = Series.variable == "temperature"
+AT_BUOY = TEMPERATURE & (Series.source == "buoy")
 
 # A series whose newest daily mean is older than this is reported offline.
 OFFLINE_AFTER = dt.timedelta(days=3)
@@ -44,12 +54,21 @@ class Condition(BaseModel):
     synced_at: dt.datetime | None  # when the sync job last checked ERDDAP
 
 
+class SatelliteCondition(Condition):
+    """Latest satellite conditions at a buoy (depth 0), and the grid cell they come from."""
+
+    latitude: float | None  # the cell's centre
+    longitude: float | None
+    distance_km: float | None  # from the buoy
+
+
 class BuoyOut(BaseModel):
     id: str
     name: str
     latitude: float | None
     longitude: float | None
-    series: list[Condition]
+    series: list[Condition]  # buoy depths, shallowest first
+    satellite: SatelliteCondition | None
 
 
 class Day(BaseModel):
@@ -80,6 +99,18 @@ class YearSummary(BaseModel):
     observed_days: int
 
 
+class Agreement(BaseModel):
+    """Days in a year with data at both a buoy depth and the satellite, by which saw a heatwave."""
+
+    buoy_id: str
+    depth: int
+    year: int
+    both: int
+    satellite_only: int
+    buoy_only: int
+    neither: int
+
+
 def now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
@@ -99,16 +130,29 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
             select(DailyMean.series_id, func.min(DailyMean.date)).group_by(DailyMean.series_id)
         ).all()
     )
+
+    def condition(series: Series) -> Condition:
+        return describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
+
+    def satellite(buoy: Buoy) -> SatelliteCondition | None:
+        for series in buoy.series:
+            if series.variable == "temperature" and series.source == "satellite":
+                return SatelliteCondition(
+                    **condition(series).model_dump(),
+                    latitude=series.latitude,
+                    longitude=series.longitude,
+                    distance_km=series.distance_km,
+                )
+        return None
+
     return [
         BuoyOut(
             id=buoy.id,
             name=buoy.name,
             latitude=buoy.latitude,
             longitude=buoy.longitude,
-            series=[
-                describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
-                for series in buoy.series
-            ],
+            series=[condition(s) for s in buoy.series if s.variable == "temperature" and s.source == "buoy"],
+            satellite=satellite(buoy),
         )
         for buoy in buoys
     ]
@@ -132,7 +176,7 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
     return Condition(
         depth=series.depth,
         dataset_id=series.dataset_id,
-        erddap_url=f"{settings.erddap_url}/tabledap/{series.dataset_id}.html",
+        erddap_url=SOURCES[series.source].page_url(series),
         state=state,
         first_date=first_date,
         date=series.latest_date,
@@ -149,7 +193,9 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
 
 
 def get_series(session: Session, buoy_id: str, depth: int) -> Series:
-    series = session.scalar(select(Series).where(Series.buoy_id == buoy_id.upper(), Series.depth == depth))
+    series = session.scalar(
+        select(Series).where(TEMPERATURE, Series.buoy_id == buoy_id.upper(), Series.depth == depth)
+    )
     if series is None:
         raise HTTPException(404, f"No series for buoy {buoy_id} at {depth} m")
     return series
@@ -194,8 +240,9 @@ def daily(
 ) -> list[Day]:
     """Daily mean temperature with its climatology and heatwave threshold.
 
-    Defaults to the 365 days ending on the newest observation. Days without
-    enough data are included with a null temperature, so gaps stay visible.
+    Depth 0 is the satellite's sea surface temperature at the buoy. Defaults
+    to the 365 days ending on the newest observation. Days without enough
+    data are included with a null temperature, so gaps stay visible.
     """
     series = get_series(session, buoy_id, depth)
     end = end or series.latest_date or today()
@@ -237,9 +284,12 @@ def list_events(
     year: int | None = None,
     min_category: Annotated[int, Query(ge=1, le=4)] = 1,
 ) -> list[EventOut]:
-    """Marine heatwaves, newest first. `year` matches events overlapping that year."""
+    """Marine heatwaves at the buoys, newest first. `year` matches events overlapping that year."""
     query = (
-        select(Event).join(Series).options(selectinload(Event.series)).where(Event.category >= min_category)
+        select(Event)
+        .join(Series)
+        .options(selectinload(Event.series))
+        .where(AT_BUOY, Event.category >= min_category)
     )
     if buoy_id is not None:
         query = query.where(Series.buoy_id == buoy_id.upper())
@@ -257,17 +307,13 @@ def annual(depth: int, session: SessionDep) -> list[YearSummary]:
     observed = session.execute(
         select(Series.buoy_id, year, func.count())
         .join(Series)
-        .where(Series.depth == depth)
+        .where(TEMPERATURE, Series.depth == depth)
         .group_by(Series.buoy_id, year)
     ).all()
 
-    heatwave_days: Counter[tuple[str, int]] = Counter()
-    events = session.scalars(
-        select(Event).join(Series).options(selectinload(Event.series)).where(Series.depth == depth)
-    )
-    for event in events:
-        for offset in range(event.duration):
-            heatwave_days[event.series.buoy_id, (event.start_date + dt.timedelta(days=offset)).year] += 1
+    series = session.scalars(select(Series).where(TEMPERATURE, Series.depth == depth)).all()
+    days = queries.heatwave_days(session, [s.id for s in series])
+    heatwave_days = Counter((s.buoy_id, day.year) for s in series for day in days[s.id].index)
 
     return [
         YearSummary(
@@ -279,3 +325,41 @@ def annual(depth: int, session: SessionDep) -> list[YearSummary]:
         )
         for buoy_id, year, count in sorted(observed)
     ]
+
+
+@router.get("/agreement")
+def agreement(depth: int, session: SessionDep) -> list[Agreement]:
+    """How often the satellite saw the heatwaves at one depth, per buoy and year.
+
+    Compares each buoy's heatwave days at `depth` with the satellite's at the
+    surface above it, over the days both have data.
+    """
+    series = session.scalars(
+        select(Series).where(
+            TEMPERATURE,
+            or_(Series.source == "satellite", (Series.source == "buoy") & (Series.depth == depth)),
+        )
+    ).all()
+    ids = [s.id for s in series]
+    observed = queries.observed_days(session, ids)
+    heatwaves = queries.heatwave_days(session, ids)
+    flags = {(s.buoy_id, s.source): compare.in_heatwave(observed[s.id], heatwaves[s.id]) for s in series}
+
+    rows = []
+    for buoy_id in sorted({s.buoy_id for s in series}):
+        if (buoy_id, "buoy") not in flags or (buoy_id, "satellite") not in flags:
+            continue
+        table = compare.agreement(flags[buoy_id, "buoy"], flags[buoy_id, "satellite"])
+        rows += [
+            Agreement(
+                buoy_id=buoy_id,
+                depth=depth,
+                year=int(year),
+                both=int(both),
+                satellite_only=int(satellite_only),
+                buoy_only=int(buoy_only),
+                neither=int(neither),
+            )
+            for year, both, satellite_only, buoy_only, neither in table.itertuples()
+        ]
+    return rows

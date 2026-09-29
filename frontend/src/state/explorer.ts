@@ -3,8 +3,9 @@ import { useSearchParams } from "react-router";
 
 import { isDay } from "../lib/dates";
 
+/** The depths the map can show. Each buoy's own depths come from the API and can include others. */
 export const DEPTHS = [1, 20, 50] as const;
-export type Depth = (typeof DEPTHS)[number];
+const DEEPEST = 1000; // metres: anything below is a mistyped URL
 
 /**
  * The explorer's view lives in the URL, e.g. /?buoy=F01&depth=20&from=2021-05-01&to=2021-12-31,
@@ -12,7 +13,7 @@ export type Depth = (typeof DEPTHS)[number];
  */
 export interface ExplorerState {
   buoy: string | null; // null: let the page choose
-  depth: Depth;
+  depth: number; // metres
   from: string | null; // null: the default range
   to: string | null;
 }
@@ -29,7 +30,7 @@ export function parseExplorerParams(params: URLSearchParams): ExplorerState {
   }
   return {
     buoy: buoy && /^[A-Z0-9]{2,8}$/.test(buoy) ? buoy : null,
-    depth: (DEPTHS as readonly number[]).includes(depth) ? (depth as Depth) : DEPTHS[0],
+    depth: Number.isInteger(depth) && depth > 0 && depth <= DEEPEST ? depth : DEPTHS[0],
     from,
     to,
   };

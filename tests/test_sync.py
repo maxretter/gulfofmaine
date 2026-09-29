@@ -126,7 +126,9 @@ def test_catalog_adds_each_series_once_with_its_buoy_position(session):
     ensure_catalog(session, erddap)
     ensure_catalog(session, erddap)
 
-    assert len(session.scalars(select(Series)).all()) == len(SERIES) == 18
+    assert (
+        len(session.scalars(select(Series)).all()) == len(SERIES) == 24
+    )  # 18 buoy depths, 6 satellite cells
     a01 = session.get_one(Buoy, "A01")
     assert (a01.name, a01.latitude, a01.longitude) == ("Massachusetts Bay", 42.5183, -70.5681)
     # Positions come from each buoy's shallowest dataset.
@@ -134,10 +136,11 @@ def test_catalog_adds_each_series_once_with_its_buoy_position(session):
 
 
 def test_a_failing_dataset_doesnt_stop_the_others(session_factory):
-    # A01's datasets have nothing new; every other dataset answers with an error.
+    # A01's datasets have nothing new; every other buoy dataset answers with
+    # an error, and there's no source for the satellite dataset at all.
     erddap = recorded_erddap([*CATALOG, ("/A01_", NO_MATCH)], [])
 
-    assert sync_all(session_factory, erddap, buoy_sources(erddap)) == 15
+    assert sync_all(session_factory, erddap, buoy_sources(erddap)) == 15 + 1
 
     with session_factory() as session:
         synced = session.scalars(select(Series.dataset_id).where(Series.synced_at.is_not(None))).all()

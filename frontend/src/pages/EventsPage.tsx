@@ -15,7 +15,7 @@ import {
   toEventParams,
 } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
-import { DEPTHS, toSearchParams } from "../state/explorer";
+import { toSearchParams } from "../state/explorer";
 
 const PAGE = 100;
 
@@ -24,7 +24,7 @@ function explorerLink(event: HeatwaveEvent): string {
   const pad = Math.max(14, Math.round(event.duration / 2));
   const params = toSearchParams({
     buoy: event.buoy_id,
-    depth: event.depth as (typeof DEPTHS)[number],
+    depth: event.depth,
     from: addDays(event.start_date, -pad),
     to: addDays(event.end_date, pad),
   });
@@ -54,6 +54,7 @@ export function EventsPage() {
 
   const matching = sortEvents(filterEvents(events.data, filters), sort);
   const years = [...new Set(events.data.map((e) => Number(e.start_date.slice(0, 4))))].sort((a, b) => b - a);
+  const depths = [...new Set(events.data.map((e) => e.depth))].sort((a, b) => a - b);
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
 
   const header = (label: string, key: SortKey, numeric = false) => (
@@ -103,7 +104,7 @@ export function EventsPage() {
             onChange={(e) => setFilters({ depth: e.target.value ? Number(e.target.value) : null })}
           >
             <option value="">All</option>
-            {DEPTHS.map((d) => (
+            {depths.map((d) => (
               <option key={d} value={d}>
                 {d} m
               </option>

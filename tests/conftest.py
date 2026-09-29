@@ -21,6 +21,7 @@ from heatwaves.db import get_session
 from heatwaves.erddap import Erddap
 from heatwaves.main import app
 from heatwaves.models import Base, Buoy, DailyMean, Series
+from heatwaves.stations import buoy_series, satellite_series
 
 DATA = Path(__file__).parent / "data"
 
@@ -41,6 +42,21 @@ CATALOG = [("/allDatasets.json?", "all_datasets.json")]
 # The same days with temperature and salinity, recorded 2026-09-28 up to the
 # end of the recorded span (15:00Z), so the sync fetches both at once.
 A01_SYNC_WITH_SALINITY = [*A01_SYNC[:2], ("/A01_ocean_001m.nc?", "A01_ocean_001m_salinity.nc")]
+
+# Recorded from coastwatch.pfeg.noaa.gov on 2026-09-28, when the final OISST
+# ran through Sep 13 and the preliminary through Sep 27: choosing each buoy's
+# cell, then every cell from Aug 27, the final product's days first.
+COASTWATCH = "https://coastwatch.pfeg.noaa.gov/erddap"
+OISST_SYNC = [
+    ("/ncdcOisst21NrtAgg_LonPM180.json?time[last]", "oisst_preliminary_last.json"),
+    ("/ncdcOisst21Agg_LonPM180.json?time[last]", "oisst_final_last.json"),
+    ("/ncdcOisst21Agg_LonPM180.nc?sst[(2026-09-13T12:00:00Z)]", "oisst_cells.nc"),
+    ("/ncdcOisst21Agg_LonPM180.nc?sst[(2026-08-27T12:00:00Z):(2026-09-13T12:00:00Z)]", "oisst_final.nc"),
+    (
+        "/ncdcOisst21NrtAgg_LonPM180.nc?sst[(2026-09-14T12:00:00Z):(2026-09-27T12:00:00Z)]",
+        "oisst_preliminary.nc",
+    ),
+]
 
 
 @contextmanager
@@ -112,12 +128,13 @@ def add_series(
     """A buoy and series holding `values` as its daily means."""
     if session.get(Buoy, buoy_id) is None:
         session.add(Buoy(id=buoy_id, name="Test Buoy", latitude=42.5, longitude=-70.5))
+    spec = satellite_series(buoy_id) if source == "satellite" else buoy_series(buoy_id, depth, variable)
     series = Series(
         buoy_id=buoy_id,
-        depth=depth,
-        variable=variable,
-        source=source,
-        dataset_id=f"{buoy_id}_ocean_{depth:03d}m",
+        depth=spec.depth,
+        variable=spec.variable,
+        source=spec.source,
+        dataset_id=spec.dataset_id,
     )
     session.add(series)
     session.flush()

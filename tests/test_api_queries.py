@@ -13,7 +13,8 @@ TODAY = dt.datetime.now(dt.UTC).date()
 
 @pytest.fixture(scope="module")
 def client():
-    """A series in each state, and at B01 1 m a heatwave from Jul 1 to Jul 10, 2021.
+    """A series in each state; at B01 1 m a heatwave from Jul 1 to Jul 10, 2021, and
+    over B01 a satellite heatwave from Jul 5 to Jul 14.
 
     Days either side of each heatwave are set to normal, so its edges are exact.
     """
@@ -28,6 +29,9 @@ def client():
     offline = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=10), seed=2)
     offline["2021-06-25":"2021-07-15"] = typical["2021-06-25":"2021-07-15"]
     offline["2021-07-01":"2021-07-10"] += 2.5
+    satellite = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=1), seed=3)
+    satellite["2021-06-25":"2021-07-20"] = typical["2021-06-25":"2021-07-20"]
+    satellite["2021-07-05":"2021-07-14"] += 2.5
 
     with fresh_database() as session_factory, session_factory() as session:
         for values, buoy_id, depth in (
@@ -37,6 +41,9 @@ def client():
             (offline, "B01", 1),
         ):
             update_heatwaves(session, add_series(session, values, buoy_id, depth))
+        over_b01 = add_series(session, satellite, "B01", source="satellite")
+        over_b01.latitude, over_b01.longitude, over_b01.distance_km = 43.125, -70.375, 7.5
+        update_heatwaves(session, over_b01)
         # A series the sync has created but found no data for yet.
         empty = Series(
             buoy_id="B01", depth=20, variable="temperature", source="buoy", dataset_id="B01_ocean_020m"
@@ -102,3 +109,34 @@ def test_annual_counts_heatwave_and_observed_days(client):
 
     assert (years["B01", 2021]["heatwave_days"], years["B01", 2021]["observed_days"]) == (10, 365)
     assert years["A01", TODAY.year]["heatwave_days"] >= 8
+
+
+def test_buoys_report_the_satellite_apart_from_the_depths(client):
+    buoys = {buoy["id"]: buoy for buoy in client.get("/api/buoys").json()}
+
+    assert buoys["A01"]["satellite"] is None
+    satellite = buoys["B01"]["satellite"]
+    assert (satellite["depth"], satellite["distance_km"], satellite["latitude"]) == (0, 7.5, 43.125)
+    assert satellite["date"] == (TODAY - dt.timedelta(days=1)).isoformat()
+    assert (
+        satellite["erddap_url"]
+        == "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.html"
+    )
+    assert buoys["B01"]["series"][0]["erddap_url"].endswith("/tabledap/B01_ocean_001m.html")
+
+
+def test_daily_series_serves_the_satellite_at_depth_0(client):
+    days = client.get("/api/buoys/B01/0/daily?start=2021-07-01&end=2021-07-10").json()
+
+    assert len(days) == 10
+    assert all(day["temperature"] > day["threshold"] for day in days[4:])
+
+
+def test_agreement_compares_a_depth_with_the_satellite_over_days_both_observed(client):
+    rows = {(row["buoy_id"], row["year"]): row for row in client.get("/api/agreement?depth=1").json()}
+
+    assert {buoy for buoy, _ in rows} == {"B01"}  # A01 has no satellite series
+    year = rows["B01", 2021]
+    assert (year["both"], year["buoy_only"]) == (6, 4)  # Jul 5-10, and Jul 1-4
+    assert year["satellite_only"] >= 4  # Jul 11-14, and any others
+    assert year["both"] + year["satellite_only"] + year["buoy_only"] + year["neither"] == 365

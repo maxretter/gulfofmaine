@@ -43,8 +43,8 @@ class Buoy(Base):
 class Series(Base):
     """One variable at one depth on one buoy, from one source (see heatwaves.stations).
 
-    Series at the same buoy, depth and source are fetched together, in one
-    request for all their variables.
+    Series from the same source and dataset are fetched together: every
+    variable of a buoy's dataset, or every buoy's cell of a satellite grid.
     """
 
     __tablename__ = "series"
@@ -56,8 +56,14 @@ class Series(Base):
     variable: Mapped[str]  # e.g. temperature
     source: Mapped[str]  # e.g. buoy
     dataset_id: Mapped[str]
+    # Where a satellite series is sampled: the centre of the grid cell nearest
+    # the buoy that has data, and its distance from the buoy.
+    latitude: Mapped[float | None]
+    longitude: Mapped[float | None]
+    distance_km: Mapped[float | None]
 
-    # Newest ERDDAP time_modified already read; the next sync starts from here.
+    # Where the next sync starts: the newest ERDDAP time_modified read for a
+    # buoy, or the newest day read for a satellite.
     modified_through: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
     synced_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
 
@@ -70,6 +76,11 @@ class Series(Base):
 
     buoy: Mapped[Buoy] = relationship(back_populates="series")
 
+    @property
+    def label(self) -> str:
+        """For logs: satellite series share a dataset, so its ID isn't enough."""
+        return f"{self.buoy_id} {self.depth} m {self.variable} ({self.source})"
+
 
 class DailyMean(Base):
     __tablename__ = "daily_mean"
@@ -77,7 +88,7 @@ class DailyMean(Base):
     series_id: Mapped[int] = mapped_column(ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
     date: Mapped[dt.date] = mapped_column(primary_key=True)
     value: Mapped[float]  # in the variable's units: degrees C for temperature
-    hours: Mapped[int]  # hourly bins behind the mean
+    hours: Mapped[int | None]  # hourly bins behind the mean; None for a daily satellite analysis
 
 
 class ClimatologyDay(Base):

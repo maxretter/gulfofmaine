@@ -21,12 +21,20 @@ export interface Condition {
   synced_at: string | null;
 }
 
+/** Satellite sea surface temperature at a buoy (depth 0), from the nearest grid cell with data. */
+export interface SatelliteCondition extends Condition {
+  latitude: number | null; // the cell's centre
+  longitude: number | null;
+  distance_km: number | null; // from the buoy
+}
+
 export interface Buoy {
   id: string;
   name: string;
   latitude: number | null;
   longitude: number | null;
-  series: Condition[];
+  series: Condition[]; // buoy depths, shallowest first
+  satellite: SatelliteCondition | null;
 }
 
 export interface Day {
@@ -47,6 +55,17 @@ export interface HeatwaveEvent {
   mean_intensity: number;
   category: number;
   category_name: string;
+}
+
+/** Days in a year with data at both a buoy depth and the satellite, by which saw a heatwave. */
+export interface Agreement {
+  buoy_id: string;
+  depth: number;
+  year: number;
+  both: number;
+  satellite_only: number;
+  buoy_only: number;
+  neither: number;
 }
 
 export interface YearSummary {

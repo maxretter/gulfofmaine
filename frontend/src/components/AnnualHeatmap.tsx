@@ -1,15 +1,15 @@
 import * as Plot from "@observablehq/plot";
 import { extent, range } from "d3";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useAnnual } from "../api/queries";
 import type { Buoy, YearSummary } from "../api/types";
 import { colors, heatDayBin, heatDayBins } from "../lib/colors";
+import { chartDefaults } from "../lib/chart";
 import { daysBetween, formatDay, minDay } from "../lib/dates";
-import { useElementWidth } from "../lib/useElementWidth";
+import { Chart } from "./Chart";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 import { Swatch } from "./StateBadge";
-import { TableToggle } from "./TableToggle";
 
 interface Cell extends YearSummary {
   enough: boolean;
@@ -31,17 +31,69 @@ function daysSoFar(year: number): number {
 
 export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }: Props) {
   const annual = useAnnual(depth);
-  const ref = useRef<HTMLDivElement>(null);
-  const width = useElementWidth(ref);
   const names = useMemo(() => new Map(buoys.map((b) => [b.id, b.name])), [buoys]);
-
   const cells: Cell[] = useMemo(
     () => (annual.data ?? []).map((d) => ({ ...d, enough: d.observed_days >= daysSoFar(d.year) / 2 })),
     [annual.data],
   );
 
-  const options = useMemo((): Plot.PlotOptions | null => {
-    if (!cells.length || !width) return null;
+  return (
+    <Chart
+      className="chart clickable"
+      loading={annual.isPlaceholderData}
+      error={annual.isError && "Couldn't load the yearly summary."}
+      minHeight={44 + buoys.length * 30}
+      legend={
+        <div className="legend">
+          {heatDayBins.map((bin) => (
+            <span className="state" key={bin.label}>
+              <Swatch color={bin.color} variant="square" />
+              {bin.min === 0 ? "0 days" : bin.label}
+            </span>
+          ))}
+          <span className="state">
+            <Swatch color={colors.axis} variant="hollow" />
+            Too little data
+          </span>
+        </div>
+      }
+      table={{
+        columns: [
+          { label: "Buoy" },
+          { label: "Year", numeric: true },
+          { label: "Heatwave days", numeric: true },
+          { label: "Days observed", numeric: true },
+        ],
+        rows: () =>
+          cells.map((d) => [`${d.buoy_id} ${names.get(d.buoy_id)}`, d.year, d.enough ? d.heatwave_days : "–", d.observed_days]),
+      }}
+    >
+      {(width) =>
+        cells.length > 0 && (
+          <Heatmap
+            cells={cells}
+            width={width}
+            buoys={buoys}
+            names={names}
+            selectedBuoy={selectedBuoy}
+            from={from}
+            to={to}
+            onSelect={onSelect}
+          />
+        )
+      }
+    </Chart>
+  );
+}
+
+interface HeatmapProps extends Omit<Props, "depth"> {
+  cells: Cell[];
+  width: number;
+  names: Map<string, string>;
+}
+
+function Heatmap({ cells, width, buoys, names, selectedBuoy, from, to, onSelect }: HeatmapProps) {
+  const options = useMemo((): Plot.PlotOptions => {
     const [first, last] = extent(cells, (d) => d.year) as [number, number];
     const [fromYear, toYear] = [Number(from.slice(0, 4)), Number(to.slice(0, 4))];
     const chartWidth = Math.max(width, 640);
@@ -52,13 +104,13 @@ export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }
         : `Too little data (${d.observed_days} days observed)`) +
       "\nClick to explore";
     return {
+      ...chartDefaults,
       width: chartWidth,
       height: 44 + buoys.length * 30,
       marginLeft: 44,
-      style: { fontSize: "12px", color: colors.ink2, overflow: "visible" },
+      marginRight: 20,
       x: { domain: range(first, last + 1), label: null, tickFormat: (y: number) => (y % 5 === 0 || chartWidth > 900 ? String(y) : "") },
       y: { domain: buoys.map((b) => b.id), label: null },
-      color: { type: "identity" },
       marks: [
         Plot.cell(
           cells.filter((d) => d.enough),
@@ -82,7 +134,8 @@ export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }
   const onRender = useCallback(
     (plot: PlotElement) => {
       // On narrow screens the grid scrolls sideways; start at the recent years.
-      if (ref.current) ref.current.scrollLeft = ref.current.scrollWidth;
+      const frame = plot.closest(".chart");
+      if (frame) frame.scrollLeft = frame.scrollWidth;
       const click = () => {
         if (plot.value) onSelect(plot.value.buoy_id, plot.value.year);
       };
@@ -92,40 +145,5 @@ export function AnnualHeatmap({ depth, buoys, selectedBuoy, from, to, onSelect }
     [onSelect],
   );
 
-  return (
-    <>
-      {/* Height reserved up front, so the page below doesn't jump when the data arrives. */}
-      <div
-        ref={ref}
-        className={`chart clickable${annual.isPlaceholderData ? " loading" : ""}`}
-        style={{ minHeight: 44 + buoys.length * 30 }}
-      >
-        {annual.isError && <p className="note">Couldn't load the yearly summary.</p>}
-        {options && <PlotFigure options={options} onRender={onRender} />}
-      </div>
-      <div className="legend">
-        {heatDayBins.map((bin) => (
-          <span className="state" key={bin.label}>
-            <Swatch color={bin.color} variant="square" />
-            {bin.min === 0 ? "0 days" : bin.label}
-          </span>
-        ))}
-        <span className="state">
-          <Swatch color={colors.axis} variant="hollow" />
-          Too little data
-        </span>
-      </div>
-      <TableToggle
-        columns={[
-          { label: "Buoy" },
-          { label: "Year", numeric: true },
-          { label: "Heatwave days", numeric: true },
-          { label: "Days observed", numeric: true },
-        ]}
-        rows={() =>
-          cells.map((d) => [`${d.buoy_id} ${names.get(d.buoy_id)}`, d.year, d.enough ? d.heatwave_days : "–", d.observed_days])
-        }
-      />
-    </>
-  );
+  return <PlotFigure options={options} onRender={onRender} />;
 }
