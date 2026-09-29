@@ -21,7 +21,7 @@ interface Props {
   onSelect: (year: number) => void;
 }
 
-/** Heatwaves at one depth per year, stacked by origin, Unclear included. Click a year to map it. */
+/** Heatwaves at one depth per year, stacked by origin, Unclear included. Click a year to see it below. */
 export function OriginsByYear({ events, depth, year, onSelect }: Props) {
   const rows = useMemo(() => originsByYear(events, depth), [events, depth]);
   const totals = useMemo(() => {
@@ -78,7 +78,7 @@ function Columns({ rows, year, width, onSelect }: { rows: OriginYear[]; year: nu
     const tallest = Math.max(...totals.map((t) => t.count));
     const describe = (y: number) => {
       const counts = ORDER.map((o) => `${origins[o].name}: ${rows.find((r) => r.year === y && r.origin === o)?.count ?? 0}`);
-      return `${y}\n${counts.join("\n")}\nClick to map this year`;
+      return `${y}\n${counts.join("\n")}\nClick to see this year below`;
     };
     return {
       ...chartDefaults,
@@ -88,7 +88,7 @@ function Columns({ rows, year, width, onSelect }: { rows: OriginYear[]; year: nu
       x: { domain, padding, label: null, tickFormat: (y: number) => (y % 5 === 0 ? String(y) : "") },
       y: { label: "heatwaves", grid: true, nice: true },
       marks: [
-        // The year mapped below, as a column of shade behind its bar.
+        // The year shown below, as a column of shade behind its bar.
         Plot.barY(
           domain.includes(year) ? [{ year, count: tallest }] : [],
           { x: "year", y: "count", fill: colors.neutral, inset: -3 },

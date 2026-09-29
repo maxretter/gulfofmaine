@@ -113,6 +113,18 @@ export function eventsInRange(events: HeatwaveEvent[], buoy: string, from: strin
   return events.filter((e) => e.buoy_id === buoy && e.start_date <= to && e.end_date >= from);
 }
 
+/** For each of `dates`, consecutive ISO days, the one of `events` (at one buoy and depth) it falls in, if any. */
+export function eventOnEachDay(events: HeatwaveEvent[], dates: string[]): (HeatwaveEvent | null)[] {
+  const days: (HeatwaveEvent | null)[] = dates.map(() => null);
+  if (!dates.length) return days;
+  for (const event of events) {
+    const first = Math.max(0, daysBetween(dates[0], event.start_date));
+    const last = Math.min(dates.length - 1, daysBetween(dates[0], event.end_date));
+    for (let i = first; i <= last; i++) days[i] = event;
+  }
+  return days;
+}
+
 
 export interface Band {
   date: Date;

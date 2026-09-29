@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { HeatwaveEvent } from "../api/types";
 import {
+  eventOnEachDay,
   eventPath,
   eventRange,
   filterEvents,
@@ -163,5 +164,21 @@ describe("heatwave days by buoy and year", () => {
       event({ buoy_id: "B01", start_date: "2021-07-01", end_date: "2021-07-02" }),
     ];
     expect(days(events)).toEqual(["A01 2021: 15", "B01 2021: 2"]);
+  });
+});
+
+describe("eventOnEachDay", () => {
+  const dates = ["2021-01-01", "2021-01-02", "2021-01-03", "2021-01-04", "2021-01-05", "2021-01-06"];
+  const carried = event({ start_date: "2020-12-20", end_date: "2021-01-02" });
+  const inside = event({ start_date: "2021-01-04", end_date: "2021-01-04" });
+  const leaving = event({ start_date: "2021-01-06", end_date: "2021-02-01" });
+
+  it("finds the heatwave on each day, cut to the dates given", () => {
+    expect(eventOnEachDay([carried, inside, leaving], dates)).toEqual([carried, carried, null, inside, null, leaving]);
+  });
+
+  it("leaves days outside every heatwave empty", () => {
+    expect(eventOnEachDay([event({ start_date: "2021-03-01", end_date: "2021-03-10" })], dates)).toEqual(dates.map(() => null));
+    expect(eventOnEachDay([carried], [])).toEqual([]);
   });
 });

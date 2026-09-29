@@ -256,21 +256,16 @@ td .swatch { position: relative; top: 1px; }
 .sources { color: var(--ink-2); font-size: 0.85rem; margin: 1.25rem 0 0; }
 
 /* --- Origins page --- */
-.playback { display: flex; align-items: center; gap: 0.75rem; margin: 0.25rem 0 1rem; flex-wrap: wrap; }
-.playback input[type="range"] { flex: 1; min-width: 180px; accent-color: var(--ink); }
-.play { font: inherit; font-size: 0.9rem; padding: 0.3rem 0.9rem; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); cursor: pointer; min-width: 5rem; }
-.play:hover { border-color: var(--ink-2); }
-.playback-date { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 8rem; }
-.onset-now { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
-.onset-now { align-items: start; }
-.onset-now .map { height: 400px; min-height: 0; border-radius: 8px; }
-.onset-cell { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
-.heatwave-flag { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 4px; background: var(--ink); color: var(--surface); font-size: 0.75rem; }
-.strip-frame { position: relative; }
-.day-marker { position: absolute; top: 0; bottom: 26px; width: 2px; margin-left: -1px; background: var(--ink); pointer-events: none; }
-.heatwave-bar { display: inline-block; width: 18px; height: 5px; background: var(--ink); }
+.year-by-buoy { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem 1.5rem; align-items: start; }
+.map.path-map { flex: none; height: 268px; min-height: 0; border-radius: 8px; }
+.path-map .leaflet-control-attribution { font-size: 10px; }
+.path-label.leaflet-tooltip { font-size: 11px; padding: 1px 4px; }
+.path-arrow path { fill: none; stroke: var(--ink-2); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .anomaly-legend svg { display: block; }
-@media (max-width: 760px) { .onset-now { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .year-by-buoy { grid-template-columns: minmax(0, 1fr); }
+  .map.path-map { order: -1; height: 200px; }
+}
 
 /* --- A heatwave's page --- */
 .crumbs { margin: 0 0 0.5rem; font-size: 0.9rem; }

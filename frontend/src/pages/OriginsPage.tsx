@@ -2,15 +2,15 @@ import { useCallback } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { useBuoys, useEvents, useOriginRules } from "../api/queries";
-import { OnsetMap } from "../components/OnsetMap";
 import { OriginsByYear } from "../components/OriginsByYear";
+import { YearByBuoy } from "../components/YearByBuoy";
 import { latest } from "../lib/dates";
 
 const DEFAULT_YEAR = 2021; // the best-studied recent onset: M01 in January, the western Gulf by April
 const DEFAULT_DEPTH = 50;
 const FIRST_YEAR = 2001; // the first buoy records
 
-/** Where the heat in heatwaves at depth came from, and how one year's spread. /origins?depth=50&year=2021 */
+/** Where the heat in heatwaves at depth came from, and one year's heatwaves at every buoy. /origins?depth=50&year=2021 */
 export function OriginsPage() {
   const buoys = useBuoys();
   const events = useEvents();
@@ -66,7 +66,7 @@ export function OriginsPage() {
         <h2>Heatwaves at {depth} m each year, by origin</h2>
         <p className="caption">
           By the year each began. Unclear is kept in view: it is where the signals disagree or the data are too thin.
-          Click a year to map it below.
+          Click a year to see its heatwaves below.
         </p>
         {events.isError ? (
           <p className="note">Couldn't load the heatwaves.</p>
@@ -77,7 +77,7 @@ export function OriginsPage() {
 
       <section className="card">
         <div className="detail-head">
-          <h2>How {year}'s heatwaves spread at {depth} m</h2>
+          <h2>Every heatwave at {depth} m in {year}</h2>
           <label>
             <span className="filter-label">Year </span>
             <select className="select" value={year} onChange={(e) => update({ year: Number(e.target.value) })}>
@@ -90,11 +90,17 @@ export function OriginsPage() {
           </label>
         </div>
         <p className="caption">
-          Each buoy colored by how far above or below normal it was on the day shown, ringed while in a heatwave.
-          Play the year, or drag through it. Below, every buoy's year from east to west, the way slope water travels:
-          a heatwave that begins at N01 or M01 and reaches A01 weeks later came from offshore.
+          Each buoy's year, east to west in the order slope water reaches them, as on the map. Bars are heatwaves,
+          colored by where their heat came from, under a strip of the temperature against normal. Heat from offshore
+          should reach the eastern buoys first, but neighboring buoys mostly warm and cool together, so that order is
+          one clue among five. Click a heatwave for its evidence, or{" "}
+          <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
-        {buoys.data ? <OnsetMap year={year} depth={depth} buoys={buoys.data} /> : <p className="note">Loading…</p>}
+        {buoys.data ? (
+          <YearByBuoy year={year} depth={depth} buoys={buoys.data} events={events.data ?? []} />
+        ) : (
+          <p className="note">Loading…</p>
+        )}
       </section>
     </>
   );

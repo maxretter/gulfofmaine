@@ -190,11 +190,11 @@ works:
 - **Data** (`/data`). Every file with its size, the variables in them, and
   how to open one in xarray, pandas or curl.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
-  stacked by origin with Unclear kept in view; click a year to map it. The map
-  plays the year day by day, each buoy colored by its anomaly and ringed while
-  in a heatwave, over a strip of every buoy's year from east to west, which
-  shows a heatwave traveling from Jordan Basin to Massachusetts Bay at a
-  glance and doubles as the scrubber.
+  stacked by origin with Unclear kept in view; click a year to see it below:
+  every buoy's year from east to west, in the order slope water reaches them,
+  with each heatwave a bar colored by its origin under a strip of the daily
+  anomaly. A small map beside it joins the buoys in that order, and a
+  heatwave opens its page.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one
