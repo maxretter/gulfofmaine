@@ -43,16 +43,10 @@ export function EventsPage() {
     [setParams, setShown],
   );
   const setFilters = (patch: Partial<EventFilters>) => updateFilters(() => patch);
-  // The heatmap shows one depth: the one filtered to, else the shallowest.
-  const heatmapDepth = filters.depth ?? DEPTHS[0];
-  // A cell filters the list to its buoy and year at that depth; clicking the same cell again clears that.
+  // A cell filters the list to its buoy and year; clicking the same cell again clears that.
   const selectCell = useCallback(
     (buoy: string, year: number) =>
-      updateFilters((was) =>
-        was.buoy === buoy && was.year === year
-          ? { buoy: null, year: null }
-          : { buoy, year, depth: was.depth ?? DEPTHS[0] },
-      ),
+      updateFilters((was) => (was.buoy === buoy && was.year === year ? { buoy: null, year: null } : { buoy, year })),
     [updateFilters],
   );
   const setSort = (key: SortKey) =>
@@ -178,15 +172,18 @@ export function EventsPage() {
 
       {buoys.data && (
         <section className="card">
-          <h2>Heatwave days per year at {heatmapDepth} m</h2>
+          <h2>Heatwave days per year {filters.depth === null ? "at any depth" : `at ${filters.depth} m`}</h2>
           <p className="caption">
-            Days inside a marine heatwave, by buoy and year.{" "}
-            {filters.depth === null && "Choose a depth above to see another. "}
-            Click a cell to list its heatwaves below.
+            Days inside a heatwave that matches the filters above, by buoy and year
+            {filters.depth === null && "; a day with heatwaves at several depths counts once"}. Click a cell to list
+            its heatwaves below.
           </p>
           <AnnualHeatmap
-            depth={heatmapDepth}
             buoys={buoys.data}
+            events={events.data}
+            depth={filters.depth}
+            minCategory={filters.minCategory}
+            origin={filters.origin}
             selected={{ buoy: filters.buoy, year: filters.year }}
             onSelect={selectCell}
           />

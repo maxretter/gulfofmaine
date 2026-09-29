@@ -1,6 +1,6 @@
 import type { DayPoint } from "../api/queries";
 import type { HeatwaveEvent, Origin } from "../api/types";
-import { addDays, parseDay } from "./dates";
+import { addDays, daysBetween, maxDay, minDay, parseDay } from "./dates";
 
 export interface EventFilters {
   buoy: string | null;
@@ -75,6 +75,37 @@ export function overlapping(events: HeatwaveEvent[], event: HeatwaveEvent): Heat
         a.depth - b.depth ||
         a.start_date.localeCompare(b.start_date),
     );
+}
+
+/**
+ * Days inside any of `events`, by buoy and year. A day inside heatwaves at several depths counts once, so the count
+ * is days with a heatwave somewhere at the buoy, never more than the days in the year.
+ */
+export function heatwaveDaysByYear(events: HeatwaveEvent[]): { buoy_id: string; year: number; days: number }[] {
+  const spans = new Map<string, [string, string][]>();
+  for (const event of events) {
+    const list = spans.get(event.buoy_id) ?? [];
+    list.push([event.start_date, event.end_date]);
+    spans.set(event.buoy_id, list);
+  }
+  const totals: { buoy_id: string; year: number; days: number }[] = [];
+  for (const [buoy, list] of spans) {
+    const merged: [string, string][] = [];
+    for (const [start, end] of list.sort((a, b) => a[0].localeCompare(b[0]))) {
+      const last = merged.at(-1);
+      if (last && start <= last[1]) last[1] = maxDay(last[1], end);
+      else merged.push([start, end]);
+    }
+    const byYear = new Map<number, number>();
+    for (const [start, end] of merged) {
+      for (let year = Number(start.slice(0, 4)); year <= Number(end.slice(0, 4)); year++) {
+        const days = daysBetween(maxDay(start, `${year}-01-01`), minDay(end, `${year}-12-31`)) + 1;
+        byYear.set(year, (byYear.get(year) ?? 0) + days);
+      }
+    }
+    for (const [year, days] of byYear) totals.push({ buoy_id: buoy, year, days });
+  }
+  return totals;
 }
 
 /** Events overlapping [from, to] (ISO days), for one buoy. */
