@@ -172,7 +172,7 @@ export function EventsPage() {
       </div>
 
       {buoys.data && (
-        <section className="card figure">
+        <section className="card">
           <h2>Heatwave days per year {filters.depth === null ? "at any depth" : `at ${filters.depth} m`}</h2>
           <p className="caption">
             Days inside a heatwave that matches the filters above, by buoy and year

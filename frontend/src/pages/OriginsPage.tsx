@@ -60,7 +60,7 @@ export function OriginsPage() {
         </p>
       </section>
 
-      <section className="card figure">
+      <section className="card">
         <h2>
           Heatwaves at <InlineSelect {...depthChoice} /> each year, by origin
         </h2>
@@ -75,7 +75,7 @@ export function OriginsPage() {
         )}
       </section>
 
-      <section className="card figure">
+      <section className="card">
         <h2>
           Every heatwave at <InlineSelect {...depthChoice} /> in{" "}
           <InlineSelect

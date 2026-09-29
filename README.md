@@ -205,11 +205,11 @@ contrast, and the satellite's and the origins' colors were checked the same
 way against the ones beside them; anomalies use a blue–gray–orange diverging
 scale.
 
-The look is editorial: Newsreader for titles, figures and long text, Public
+The look is editorial: Newsreader for titles, readings and long text, Public
 Sans for everything else (both self-hosted through Fontsource, since the
-content security policy allows no other origins), sections set open under
-rules rather than in boxes, and charts numbered as figures. The same stripes
-run across the top of every page as the site's mark.
+content security policy allows no other origins), and sections set open
+under rules rather than in boxes. The same stripes run across the top of
+every page as the site's mark.
 
 ### API
 

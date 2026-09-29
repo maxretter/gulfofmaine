@@ -68,7 +68,7 @@ export function BuoyPage() {
 
       <Tiles buoy={buoy} />
 
-      <section className="card figure">
+      <section className="card">
         {range ? (
           <Record
             buoy={buoy}
@@ -86,7 +86,7 @@ export function BuoyPage() {
       </section>
 
       {buoy.satellite && (
-        <section className="card figure">
+        <section className="card">
           <h2>What the satellite misses here</h2>
           <p className="caption">
             Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the

@@ -69,7 +69,7 @@ export function SatellitePage() {
             })}
           </div>
 
-          <section className="card figure">
+          <section className="card">
             <h2>Heatwave days at 20 and 50 m, every buoy together</h2>
             <p className="caption">
               Each year's heatwave days at depth, summed over the buoys and split by whether the satellite record also
