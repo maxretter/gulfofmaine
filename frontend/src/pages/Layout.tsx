@@ -19,7 +19,7 @@ export function Layout() {
             <NavLink to="/events">Heatwaves</NavLink>
             <NavLink to="/methods">Methods</NavLink>
             <a href="/docs">API</a>
-            <a href="https://github.com/maxretter/gom-heatwaves">Source</a>
+            <a href="https://github.com/maxretter/gulfofmaine">Source</a>
           </nav>
         </div>
       </header>

@@ -24,7 +24,7 @@ class Settings:
             coastwatch_url=env("COASTWATCH_URL", "https://coastwatch.pfeg.noaa.gov/erddap"),
             erddap_timeout=float(env("ERDDAP_TIMEOUT", "120")),
             user_agent=env(
-                "ERDDAP_USER_AGENT", "gom-heatwaves/0.1 (+https://github.com/maxretter/gom-heatwaves)"
+                "ERDDAP_USER_AGENT", "gom-heatwaves/0.1 (+https://github.com/maxretter/gulfofmaine)"
             ),
             sync_stale_after=dt.timedelta(hours=float(env("SYNC_STALE_AFTER_HOURS", "3"))),
         )
