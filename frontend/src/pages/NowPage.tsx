@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useBuoys } from "../api/queries";
 import { BuoyMap } from "../components/BuoyMap";
 import { ConditionsTable } from "../components/ConditionsTable";
+import { InlineSelect } from "../components/InlineSelect";
 import { StateLegend } from "../components/StateBadge";
 import { StripesFigure } from "../components/Stripes";
 import { heatwaveSummary } from "../lib/state";
@@ -34,27 +35,6 @@ export function NowPage() {
         <StripesFigure />
       </section>
 
-      <div className="toolbar">
-        <div className="filters" role="group" aria-label="Depth">
-          <span className="filter-label">Depth</span>
-          <div className="segmented">
-            {DEPTHS.map((depth) => (
-              <button key={depth} type="button" aria-pressed={depth === view.depth} onClick={() => update({ depth })}>
-                {depth} m
-              </button>
-            ))}
-          </div>
-        </div>
-        {buoys.data && (
-          <p className="summary" aria-live="polite">
-            {heatwaveSummary(
-              buoys.data.flatMap((b) => b.series.filter((s) => s.depth === view.depth)),
-              view.depth,
-            )}
-          </p>
-        )}
-      </div>
-
       {buoys.isPending ? (
         <p className="note">Loading…</p>
       ) : buoys.isError ? (
@@ -70,8 +50,21 @@ export function NowPage() {
             </figcaption>
           </figure>
           <div className="card">
-            <h2>Latest daily mean at {view.depth} m</h2>
-            <p className="caption">Choose a buoy, here or on the map, for its whole record and every heatwave in it.</p>
+            <h2>
+              Latest daily mean at{" "}
+              <InlineSelect
+                label="Depth"
+                value={view.depth}
+                options={DEPTHS.map((depth) => ({ value: depth, label: `${depth} m` }))}
+                onChange={(depth) => update({ depth })}
+              />
+            </h2>
+            <p className="summary" aria-live="polite">
+              {heatwaveSummary(
+                buoys.data.flatMap((b) => b.series.filter((s) => s.depth === view.depth)),
+                view.depth,
+              )}
+            </p>
             <ConditionsTable buoys={buoys.data} depth={view.depth} pathFor={pathFor} />
           </div>
         </section>

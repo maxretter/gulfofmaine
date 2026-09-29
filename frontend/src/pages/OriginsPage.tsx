@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { useBuoys, useEvents, useOriginRules } from "../api/queries";
+import { InlineSelect } from "../components/InlineSelect";
 import { OriginsByYear } from "../components/OriginsByYear";
 import { YearByBuoy } from "../components/YearByBuoy";
 import { latest } from "../lib/dates";
@@ -38,6 +39,13 @@ export function OriginsPage() {
     [setParams],
   );
   const selectYear = useCallback((y: number) => update({ year: y }), [update]);
+  // Both titles choose the depth, each in its own words.
+  const depthChoice = {
+    label: "Depth",
+    value: depth,
+    options: depths.map((d) => ({ value: d, label: `${d} m` })),
+    onChange: (d: number) => update({ depth: d }),
+  };
 
   return (
     <>
@@ -52,19 +60,10 @@ export function OriginsPage() {
         </p>
       </section>
 
-      <div className="filters" role="group" aria-label="Depth">
-        <span className="filter-label">Depth</span>
-        <div className="segmented">
-          {depths.map((d) => (
-            <button key={d} type="button" aria-pressed={d === depth} onClick={() => update({ depth: d })}>
-              {d} m
-            </button>
-          ))}
-        </div>
-      </div>
-
       <section className="card figure">
-        <h2>Heatwaves at {depth} m each year, by origin</h2>
+        <h2>
+          Heatwaves at <InlineSelect {...depthChoice} /> each year, by origin
+        </h2>
         <p className="caption">
           By the year each began. Unclear is kept in view: it is where the signals disagree or the data are too thin.
           Click a year to see its heatwaves below.
@@ -77,19 +76,15 @@ export function OriginsPage() {
       </section>
 
       <section className="card figure">
-        <div className="detail-head">
-          <h2>Every heatwave at {depth} m in {year}</h2>
-          <label>
-            <span className="filter-label">Year </span>
-            <select className="select" value={year} onChange={(e) => update({ year: Number(e.target.value) })}>
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <h2>
+          Every heatwave at <InlineSelect {...depthChoice} /> in{" "}
+          <InlineSelect
+            label="Year"
+            value={year}
+            options={years.map((y) => ({ value: y, label: String(y) }))}
+            onChange={selectYear}
+          />
+        </h2>
         <p className="caption">
           Each buoy's year, top to bottom in the order slope water reaches them: in through the Northeast Channel, then
           west along the coast to Massachusetts Bay. Bars are heatwaves, colored by where their heat came from, under a
