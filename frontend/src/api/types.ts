@@ -87,7 +87,8 @@ export interface SignalDay {
   anomaly: number | null; // temperature at the event's depth minus normal, °C
   salinity_anomaly: number | null;
   stratification: number | null; // 1 m minus the event's depth, °C
-  surface_heatwave: boolean;
+  surface_anomaly: number | null; // at 1 m, °C
+  surface_heatwave: boolean; // at 1 m
   deep_anomaly: number | null; // M01, mean over 100–250 m, °C
   deep_heatwave: boolean;
 }

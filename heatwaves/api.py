@@ -118,6 +118,7 @@ class SignalDay(BaseModel):
     anomaly: float | None  # temperature at the event's depth minus normal, degrees C
     salinity_anomaly: float | None
     stratification: float | None  # 1 m minus the event's depth, degrees C
+    surface_anomaly: float | None  # at 1 m, degrees C
     surface_heatwave: bool  # at 1 m
     deep_anomaly: float | None  # M01, mean over 100-250 m, degrees C
     deep_heatwave: bool  # M01 at any of 100-250 m
@@ -455,13 +456,21 @@ def get_event(buoy_id: str, depth: int, start: dt.date, session: SessionDep) -> 
             anomaly=_number(anomaly),
             salinity_anomaly=_number(salinity_anomaly),
             stratification=_number(stratification),
+            surface_anomaly=_number(surface_anomaly),
             surface_heatwave=bool(surface_heatwave),
             deep_anomaly=_number(deep_anomaly),
             deep_heatwave=bool(deep_heatwave),
         )
-        for day, anomaly, salinity_anomaly, stratification, surface_heatwave, deep_anomaly, deep_heatwave in (
-            signals.itertuples()
-        )
+        for (
+            day,
+            anomaly,
+            salinity_anomaly,
+            stratification,
+            surface_anomaly,
+            surface_heatwave,
+            deep_anomaly,
+            deep_heatwave,
+        ) in signals.itertuples()
     ]
     detail.onsets = [
         Onset(buoy_id=buoy, date=date, group=groups.get(buoy))

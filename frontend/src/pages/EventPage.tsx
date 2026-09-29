@@ -149,7 +149,7 @@ function SignalChart({ signal, days, onset, detail, rules, buoys }: SignalChartP
   if (signal === "onset_order") return <OnsetOrder detail={detail} rules={rules} buoys={buoys} />;
   if (!hasData(signal, detail.evidence!)) return null; // the reading says what's missing
   return (
-    <Chart className="chart" minHeight={signal === "surface_heatwave" ? 56 : 130}>
+    <Chart className="chart" minHeight={130}>
       {(width) => <WindowChart signal={signal} days={days} onset={onset} detail={detail} rules={rules} width={width} />}
     </Chart>
   );
@@ -194,6 +194,30 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
         days.filter((d) => d[y] !== null),
         Plot.pointerX({ x: "date", y, title: (d: Day) => `${formatDate(d.date)}\n${format(d[y] as number)}` }),
       );
+    // Temperature against normal somewhere else in the water, its heatwave days shaded and the days before onset,
+    // which the vote reads, in gray.
+    const heatwavesThere = (anomaly: "surface_anomaly" | "deep_anomaly", heatwave: "surface_heatwave" | "deep_heatwave") => ({
+      ...base,
+      y: { label: "°C vs normal", grid: true, nice: true },
+      marks: [
+        Plot.rectX([before], { ...before, fill: colors.neutral }),
+        Plot.rectX(
+          days.filter((d) => d[heatwave]),
+          { x1: (d: Day) => d.date, x2: (d: Day) => nextDay(d.date), fill: categories[1].color, fillOpacity: 0.35 },
+        ),
+        Plot.ruleY([0], { stroke: colors.axis }),
+        onsetRule,
+        Plot.lineY(days, { x: "date", y: anomaly, stroke: colors.observed, strokeWidth: 2 }),
+        Plot.tip(
+          days.filter((d) => d[anomaly] !== null),
+          Plot.pointerX({
+            x: "date",
+            y: anomaly,
+            title: (d: Day) => `${formatDate(d.date)}\n${formatSigned(d[anomaly])}${d[heatwave] ? "\nIn a heatwave" : ""}`,
+          }),
+        ),
+      ],
+    });
     // A dashed reference line, named in the right margin, clear of the data.
     const threshold = (value: number, text: string, side: "above" | "below") => [
       Plot.ruleY([value], { stroke: colors.ink2, strokeDasharray: "4,3" }),
@@ -225,23 +249,7 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
           ],
         };
       case "surface_heatwave":
-        return {
-          ...base,
-          height: 56,
-          y: { axis: null, domain: [0, 1] },
-          marks: [
-            Plot.rectX([before], { ...before, y1: 0, y2: 1, fill: colors.neutral }),
-            Plot.rectX(
-              days.filter((d) => d.surface_heatwave),
-              { x1: (d: Day) => d.date, x2: (d: Day) => nextDay(d.date), y1: 0.15, y2: 0.85, fill: categories[1].color, inset: 0.5 },
-            ),
-            onsetRule,
-            Plot.tip(
-              days.filter((d) => d.surface_heatwave),
-              Plot.pointerX({ x: "date", y: () => 0.5, title: (d: Day) => `${formatDate(d.date)}\nHeatwave at 1 m` }),
-            ),
-          ],
-        };
+        return heatwavesThere("surface_anomaly", "surface_heatwave");
       case "stratification":
         return {
           ...base,
@@ -268,21 +276,7 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
           ],
         };
       case "deep":
-        return {
-          ...base,
-          y: { label: "°C vs normal", grid: true, nice: true },
-          marks: [
-            Plot.rectX([before], { ...before, fill: colors.neutral }),
-            Plot.rectX(
-              days.filter((d) => d.deep_heatwave),
-              { x1: (d: Day) => d.date, x2: (d: Day) => nextDay(d.date), fill: categories[1].color, fillOpacity: 0.35 },
-            ),
-            Plot.ruleY([0], { stroke: colors.axis }),
-            onsetRule,
-            Plot.lineY(days, { x: "date", y: "deep_anomaly", stroke: colors.observed, strokeWidth: 2 }),
-            tip("deep_anomaly", (v) => formatSigned(v)),
-          ],
-        };
+        return heatwavesThere("deep_anomaly", "deep_heatwave");
       default:
         return base;
     }
@@ -355,6 +349,7 @@ function SignalTable({ days, depth }: { days: Day[]; depth: number }) {
           { label: `${depth} m vs normal`, numeric: true },
           { label: "Salinity vs normal", numeric: true },
           { label: `1 m minus ${depth} m`, numeric: true },
+          { label: "1 m vs normal", numeric: true },
           { label: "Heatwave at 1 m" },
           { label: "M01 deep vs normal", numeric: true },
           { label: "M01 deep heatwave" },
@@ -365,6 +360,7 @@ function SignalTable({ days, depth }: { days: Day[]; depth: number }) {
           formatSigned(d.anomaly),
           formatSigned(d.salinity_anomaly, "", 2),
           formatSigned(d.stratification),
+          formatSigned(d.surface_anomaly),
           yes(d.surface_heatwave),
           formatSigned(d.deep_anomaly),
           yes(d.deep_heatwave),

@@ -154,9 +154,10 @@ def signals(record: Record, buoy: str, depth: int, onset: dt.date) -> pd.DataFra
     """Each signal day by day over an event's evidence window, for charts.
 
     Columns: `anomaly` (temperature at the event's depth), `salinity_anomaly`,
-    `stratification` (1 m minus the event's depth), `surface_heatwave`,
-    `deep_anomaly` (M01's mean over the depths below 50 m with data) and
-    `deep_heatwave` (at any of them). Days without data are NaN.
+    `stratification` (1 m minus the event's depth), `surface_anomaly` and
+    `surface_heatwave` (at 1 m), `deep_anomaly` (M01's mean over the depths
+    below 50 m with data) and `deep_heatwave` (at any of them). Days without
+    data are NaN.
     """
     start = pd.Timestamp(onset)
     days = pd.date_range(start - pd.Timedelta(days=BEFORE), start + pd.Timedelta(days=AFTER), name="date")
@@ -177,6 +178,7 @@ def signals(record: Record, buoy: str, depth: int, onset: dt.date) -> pd.DataFra
             "anomaly": column(here, "anomaly"),
             "salinity_anomaly": column(record.salinity.get((buoy, depth)), "anomaly"),
             "stratification": column(surface, "value") - column(here, "value"),
+            "surface_anomaly": column(surface, "anomaly"),
             "surface_heatwave": in_heatwave([(buoy, SURFACE)]),
             "deep_anomaly": pd.concat(deep_anomalies, axis=1).mean(axis=1),
             "deep_heatwave": in_heatwave(deep),

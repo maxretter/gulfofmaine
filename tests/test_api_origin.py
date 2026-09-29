@@ -80,6 +80,7 @@ def test_one_event_with_its_evidence_day_by_day(client):
     assert onset["stratification"] == pytest.approx(3.5)
     assert [day["deep_heatwave"] for day in signals].count(True) == 17  # Mar 20 to Apr 5
     assert not any(day["surface_heatwave"] for day in signals)
+    assert onset["surface_anomaly"] == pytest.approx(0, abs=0.3)  # 1 m is warm, but no warmer than its normal
     assert event["onsets"] == [
         {"buoy_id": "M01", "date": "2021-02-13", "group": "offshore"},
         {"buoy_id": "A01", "date": "2021-04-14", "group": "western"},
