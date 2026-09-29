@@ -22,7 +22,8 @@
 		root * /srv
 		header {
 			X-Content-Type-Options nosniff
-			Referrer-Policy same-origin
+			# OpenStreetMap's tile servers block requests without a Referer; this sends them only the origin.
+			Referrer-Policy strict-origin-when-cross-origin
 			# Inline styles are Leaflet's and React's style attributes; there are no inline scripts.
 			Content-Security-Policy "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 		}
