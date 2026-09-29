@@ -203,7 +203,7 @@ class GriddapSource:
         )
         # When a range ends on a day the product is missing, ERDDAP moves
         # that end to the nearest day it has, which can be outside the range
-        # and so also in the neighbouring request.
+        # and so also in the neighboring request.
         return grid.sel(time=slice(first.isoformat(), last.isoformat())) if grid is not None else None
 
     def _place(self, series: Sequence[Series], day: dt.date) -> None:
@@ -233,7 +233,7 @@ class GriddapSource:
 def nearest_cell(
     values: xr.DataArray, latitude: float, longitude: float, within: float
 ) -> tuple[float, float, float]:
-    """The centre of the cell with data nearest a point, and its distance from it in km.
+    """The center of the cell with data nearest a point, and its distance from it in km.
 
     `values` is a latitude-longitude grid; only cells within `within`
     degrees of the point are considered.

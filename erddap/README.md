@@ -36,7 +36,7 @@ and the same for `gom_heatwaves_events\.nc` in `/data/products/`. The edits:
   `longitude` on the satellite cell's position, `time` on the events' last and
   peak days. The files carry the standard names that apply.
 - Its keywords (which included land surface temperature and surface waves)
-  replaced with the files' GCMD keywords; `ioos_category` and colour-bar ranges
+  replaced with the files' GCMD keywords; `ioos_category` and color-bar ranges
   set for the Gulf of Maine.
 - The events file's `event` index variable left out.
 

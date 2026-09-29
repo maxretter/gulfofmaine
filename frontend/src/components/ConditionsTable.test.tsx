@@ -78,7 +78,7 @@ function renderTable() {
 }
 
 describe("ConditionsTable", () => {
-  it("labels every state in words, not just colour", () => {
+  it("labels every state in words, not just color", () => {
     renderTable();
     expect(screen.getByText("No heatwave")).toBeTruthy();
     expect(screen.getByText("Moderate heatwave · day 7")).toBeTruthy();

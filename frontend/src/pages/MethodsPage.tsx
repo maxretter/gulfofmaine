@@ -65,7 +65,7 @@ export function MethodsPage() {
       <p>
         Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty water from the continental slope enters
         through the Northeast Channel and spreads west along the bottom from Jordan Basin. Or heat taken up at the
-        surface is mixed down, by wind or by the autumn overturn. Each heatwave at 20 and 50 m is labelled{" "}
+        surface is mixed down, by wind or by the autumn overturn. Each heatwave at 20 and 50 m is labeled{" "}
         <OriginLabel origin="offshore" />, <OriginLabel origin="surface" /> or <OriginLabel origin="unclear" /> from
         five signals, read around its onset. The labels are plain rules rather than a fitted model, so each can be
         traced to its evidence on the heatwave's own page.
@@ -121,7 +121,7 @@ export function MethodsPage() {
               <tr>
                 <th scope="col">Buoy</th>
                 <th scope="col" className="num">
-                  Cell centre
+                  Cell center
                 </th>
                 <th scope="col" className="num">
                   Distance from the buoy
@@ -170,7 +170,7 @@ export function MethodsPage() {
         <li>
           <strong>The baseline is fixed on purpose.</strong> The Gulf of Maine is warming faster than almost any other
           ocean region, so against a fixed baseline heatwaves become more common over time. That is the signal, not an
-          artefact.
+          artifact.
         </li>
         <li>
           <strong>Deep water can warm by mixing.</strong> In autumn, storms mix warm surface water downwards, so

@@ -473,17 +473,17 @@ def daily_dataset(table: pd.DataFrame, buoy: Buoy, depth: int, satellite: Series
     ds["satellite_latitude"] = (
         (),
         _position(satellite, "latitude"),
-        {"long_name": "Latitude of the OISST cell's centre", "units": "degrees_north", **REFERENCE},
+        {"long_name": "Latitude of the OISST cell's center", "units": "degrees_north", **REFERENCE},
     )
     ds["satellite_longitude"] = (
         (),
         _position(satellite, "longitude"),
-        {"long_name": "Longitude of the OISST cell's centre", "units": "degrees_east", **REFERENCE},
+        {"long_name": "Longitude of the OISST cell's center", "units": "degrees_east", **REFERENCE},
     )
     ds["satellite_distance"] = (
         (),
         _position(satellite, "distance_km"),
-        {"long_name": "Distance from the buoy to the OISST cell's centre", "units": "km", **REFERENCE},
+        {"long_name": "Distance from the buoy to the OISST cell's center", "units": "km", **REFERENCE},
     )
     ds = ds.set_coords(["series_id", "latitude", "longitude", "depth"])
 

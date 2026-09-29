@@ -39,7 +39,7 @@ const at = (depth: number, state: State, overrides: Partial<Condition> = {}) =>
   ({ depth, state, category: state === "heatwave" ? 1 : null, date: "2026-09-29", ...overrides }) as Condition;
 
 describe("a buoy's status in the list of buoys", () => {
-  it("names the depths in a heatwave, drawn in the most severe one's colour", () => {
+  it("names the depths in a heatwave, drawn in the most severe one's color", () => {
     const status = buoyStatus([at(1, "heatwave"), at(20, "above_threshold"), at(50, "heatwave", { category: 2 })]);
     expect(status.text).toBe("In a heatwave at 1 and 50 m");
     expect(status.condition?.depth).toBe(50);

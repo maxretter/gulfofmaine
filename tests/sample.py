@@ -24,7 +24,7 @@ SATELLITE_CELL = (42.625, -70.625, 12.7)
 def build(session: Session) -> None:
     """A01 at 1 and 50 m, with salinity at 50 m and the satellite.
 
-    50 m has a heatwave from about Apr 14 to 28, 2021, labelled offshore, and
+    50 m has a heatwave from about Apr 14 to 28, 2021, labeled offshore, and
     a gap in March 2020; the satellite has one from Apr 1 to 20, 2021.
     """
     at_50 = seasonal_temperatures("2003-01-01", END, seed=1)

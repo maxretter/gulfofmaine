@@ -183,7 +183,7 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
     daily = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
 
     try:
-        analysis = hobday.analyse(daily, BASELINE)
+        analysis = hobday.analyze(daily, BASELINE)
     except hobday.InsufficientData as error:
         log.warning("%s: can't compute heatwaves: %s", series.label, error)
         return before, before

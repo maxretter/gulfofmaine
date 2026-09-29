@@ -1,4 +1,4 @@
-/* Page chrome. Data colours (categories, heat-day ramp) are in src/lib/colors.ts. */
+/* Page chrome. Data colors (categories, heat-day ramp) are in src/lib/colors.ts. */
 :root {
   color-scheme: light;
   --page: #f9f9f7;
@@ -158,7 +158,7 @@ th[scope="rowgroup"] { vertical-align: top; }
 .table-view summary { color: var(--link); cursor: pointer; font-size: 0.9rem; width: fit-content; }
 .table-view .table-scroll { max-height: 420px; overflow: auto; margin-top: 0.5rem; }
 
-/* --- Status and legends: a shaped swatch beside a text label, never colour alone --- */
+/* --- Status and legends: a shaped swatch beside a text label, never color alone --- */
 .state { display: inline-flex; align-items: center; gap: 0.4rem; }
 .state.muted { color: var(--ink-2); }
 td .state { align-items: baseline; }

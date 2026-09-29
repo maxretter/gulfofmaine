@@ -180,7 +180,7 @@ function hasData(signal: Signal, evidence: Evidence): boolean {
   }
 }
 
-// Small charts share a frame: dates as "Apr 14", and a right margin for labelling reference lines.
+// Small charts share a frame: dates as "Apr 14", and a right margin for labeling reference lines.
 const frame = { marginTop: 22, marginRight: 64, tickFormat: "%b %-d" };
 
 function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalChartProps, "buoys"> & { width: number }) {

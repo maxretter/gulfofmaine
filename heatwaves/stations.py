@@ -25,7 +25,7 @@ BUOYS = {
     "N01": "Northeast Channel",
 }
 
-# Each buoy's fixed depths, in metres. M01's sensors below 50 m sit in the
+# Each buoy's fixed depths, in meters. M01's sensors below 50 m sit in the
 # deep water of Jordan Basin, below the reach of winter mixing.
 DEPTHS = {
     "A01": (1, 20, 50),
@@ -50,7 +50,7 @@ BASELINE = (2003, 2022)
 @dataclass(frozen=True)
 class SeriesSpec:
     buoy: str
-    depth: int  # metres
+    depth: int  # meters
     variable: str  # as named in the dataset, e.g. temperature
     source: str  # what fetches it (heatwaves.sources): "buoy" or "satellite"
     dataset_id: str

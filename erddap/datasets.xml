@@ -4,7 +4,7 @@ The two products (heatwaves/products.py) as ERDDAP datasets. Drafted by
 ERDDAP 2.31.1's GenerateDatasetsXml (EDDTableFromNcCFFiles) from the files
 themselves, then edited as erddap/README.md describes. The files are where
 their own metadata lives; the attributes here only add ERDDAP's (ioos_category,
-colour bars, subset variables) and replace the few that differ per file.
+color bars, subset variables) and replace the few that differ per file.
 fileDir is where the products volume is mounted in compose.yaml's erddap service.
 -->
 <erddapDatasets>

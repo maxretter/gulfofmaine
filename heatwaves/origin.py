@@ -39,7 +39,7 @@ import pandas as pd
 Origin = Literal["offshore", "surface", "unclear"]
 Vote = Literal["offshore", "surface"] | None
 
-DEPTHS = (20, 50)  # metres: the depths whose heatwaves get a label
+DEPTHS = (20, 50)  # meters: the depths whose heatwaves get a label
 BEFORE = 30  # days before onset in the evidence window
 AFTER = 14  # days after onset in the evidence window
 LOOKBACK = 90  # days before onset searched for other buoys' onsets
@@ -59,7 +59,7 @@ OFFSHORE_BUOYS = ("N01", "M01")  # where slope water arrives first
 WESTERN_BUOYS = ("A01", "B01")
 DEEP_BUOY = "M01"
 DEEP_DEPTHS = (100, 150, 200, 250)
-SURFACE = 1  # metres
+SURFACE = 1  # meters
 
 SIGNALS = ("salinity", "surface_heatwave", "stratification", "deep", "onset_order")
 

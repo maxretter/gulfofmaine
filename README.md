@@ -1,6 +1,6 @@
 # Gulf of Maine heatwaves, below the surface
 
-Live marine heatwave status at 1, 20 and 50 metres on seven University of Maine
+Live marine heatwave status at 1, 20 and 50 meters on seven University of Maine
 buoys in the Gulf of Maine, with the full record back to 2001, set beside the
 satellite record at each buoy, and a label on every heatwave at 20 and 50 m for
 where its heat likely came from. A Python job reads NERACOOS's ERDDAP server
@@ -17,7 +17,7 @@ published as CF NetCDF and CSV files, ready for ERDDAP.
 ## Why
 
 Most heatwave monitoring in the Gulf of Maine is based on satellite sea-surface
-temperature, which only sees the top few millimetres; below that, reports lean
+temperature, which only sees the top few millimeters; below that, reports lean
 on ocean models. The UMaine/NERACOOS buoys have measured temperature directly
 at fixed depths since 2001–2003, but nothing publicly applies the heatwave
 definition to those records. This does, so you can see whether surface heat
@@ -191,18 +191,18 @@ works:
   how to open one in xarray, pandas or curl.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
   stacked by origin with Unclear kept in view; click a year to map it. The map
-  plays the year day by day, each buoy coloured by its anomaly and ringed while
+  plays the year day by day, each buoy colored by its anomaly and ringed while
   in a heatwave, over a strip of every buoy's year from east to west, which
-  shows a heatwave travelling from Jordan Basin to Massachusetts Bay at a
+  shows a heatwave traveling from Jordan Basin to Massachusetts Bay at a
   glance and doubles as the scrubber.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one
 small React frame that handles width, loading, errors and the table view; the
 brush is d3-brush on top of a Plot chart. Every chart has a table view. Data
-colours come from two ordinal ramps checked for lightness order, hue spread and
-contrast, and the satellite's and the origins' colours were checked the same
-way against the ones beside them; anomalies use a blue–grey–orange diverging
+colors come from two ordinal ramps checked for lightness order, hue spread and
+contrast, and the satellite's and the origins' colors were checked the same
+way against the ones beside them; anomalies use a blue–gray–orange diverging
 scale.
 
 ### API
@@ -309,7 +309,7 @@ frontend/src/
   components/    map, heatmap, range brush, depth charts, tables
   api/           typed API client, TanStack Query hooks and the live feed
   state/         the buoys' view <-> URL
-  lib/           dates, formatting, colours, event filtering
+  lib/           dates, formatting, colors, event filtering
 erddap/          datasets.xml and an image that serves the files from ERDDAP
 scripts/         comparison with the reference implementation
 tests/           backend tests; frontend tests sit beside their code

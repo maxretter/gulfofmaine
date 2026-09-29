@@ -5,7 +5,7 @@ import { categories, colors, origins } from "../lib/colors";
 import type { Variant } from "../lib/state";
 import { Swatch } from "./StateBadge";
 
-/** A swatch with its words: how categories and origins appear everywhere, never as colour alone. */
+/** A swatch with its words: how categories and origins appear everywhere, never as color alone. */
 export function Label({ color, variant, children }: { color: string; variant?: Variant; children: ReactNode }) {
   return (
     <span className="state">

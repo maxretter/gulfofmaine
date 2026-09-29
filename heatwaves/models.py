@@ -53,11 +53,11 @@ class Series(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     buoy_id: Mapped[str] = mapped_column(ForeignKey("buoy.id"))
-    depth: Mapped[int]  # metres
+    depth: Mapped[int]  # meters
     variable: Mapped[str]  # e.g. temperature
     source: Mapped[str]  # e.g. buoy
     dataset_id: Mapped[str]
-    # Where a satellite series is sampled: the centre of the grid cell nearest
+    # Where a satellite series is sampled: the center of the grid cell nearest
     # the buoy that has data, and its distance from the buoy.
     latitude: Mapped[float | None]
     longitude: Mapped[float | None]

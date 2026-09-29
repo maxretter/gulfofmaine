@@ -7,7 +7,7 @@ import { eventRange } from "../lib/events";
 
 /** The depths the map can show. Each buoy's own depths come from the API and can include others. */
 export const DEPTHS = [1, 20, 50] as const;
-const DEEPEST = 1000; // metres: anything below is a mistyped URL
+const DEEPEST = 1000; // meters: anything below is a mistyped URL
 const BUOY_ID = /^[A-Z0-9]{2,8}$/;
 
 /**
@@ -16,7 +16,7 @@ const BUOY_ID = /^[A-Z0-9]{2,8}$/;
  * bookmarked and shared, and the back button works.
  */
 export interface BuoyView {
-  depth: number; // metres
+  depth: number; // meters
   from: string | null; // null: the default range
   to: string | null;
 }

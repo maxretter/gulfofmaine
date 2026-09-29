@@ -59,7 +59,7 @@ def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
         raise ValueError(f"{dataset_id} has no data")
     daily = qc.daily_means(qc.good_readings(raw, "temperature"))["value"]
 
-    analysis = hobday.analyse(daily, BASELINE)
+    analysis = hobday.analyze(daily, BASELINE)
     ours = {(e.start, e.end, e.category) for e in analysis.events}
 
     # The reference needs its climatology period inside the series, so a record

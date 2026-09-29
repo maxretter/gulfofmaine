@@ -25,7 +25,7 @@ export function NowPage() {
       <section className="intro">
         <h1>Marine heatwaves below the surface of the Gulf of Maine</h1>
         <p className="lead">
-          The latest daily water temperature at 1, 20 and 50 metres on the University of Maine's buoys, against each
+          The latest daily water temperature at 1, 20 and 50 meters on the University of Maine's buoys, against each
           spot's 2003–2022 normal. A marine heatwave is five or more days warmer than the 90th percentile for the time
           of year. Updated every 10 minutes from NERACOOS.
         </p>

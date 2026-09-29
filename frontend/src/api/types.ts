@@ -25,7 +25,7 @@ export interface Condition {
 
 /** Satellite sea surface temperature at a buoy (depth 0), from the nearest grid cell with data. */
 export interface SatelliteCondition extends Condition {
-  latitude: number | null; // the cell's centre
+  latitude: number | null; // the cell's center
   longitude: number | null;
   distance_km: number | null; // from the buoy
 }

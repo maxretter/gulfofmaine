@@ -97,7 +97,7 @@ def test_nothing_new_takes_one_request(session, satellites):
 
 
 def test_nearest_cell_skips_cells_masked_as_land():
-    # The point sits in the south-west cell, which is land; its east neighbour is nearer than its north one.
+    # The point sits in the south-west cell, which is land; its east neighbor is nearer than its north one.
     grid = xr.DataArray(
         [[np.nan, 15.0], [16.0, 17.0]],
         coords={"latitude": [44.125, 44.375], "longitude": [-68.875, -68.625]},

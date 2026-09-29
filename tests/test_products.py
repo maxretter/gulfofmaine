@@ -131,8 +131,8 @@ def test_events_match_the_json_api_exactly(client, tmp_path):
     assert list(nc.station.values) == list(expected["buoy_id"])
     assert nc.max_intensity.values.tolist() == expected["max_intensity"].tolist()
     assert nc.duration.values.tolist() == expected["duration"].tolist()
-    labelled = expected["origin"].notna()
-    assert nc.origin.isnull().values.tolist() == (~labelled).tolist()
+    labeled = expected["origin"].notna()
+    assert nc.origin.isnull().values.tolist() == (~labeled).tolist()
 
 
 def failures(path: Path, checker: str) -> list[tuple[int, str, list[str]]]:

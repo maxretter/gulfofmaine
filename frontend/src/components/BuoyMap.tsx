@@ -25,7 +25,7 @@ export function BuoyMap({ buoys, depth, onSelect }: Props) {
       boundsOptions={{ padding: [40, 40] }}
       scrollWheelZoom={false}
       className="map"
-      aria-label={`Map of buoys, coloured by heatwave status at ${depth} m`}
+      aria-label={`Map of buoys, colored by heatwave status at ${depth} m`}
     >
       {/* OpenStreetMap's standard tiles: fine for low traffic, with attribution. */}
       <TileLayer

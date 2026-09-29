@@ -85,7 +85,7 @@ function event(start_date: string, depth: number, origin: HeatwaveEvent["origin"
 }
 
 describe("originsByYear", () => {
-  it("counts one depth's labelled heatwaves by the year they began", () => {
+  it("counts one depth's labeled heatwaves by the year they began", () => {
     const events = [
       event("2021-01-17", 50, "offshore"),
       event("2021-12-30", 50, "offshore"),
@@ -111,7 +111,7 @@ describe("eastToWest", () => {
 });
 
 describe("anomalyColor", () => {
-  it("is grey at normal, clamps at the ends, and has no colour without data", () => {
+  it("is gray at normal, clamps at the ends, and has no color without data", () => {
     expect(anomalyColor(0)).toBe("rgb(240, 239, 236)");
     expect(anomalyColor(9)).toBe(anomalyColor(3));
     expect(anomalyColor(null)).toBeNull();

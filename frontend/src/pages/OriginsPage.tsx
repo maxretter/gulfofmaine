@@ -90,7 +90,7 @@ export function OriginsPage() {
           </label>
         </div>
         <p className="caption">
-          Each buoy coloured by how far above or below normal it was on the day shown, ringed while in a heatwave.
+          Each buoy colored by how far above or below normal it was on the day shown, ringed while in a heatwave.
           Play the year, or drag through it. Below, every buoy's year from east to west, the way slope water travels:
           a heatwave that begins at N01 or M01 and reaches A01 weeks later came from offshore.
         </p>

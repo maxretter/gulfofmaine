@@ -59,7 +59,7 @@ class Condition(BaseModel):
 class SatelliteCondition(Condition):
     """Latest satellite conditions at a buoy (depth 0), and the grid cell they come from."""
 
-    latitude: float | None  # the cell's centre
+    latitude: float | None  # the cell's center
     longitude: float | None
     distance_km: float | None  # from the buoy
 
@@ -141,7 +141,7 @@ class EventDetail(EventOut):
 class OriginRules(BaseModel):
     """The thresholds heatwaves.origin labels with."""
 
-    depths: list[int]  # metres: the depths whose heatwaves get a label
+    depths: list[int]  # meters: the depths whose heatwaves get a label
     before: int  # days before onset in the evidence window
     after: int  # days after onset in the evidence window
     lookback: int  # days before onset searched for other buoys' onsets

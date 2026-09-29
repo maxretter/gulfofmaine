@@ -77,7 +77,7 @@ class Analysis:
     status: Status
 
 
-def analyse(temperature: pd.Series, baseline: tuple[int, int]) -> Analysis:
+def analyze(temperature: pd.Series, baseline: tuple[int, int]) -> Analysis:
     """The whole method in one call: climatology, aligned frame, events and latest status.
 
     Raises InsufficientData if the baseline has too little data.
@@ -114,7 +114,7 @@ def climatology(temperature: pd.Series, baseline: tuple[int, int]) -> xr.Dataset
             f"{int(values.count())} of {days.size} baseline days have data; at least half are needed"
         )
 
-    # Pool neighbours by position in the time series, as the reference
+    # Pool neighbors by position in the time series, as the reference
     # implementation does, so windows cross year boundaries within the
     # baseline and are cut short at its two ends.
     windows = (
@@ -131,7 +131,7 @@ def climatology(temperature: pd.Series, baseline: tuple[int, int]) -> xr.Dataset
     )
 
     # Only leap years fill the Feb 29 pool, so like the reference we take the
-    # average of its neighbours instead.
+    # average of its neighbors instead.
     for name in stats.data_vars:
         stats[name].loc[{"day_of_year": FEB_29}] = (
             stats[name].sel(day_of_year=FEB_29 - 1) + stats[name].sel(day_of_year=FEB_29 + 1)

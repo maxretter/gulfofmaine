@@ -131,7 +131,7 @@ function DayMap({ buoys, byBuoy, day, depth }: DayProps & { depth: number }) {
       boundsOptions={{ padding: [40, 40] }}
       scrollWheelZoom={false}
       className="map"
-      aria-label={`Map of the buoys, coloured by temperature anomaly at ${depth} m`}
+      aria-label={`Map of the buoys, colored by temperature anomaly at ${depth} m`}
     >
       <TileLayer
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"

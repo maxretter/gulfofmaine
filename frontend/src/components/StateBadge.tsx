@@ -31,7 +31,7 @@ function label(condition: Condition): string {
   }
 }
 
-/** Status is never colour alone: a shaped swatch plus a text label. */
+/** Status is never color alone: a shaped swatch plus a text label. */
 export function StateBadge({ condition }: { condition: Condition }) {
   const look = stateLook(condition);
   const muted = condition.state === "offline" || condition.state === "no_data";

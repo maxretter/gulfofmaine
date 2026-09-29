@@ -1,8 +1,8 @@
 import { interpolateLab, scaleLinear } from "d3";
 
-// Data colours. Both ramps were checked with a palette validator: monotone
+// Data colors. Both ramps were checked with a palette validator: monotone
 // lightness, one hue family, and the light end at 2:1 or better against the
-// chart surface. Page chrome colours live in styles.css.
+// chart surface. Page chrome colors live in styles.css.
 
 export const colors = {
   ink: "#0b0b0b",
@@ -19,7 +19,7 @@ export const colors = {
 
 /**
  * Heatwave days at depth, by whether the satellite also saw one: the missed
- * days are the story, so they take the heat hue and the rest stay grey.
+ * days are the story, so they take the heat hue and the rest stay gray.
  */
 export const satelliteSaw = {
   missed: "#cf5317",
@@ -41,7 +41,7 @@ export const origins = {
 
 /**
  * Temperature anomaly, °C: the reference diverging pair, the blue ramp for
- * colder and the heat ramp below for warmer, about a grey midpoint. Clamped
+ * colder and the heat ramp below for warmer, about a gray midpoint. Clamped
  * beyond ±3 °C.
  */
 export const anomalyScale = {

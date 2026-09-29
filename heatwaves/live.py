@@ -148,7 +148,7 @@ hub = Hub(settings.live_max_clients)
 
 
 async def relay(url: str, hub: Hub, retry: float = 5.0) -> None:
-    """Pass every message on CHANNEL to the hub's browsers, until cancelled.
+    """Pass every message on CHANNEL to the hub's browsers, until canceled.
 
     Messages sent while the connection is down are lost, so once it's back
     every browser is disconnected, to reconnect and refetch.
