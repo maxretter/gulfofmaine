@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatDate, formatList, formatPercent, formatSigned, formatTemp, formatTime } from "./format";
+import {
+  formatBytes,
+  formatDate,
+  formatList,
+  formatOrdinal,
+  formatPercent,
+  formatSigned,
+  formatTemp,
+  formatTime,
+} from "./format";
 
 describe("formatting", () => {
   it("signs anomalies with a true minus, and none on values that round to zero", () => {
@@ -34,5 +43,8 @@ describe("formatting", () => {
     expect(formatList([1])).toBe("1");
     expect(formatPercent(0.684)).toBe("68%");
     expect(formatPercent(0.346)).toBe("35%");
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 103].map(formatOrdinal)).toEqual(
+      ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "103rd"],
+    );
   });
 });

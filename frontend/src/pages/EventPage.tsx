@@ -2,9 +2,11 @@ import * as Plot from "@observablehq/plot";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 
-import { type DayPoint, useBuoys, useDaily, useEvent, useOriginRules } from "../api/queries";
+import { type DayPoint, useBuoys, useDaily, useEvent, useEvents, useOriginRules } from "../api/queries";
 import type { Buoy, EventDetail, Evidence, Onset, OriginRules, Signal, SignalDay } from "../api/types";
 import { Chart } from "../components/Chart";
+import { DepthCharts, SeriesLegend } from "../components/DepthCharts";
+import { AtTheSameTime, EventFigures } from "../components/EventContext";
 import { CategoryLabel, Label, OriginLabel, VoteLabel } from "../components/Label";
 import { PlotFigure } from "../components/PlotFigure";
 import { TableToggle } from "../components/TableToggle";
@@ -12,18 +14,20 @@ import { chartDefaults } from "../lib/chart";
 import { categories, colors, origins } from "../lib/colors";
 import { addDays, formatDay, isDay, parseDay } from "../lib/dates";
 import { formatDate, formatSigned, formatTemp } from "../lib/format";
+import { eventRange } from "../lib/events";
 import { eastToWest, reading, SIGNALS, verdict } from "../lib/origin";
 import { heatwavePeriodPath } from "../state/buoyView";
 
 /** One heatwave: what it was, and the evidence for where its heat came from. /events/A01/50/2021-04-14 */
 export function EventPage() {
   const params = useParams();
-  const buoy = (params.buoy ?? "").toUpperCase();
+  const buoyId = (params.buoy ?? "").toUpperCase();
   const depth = Number(params.depth);
   const start = params.start ?? "";
-  const valid = /^[A-Z0-9]{2,8}$/.test(buoy) && Number.isInteger(depth) && isDay(start);
-  const event = useEvent(buoy, depth, start);
+  const valid = /^[A-Z0-9]{2,8}$/.test(buoyId) && Number.isInteger(depth) && isDay(start);
+  const event = useEvent(buoyId, depth, start);
   const buoys = useBuoys();
+  const events = useEvents();
   const rules = useOriginRules();
 
   if (!valid || event.error?.message.endsWith("404")) return <NotFoundEvent />;
@@ -31,7 +35,10 @@ export function EventPage() {
   if (event.isError || rules.isError) return <p className="note">Couldn't load this heatwave.</p>;
 
   const detail = event.data;
-  const name = buoys.data?.find((b) => b.id === detail.buoy_id)?.name;
+  const buoy = buoys.data?.find((b) => b.id === detail.buoy_id);
+  const buoyEvents = events.data?.filter((e) => e.buoy_id === detail.buoy_id) ?? [];
+  const period = eventRange(detail);
+  const kind = detail.category_name.toLowerCase();
   return (
     <>
       <section className="intro">
@@ -39,32 +46,49 @@ export function EventPage() {
           <Link to="/events">Every heatwave</Link>
         </p>
         <h1>
-          <span className="code">{detail.buoy_id}</span> {name}, {detail.depth} m
+          <span className="code">{detail.buoy_id}</span> {buoy?.name}, {detail.depth} m
         </h1>
         <p className="lead">
-          A {detail.category_name.toLowerCase()} heatwave from {formatDate(detail.start_date)} to{" "}
-          {formatDate(detail.end_date)}: {detail.duration} days, peaking {formatSigned(detail.max_intensity)} above
-          normal on {formatDate(detail.peak_date)}.{" "}
-          <Link to={heatwavePeriodPath(detail)}>See it on {detail.buoy_id}'s record</Link>.
+          {/^[aeiou]/.test(kind) ? "An" : "A"} {kind} heatwave from {formatDate(detail.start_date)} to{" "}
+          {formatDate(detail.end_date)}, peaking {formatSigned(detail.max_intensity)} above normal on{" "}
+          {formatDate(detail.peak_date)}. <Link to={heatwavePeriodPath(detail)}>See it on {detail.buoy_id}'s record</Link>
+          .
         </p>
         <div className="event-labels">
           <CategoryLabel category={detail.category} />
-          {detail.origin && <OriginLabel origin={detail.origin} />}
+          {detail.origin ? (
+            <OriginLabel origin={detail.origin} />
+          ) : (
+            <span className="muted">
+              No origin label: only heatwaves at {rules.data.depths.join(" and ")} m get one.{" "}
+              <Link to="/methods#origin">Why</Link>
+            </span>
+          )}
         </div>
       </section>
 
-      {detail.origin && detail.evidence ? (
+      <EventFigures event={detail} events={events.data} />
+
+      {buoy && (
+        <section className="card">
+          <h2>Through the heatwave, at every depth</h2>
+          <p className="caption">
+            {detail.buoy_id}'s daily temperature from {formatDate(period.from)} to {formatDate(period.to)}, against the
+            normal and the heatwave threshold, with heatwaves shaded by category. Hover to read every depth on a day.
+          </p>
+          <SeriesLegend buoy={buoy} />
+          <DepthCharts buoy={buoy} from={period.from} to={period.to} events={buoyEvents} />
+        </section>
+      )}
+
+      {detail.origin && detail.evidence && (
         <>
           <OriginCard detail={detail} rules={rules.data} buoys={buoys.data ?? []} />
           <TSCard detail={detail} rules={rules.data} />
         </>
-      ) : (
-        <section className="card">
-          <p className="note">
-            Only heatwaves at {rules.data.depths.join(" and ")} m are labelled with where their heat came from.
-          </p>
-        </section>
       )}
+
+      {events.data && buoys.data && <AtTheSameTime event={detail} events={events.data} buoys={buoys.data} />}
     </>
   );
 }

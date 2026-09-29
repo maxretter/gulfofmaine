@@ -12,6 +12,7 @@ import { formatDate, formatSigned, formatTemp } from "../lib/format";
 import { Chart } from "./Chart";
 import { CategoryLabel } from "./Label";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
+import { Swatch } from "./StateBadge";
 
 interface Props {
   buoy: Buoy;
@@ -28,6 +29,40 @@ interface Panel {
   byDate: Map<string, DayPoint>;
   events: HeatwaveEvent[];
   satellite: DayPoint[]; // drawn on the shallowest panel only
+}
+
+/** What the lines and shading in DepthCharts mean; the satellite's line only when the buoy has one. */
+export function SeriesLegend({ buoy }: { buoy: Buoy }) {
+  return (
+    <div className="legend series-legend">
+      <span className="key">
+        <span className="line" style={{ borderColor: colors.observed }} aria-hidden="true" />
+        Daily mean
+      </span>
+      <span className="key">
+        <span className="line" style={{ borderColor: colors.muted }} aria-hidden="true" />
+        Normal
+      </span>
+      <span className="key">
+        <span className="line dashed" style={{ borderColor: colors.ink2 }} aria-hidden="true" />
+        Heatwave threshold (90th percentile)
+      </span>
+      {buoy.satellite?.first_date && (
+        <span className="key">
+          <svg width="18" height="4" aria-hidden="true">
+            <line x1="0" x2="18" y1="2" y2="2" stroke={colors.satellite} strokeWidth="2" strokeDasharray="6,4" />
+          </svg>
+          Satellite, at the surface (top chart)
+        </span>
+      )}
+      {Object.entries(categories).map(([n, c]) => (
+        <span className="state" key={n}>
+          <Swatch color={c.color} variant="square" />
+          {c.name}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 /**

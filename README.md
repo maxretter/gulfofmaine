@@ -173,9 +173,13 @@ works:
   A heatmap cell filters the list to its buoy and year; each row opens that
   heatwave's page.
 - **A page per heatwave** (`/events/A01/50/2021-04-14`, addressed as the API
-  addresses it). Its origin, with each of the five signals as a small chart
-  over the onset window, its vote and a sentence on what it measured, and a
-  temperature–salinity diagram of the water before and after the onset.
+  addresses it). Its length, peak and mean, each ranked among the buoy's other
+  heatwaves at that depth, and what its category means; the temperature through
+  it at every depth; and every heatwave that overlapped it, at the buoy's other
+  depths and at the other buoys. At 20 and 50 m, its origin, with each of the
+  five signals as a small chart over the onset window, its vote and a sentence
+  on what it measured, and a temperature–salinity diagram of the water before
+  and after the onset.
 - **Live.** The page keeps a WebSocket open to `/api/live` and writes each
   new reading into TanStack Query's cache, so the tiles show the latest hourly
   reading and the map marker pulses as it arrives; a status change refetches

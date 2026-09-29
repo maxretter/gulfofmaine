@@ -3,12 +3,11 @@ import { Link, useParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
 import type { Buoy, Condition, HeatwaveEvent } from "../api/types";
-import { DepthCharts } from "../components/DepthCharts";
+import { DepthCharts, SeriesLegend } from "../components/DepthCharts";
 import { EventList } from "../components/EventList";
 import { RangeBrush } from "../components/RangeBrush";
 import { SatelliteMisses } from "../components/SatelliteMisses";
-import { StateBadge, Swatch } from "../components/StateBadge";
-import { categories, colors } from "../lib/colors";
+import { StateBadge } from "../components/StateBadge";
 import { addDays, daysBetween, earliest, latest, maxDay, minDay } from "../lib/dates";
 import { eventRange, eventsInRange } from "../lib/events";
 import { formatDate, formatList, formatSigned, formatTemp, formatTime } from "../lib/format";
@@ -136,7 +135,7 @@ function Tile({ label, condition, day }: { label: string; condition: Condition; 
     <div className="tile">
       <p className="tile-label">{label}</p>
       <p className="tile-value">{formatTemp(condition.temperature)}</p>
-      <p className="tile-anomaly">
+      <p className="tile-line">
         <strong>{formatSigned(condition.anomaly)}</strong> vs normal
       </p>
       <p className="tile-state">
@@ -234,34 +233,7 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
         The whole record at {depth} m, with its heatwaves shaded. Drag across it to choose a period.
       </p>
 
-      <div className="legend series-legend">
-        <span className="key">
-          <span className="line" style={{ borderColor: colors.observed }} aria-hidden="true" />
-          Daily mean
-        </span>
-        <span className="key">
-          <span className="line" style={{ borderColor: colors.muted }} aria-hidden="true" />
-          Normal
-        </span>
-        <span className="key">
-          <span className="line dashed" style={{ borderColor: colors.ink2 }} aria-hidden="true" />
-          Heatwave threshold (90th percentile)
-        </span>
-        {buoy.satellite?.first_date && (
-          <span className="key">
-            <svg width="18" height="4" aria-hidden="true">
-              <line x1="0" x2="18" y1="2" y2="2" stroke={colors.satellite} strokeWidth="2" strokeDasharray="6,4" />
-            </svg>
-            Satellite, at the surface (top chart)
-          </span>
-        )}
-        {Object.entries(categories).map(([n, c]) => (
-          <span className="state" key={n}>
-            <Swatch color={c.color} variant="square" />
-            {c.name}
-          </span>
-        ))}
-      </div>
+      <SeriesLegend buoy={buoy} />
       <DepthCharts buoy={buoy} from={from} to={to} events={events} />
 
       <h3>Heatwaves in this period</h3>

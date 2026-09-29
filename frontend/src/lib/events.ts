@@ -51,6 +51,32 @@ export function eventPath(event: Pick<HeatwaveEvent, "buoy_id" | "depth" | "star
   return `/events/${event.buoy_id}/${event.depth}/${event.start_date}`;
 }
 
+/** Where a heatwave ranks by `key` among those at its buoy and depth, largest first: 1 is the top, and ties share. */
+export function rankAmong(
+  events: HeatwaveEvent[],
+  event: HeatwaveEvent,
+  key: "duration" | "max_intensity" | "mean_intensity",
+): { rank: number; of: number } {
+  const peers = events.filter((e) => e.buoy_id === event.buoy_id && e.depth === event.depth);
+  return { rank: 1 + peers.filter((e) => e[key] > event[key]).length, of: peers.length };
+}
+
+/** The other heatwaves that overlapped `event`, at any buoy and depth: its own buoy's first, then by buoy and depth. */
+export function overlapping(events: HeatwaveEvent[], event: HeatwaveEvent): HeatwaveEvent[] {
+  const same = (e: HeatwaveEvent) =>
+    e.buoy_id === event.buoy_id && e.depth === event.depth && e.start_date === event.start_date;
+  const own = (e: HeatwaveEvent) => (e.buoy_id === event.buoy_id ? 0 : 1);
+  return events
+    .filter((e) => !same(e) && e.start_date <= event.end_date && e.end_date >= event.start_date)
+    .sort(
+      (a, b) =>
+        own(a) - own(b) ||
+        a.buoy_id.localeCompare(b.buoy_id) ||
+        a.depth - b.depth ||
+        a.start_date.localeCompare(b.start_date),
+    );
+}
+
 /** Events overlapping [from, to] (ISO days), for one buoy. */
 export function eventsInRange(events: HeatwaveEvent[], buoy: string, from: string, to: string) {
   return events.filter((e) => e.buoy_id === buoy && e.start_date <= to && e.end_date >= from);

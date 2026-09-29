@@ -52,6 +52,14 @@ export function formatList(items: (string | number)[]): string {
   return listFormat.format(items.map(String)).replace(/, and /, " and ");
 }
 
+const ordinalRules = new Intl.PluralRules("en-US", { type: "ordinal" });
+const ordinalSuffixes: Record<string, string> = { one: "st", two: "nd", few: "rd", other: "th" };
+
+/** 1st, 2nd, 3rd, 11th, 22nd. */
+export function formatOrdinal(n: number): string {
+  return `${n}${ordinalSuffixes[ordinalRules.select(n)]}`;
+}
+
 /** A share as a whole percentage: 0.684 as "68%". */
 export function formatPercent(share: number): string {
   return `${Math.round(share * 100)}%`;

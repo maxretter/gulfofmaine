@@ -6,7 +6,9 @@ import {
   eventRange,
   filterEvents,
   heatwaveBands,
+  overlapping,
   parseEventParams,
+  rankAmong,
   sortEvents,
   toEventParams,
 } from "./events";
@@ -110,5 +112,33 @@ describe("eventRange", () => {
 describe("eventPath", () => {
   it("addresses an event by buoy, depth and start date, as the API does", () => {
     expect(eventPath(event({ buoy_id: "A01", depth: 50, start_date: "2021-04-14" }))).toBe("/events/A01/50/2021-04-14");
+  });
+});
+
+describe("a heatwave among others", () => {
+  const events = [
+    event({ duration: 40, max_intensity: 3 }),
+    event({ start_date: "2020-07-01", duration: 12, max_intensity: 4 }),
+    event({ start_date: "2019-07-01", duration: 12, max_intensity: 3 }),
+    event({ start_date: "2019-07-01", depth: 20, duration: 90 }),
+  ];
+
+  it("ranks it among those at the same buoy and depth, ties sharing a rank", () => {
+    expect(rankAmong(events, events[0], "duration")).toEqual({ rank: 1, of: 3 });
+    expect(rankAmong(events, events[1], "duration")).toEqual({ rank: 2, of: 3 });
+    expect(rankAmong(events, events[2], "duration")).toEqual({ rank: 2, of: 3 });
+    expect(rankAmong(events, events[0], "max_intensity")).toEqual({ rank: 2, of: 3 });
+  });
+
+  it("finds the others that overlapped it, its own buoy's first", () => {
+    const july = event({ start_date: "2021-07-01", end_date: "2021-07-20" });
+    const others = [
+      july,
+      event({ buoy_id: "B01", start_date: "2021-07-15", end_date: "2021-08-01" }),
+      event({ buoy_id: "A01", depth: 50, start_date: "2021-06-20", end_date: "2021-07-01" }),
+      event({ buoy_id: "A01", depth: 20, start_date: "2021-07-21", end_date: "2021-07-30" }),
+      event({ buoy_id: "C01", start_date: "2021-06-01", end_date: "2021-06-30" }),
+    ];
+    expect(overlapping(others, july).map((e) => `${e.buoy_id} ${e.depth}`)).toEqual(["A01 50", "B01 1"]);
   });
 });
