@@ -89,8 +89,8 @@ export function BuoyPage() {
         <section className="card">
           <h2>What the satellite misses here</h2>
           <p className="caption">
-            Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the
-            surface above. Only days with data from both count. <Link to="/satellite">Across every buoy</Link>.
+            Heatwave days at depth each year, by whether the satellite saw one at the surface.{" "}
+            <Link to="/satellite">Across every buoy</Link>.
           </p>
           <SatelliteMisses buoy={buoy.id} />
         </section>
@@ -244,7 +244,7 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
 
       <div className="range-head">
         <p className="caption">
-          The whole record at {depth} m, with its heatwaves shaded. Drag across it to choose a period.
+          Drag across the record to choose a period.
         </p>
         {buoy.series.length > 1 && (
           <div className="filters" role="group" aria-label="Depth of the record strip">

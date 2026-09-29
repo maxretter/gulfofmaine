@@ -74,8 +74,8 @@ export function StripesFigure() {
             : top && `Warmest month: ${formatMonth(top.month)}, ${formatSigned(top.anomaly)}`}
         </span>
         <span>
-          The Gulf at {STRIPES_DEPTH} m since {first}, a month to a stripe: how far the buoys' water was from its
-          2003–2022 normal, <span className="cool">cooler</span> or <span className="warm">warmer</span>, on average.
+          The Gulf at {STRIPES_DEPTH} m since {first}, a month to a stripe: <span className="cool">cooler</span> or{" "}
+          <span className="warm">warmer</span> than normal.
         </span>
       </figcaption>
     </figure>

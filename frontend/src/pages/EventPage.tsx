@@ -38,7 +38,6 @@ export function EventPage() {
   const buoy = buoys.data?.find((b) => b.id === detail.buoy_id);
   const buoyEvents = events.data?.filter((e) => e.buoy_id === detail.buoy_id) ?? [];
   const period = eventRange(detail);
-  const kind = detail.category_name.toLowerCase();
   return (
     <>
       <section className="intro">
@@ -52,22 +51,16 @@ export function EventPage() {
         <h1>
           {buoy?.name ?? detail.buoy_id}, {detail.depth} m
         </h1>
-        <p className="lead">
-          {/^[aeiou]/.test(kind) ? "An" : "A"} {kind} heatwave from {formatDate(detail.start_date)} to{" "}
-          {formatDate(detail.end_date)}, peaking {formatSigned(detail.max_intensity)} above normal on{" "}
-          {formatDate(detail.peak_date)}. <Link to={heatwavePeriodPath(detail)}>See it on {detail.buoy_id}'s record</Link>
-          .
-        </p>
         <div className="event-labels">
           <CategoryLabel category={detail.category} />
           {detail.origin ? (
             <OriginLabel origin={detail.origin} />
           ) : (
             <span className="muted">
-              No origin label: only heatwaves at {rules.data.depths.join(" and ")} m get one.{" "}
-              <Link to="/about#origin">Why</Link>
+              Origins are labeled at {rules.data.depths.join(" and ")} m only. <Link to="/about#origin">Why</Link>
             </span>
           )}
+          <Link to={heatwavePeriodPath(detail)}>See it on {detail.buoy_id}'s record</Link>
         </div>
       </section>
 
@@ -76,10 +69,6 @@ export function EventPage() {
       {buoy && (
         <section className="card">
           <h2>Through the heatwave, at every depth</h2>
-          <p className="caption">
-            {detail.buoy_id}'s daily temperature from {formatDate(period.from)} to {formatDate(period.to)}, against the
-            normal and the heatwave threshold, with heatwaves shaded by category. Hover to read every depth on a day.
-          </p>
           <SeriesLegend buoy={buoy} />
           <DepthCharts buoy={buoy} from={period.from} to={period.to} events={buoyEvents} />
         </section>
@@ -130,8 +119,7 @@ function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
         <OriginLabel origin={detail.origin!} />
       </div>
       <p className="caption">
-        {verdict(detail.origin!, evidence.votes, rules.margin)} Each signal is read from {rules.before} days before the
-        onset to {rules.after} after; the dotted line marks the onset.
+        {verdict(detail.origin!, evidence.votes, rules.margin)} The dotted line marks the onset.
       </p>
       <div className="signals">
         {SIGNALS.map(({ key, name }) => (
@@ -409,9 +397,8 @@ function TSCard({ detail, rules }: CardProps) {
     <section className="card">
       <h2>Temperature and salinity at {detail.depth} m</h2>
       <p className="caption">
-        Each dot is a day, from {rules.before} days before the onset to {rules.after} after. Water arriving from
-        offshore moves the dots warmer and saltier; heat mixed down from the surface moves them warmer without the
-        salt. The dashed line is the normal for the same days.
+        Each dot is a day around the onset. Water from offshore moves the dots warmer and saltier; heat mixed down
+        from the surface, warmer only. The dashed line is the normal.
       </p>
       <Chart
         className="chart"

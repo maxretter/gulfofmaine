@@ -229,7 +229,7 @@ td .swatch { position: relative; top: 1px; }
 /* --- A buoy's page --- */
 .detail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; margin-bottom: 0.75rem; }
 .detail-head h2 { margin: 0; }
-.latest { margin-bottom: 1rem; }
+.latest { margin-bottom: 3rem; }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1.5rem 2rem; }
 .tile { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid var(--rule); padding: 0.7rem 0 0; }
@@ -245,11 +245,11 @@ td .swatch { position: relative; top: 1px; }
 .tile-foot { display: grid; gap: 0.35rem; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--grid); color: var(--ink-2); font-size: 0.85rem; }
 .tile-foot-label { display: block; font-size: 0.8rem; }
 /* A heatwave's figures: the category's swatch sized to its name. */
-.figures { margin-bottom: 1rem; }
+.figures { margin-bottom: 3rem; }
 .figures .tile-value { display: flex; align-items: center; gap: 0.5rem; }
 .figures .tile-value .swatch { width: 0.55em; height: 0.55em; }
 /* The satellite page's figures. */
-.stats { margin-bottom: 1rem; }
+.stats { margin-bottom: 3rem; }
 .stats .tile-value { font-size: 3.4rem; }
 @media (max-width: 640px) {
   .tiles { grid-template-columns: 1fr; }

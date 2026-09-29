@@ -37,9 +37,8 @@ export function SatellitePage() {
         <h1>What the satellite misses</h1>
         <p className="lead">
           Most heatwave monitoring in the Gulf of Maine uses satellite sea surface temperature, which sees only the top
-          millimeters of the water. Each buoy here is compared with NOAA's OISST, the satellite record behind GMRI's
-          Gulf of Maine temperature reports, in the nearest grid cell: on the days a buoy logged a heatwave, did the
-          satellite show one at the surface above? <Link to="/about#satellite">How the comparison is made</Link>.
+          millimeters of water. On the days a buoy logged a heatwave, did the satellite show one at the surface above?{" "}
+          <Link to="/about#satellite">How the comparison is made</Link>.
         </p>
       </section>
 
@@ -71,10 +70,6 @@ export function SatellitePage() {
 
           <section className="card">
             <h2>Heatwave days at 20 and 50 m, every buoy together</h2>
-            <p className="caption">
-              Each year's heatwave days at depth, summed over the buoys and split by whether the satellite record also
-              showed a heatwave at the surface above. Only days with data from both count.
-            </p>
             <SatelliteMisses />
           </section>
 
@@ -82,7 +77,7 @@ export function SatellitePage() {
             <section className="card">
               <h2>At each buoy</h2>
               <p className="caption">
-                The share of each buoy's heatwave days with no satellite heatwave above. Choose a buoy for its record.
+                The share of heatwave days with no satellite heatwave above.
               </p>
               <div className="table-scroll">
                 <table className="shares">

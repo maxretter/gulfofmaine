@@ -84,8 +84,7 @@ export function EventsPage() {
         <p className="kicker">Heatwaves</p>
         <h1>Every heatwave on record</h1>
         <p className="lead">
-          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001. See which years were
-          worst, filter and sort them, then open one to see where its heat came from.
+          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001.
         </p>
       </section>
 
@@ -175,9 +174,8 @@ export function EventsPage() {
         <section className="card">
           <h2>Heatwave days per year {filters.depth === null ? "at any depth" : `at ${filters.depth} m`}</h2>
           <p className="caption">
-            Days inside a heatwave that matches the filters above, by buoy and year
-            {filters.depth === null && "; a day with heatwaves at several depths counts once"}. Click a cell to list
-            its heatwaves below.
+            {filters.depth === null && "A day with heatwaves at several depths counts once. "}Click a cell to list its
+            heatwaves.
           </p>
           <AnnualHeatmap
             buoys={buoys.data}
@@ -194,7 +192,6 @@ export function EventsPage() {
       <section className="card">
         <p className="caption" aria-live="polite">
           {matching.length} heatwave{matching.length === 1 ? "" : "s"}, {totalDays.toLocaleString()} days in all.
-          Intensity is degrees above the normal for that day. Only heatwaves at 20 and 50 m get an origin.
           {filteredBuoy && (
             <>
               {" "}

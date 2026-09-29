@@ -53,10 +53,9 @@ export function OriginsPage() {
         <p className="kicker">Origins</p>
         <h1>Where the heat came from</h1>
         <p className="lead">
-          Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty slope water enters through the
-          Northeast Channel and spreads west along the bottom; or heat taken up at the surface is mixed down, by wind or
-          the autumn overturn. Five signals tell them apart for each heatwave, and plain rules turn them into a label,
-          or into Unclear when they disagree. <Link to="/about#origin">How the labels are made</Link>.
+          Heat reaches 20 and 50 m in two ways: warm, salty slope water flowing in through the Northeast Channel, or
+          surface heat mixed down by wind or the autumn overturn. Five signals label each heatwave, or leave it Unclear
+          when they disagree. <Link to="/about#origin">How the labels are made</Link>.
         </p>
       </section>
 
@@ -65,8 +64,7 @@ export function OriginsPage() {
           Heatwaves at <InlineSelect {...depthChoice} /> each year, by origin
         </h2>
         <p className="caption">
-          By the year each began. Unclear is kept in view: it is where the signals disagree or the data are too thin.
-          Click a year to see its heatwaves below.
+          By the year each began. Click a year to see it below.
         </p>
         {events.isError ? (
           <p className="note">Couldn't load the heatwaves.</p>
@@ -86,11 +84,7 @@ export function OriginsPage() {
           />
         </h2>
         <p className="caption">
-          Each buoy's year, top to bottom in the order slope water reaches them: in through the Northeast Channel, then
-          west along the coast to Massachusetts Bay. Bars are heatwaves, colored by where their heat came from, under a
-          strip of the temperature against normal. Heat from offshore should reach the eastern buoys first, but
-          neighboring buoys mostly warm and cool together, so that order is one clue among five. Click a heatwave for its
-          evidence, or{" "}
+          Buoys from east to west, in the order slope water reaches them. Click a heatwave for its evidence, or{" "}
           <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
         {buoys.data ? (

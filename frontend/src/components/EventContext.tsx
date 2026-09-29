@@ -48,7 +48,7 @@ export function EventFigures({ event, events }: { event: HeatwaveEvent; events: 
       <div className="tile">
         <p className="tile-label">Mean</p>
         <p className="tile-value">{formatSigned(event.mean_intensity)}</p>
-        <p className="tile-line">above normal over its {event.duration} days</p>
+        <p className="tile-line">above normal on average</p>
         {rank("mean_intensity", "highest")}
       </div>
       <div className="tile">
