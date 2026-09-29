@@ -46,8 +46,7 @@ export function Layout() {
               <NavLink to="/satellite">Satellite gap</NavLink>
             </div>
             <div className="nav-more">
-              <NavLink to="/data">Data</NavLink>
-              <NavLink to="/methods">Methods</NavLink>
+              <NavLink to="/about">About</NavLink>
             </div>
           </nav>
         </div>

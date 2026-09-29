@@ -1,20 +1,58 @@
-import { Link } from "react-router";
+import { Link, Navigate, useLocation } from "react-router";
 
-import { useBuoys, useOriginRules } from "../api/queries";
+import { useBuoys, useDataCatalog, useOriginRules } from "../api/queries";
 import type { OriginRules } from "../api/types";
+import { ProductTable, VariableTable } from "../components/DataTables";
 import { OriginLabel } from "../components/Label";
 import { categories } from "../lib/colors";
+import { latest } from "../lib/dates";
 import { formatSigned } from "../lib/format";
 
-export function MethodsPage() {
+const REPOSITORY = "https://github.com/maxretter/gulfofmaine";
+
+const CONTENTS = [
+  { id: "heatwaves", title: "What a heatwave means here" },
+  { id: "sources", title: "Where the data come from" },
+  { id: "normal", title: "Normal and threshold" },
+  { id: "origin", title: "Where the heat came from" },
+  { id: "satellite", title: "The satellite comparison" },
+  { id: "caveats", title: "Things to keep in mind" },
+  { id: "api", title: "API" },
+  { id: "data", title: "The data as files" },
+];
+
+/**
+ * How the site works and how to take its record away: the method behind every heatwave and origin label, the API,
+ * and the files. /about, and /methods and /data before them (router.tsx sends those here).
+ */
+export function AboutPage() {
   const buoys = useBuoys();
   const rules = useOriginRules();
+  const catalog = useDataCatalog();
+  const names = new Map(buoys.data?.map((buoy) => [buoy.id, buoy.name]));
+  const written = latest(catalog.data?.products.flatMap((product) => product.files.map((f) => f.modified)) ?? []);
+  const site = window.location.origin;
+
   return (
     <article className="prose">
-      <p className="kicker">Reference</p>
-      <h1>Methods</h1>
+      <p className="kicker">About</p>
+      <h1>Methods and data</h1>
+      <p className="lead">
+        How the site finds heatwaves and says where their heat came from, where its data come from, and how to take the
+        whole record away as files.
+      </p>
+      <nav className="contents" aria-label="On this page">
+        <ol>
+          {CONTENTS.map((section) => (
+            <li key={section.id}>
+              {/* Through the router, whose scroll restoration would otherwise undo the jump to a plain #link. */}
+              <Link to={`#${section.id}`}>{section.title}</Link>
+            </li>
+          ))}
+        </ol>
+      </nav>
 
-      <h2>What a heatwave means here</h2>
+      <h2 id="heatwaves">What a heatwave means here</h2>
       <p>
         The definition is the standard one from{" "}
         <a href="https://doi.org/10.1016/j.pocean.2015.12.014">Hobday et al. (2016)</a>: a marine heatwave is a spell of
@@ -28,7 +66,7 @@ export function MethodsPage() {
         .
       </p>
 
-      <h2>Data</h2>
+      <h2 id="sources">Where the data come from</h2>
       <p>
         Temperature and salinity come from the University of Maine buoys A01, B01, E01, F01, I01, M01 and N01, read
         from the <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a> as NetCDF (datasets{" "}
@@ -48,7 +86,7 @@ export function MethodsPage() {
         over a WebSocket, so the map and tiles update without a reload.
       </p>
 
-      <h2>Normal and threshold</h2>
+      <h2 id="normal">Normal and threshold</h2>
       <p>
         For each buoy and depth, the normal and the threshold for a calendar day are the mean and 90th percentile of
         every value within five days of it across 2003–2022, each smoothed with a 31-day running mean. Gaps of up to
@@ -162,7 +200,7 @@ export function MethodsPage() {
         disagree about days close to the threshold. That share is the yardstick for the ones at 20 and 50 m.
       </p>
 
-      <h2>Things to keep in mind</h2>
+      <h2 id="caveats">Things to keep in mind</h2>
       <ul>
         <li>
           <strong>Twenty years, not thirty.</strong> Hobday et al. recommend a 30-year baseline. The buoys' records
@@ -195,7 +233,7 @@ export function MethodsPage() {
         </li>
       </ul>
 
-      <h2>API</h2>
+      <h2 id="api">API</h2>
       <p>
         Everything here comes from a JSON API, documented at <a href="/docs">/docs</a>. For example,{" "}
         <a href="/api/buoys">
@@ -217,7 +255,11 @@ export function MethodsPage() {
         <a href="/api/onsets?year=2021&depth=50">
           <code>/api/onsets?year=2021&amp;depth=50</code>
         </a>{" "}
-        every buoy's anomalies through a year, and{" "}
+        every buoy's anomalies through a year,{" "}
+        <a href="/api/stripes?depth=50">
+          <code>/api/stripes?depth=50</code>
+        </a>{" "}
+        the stripes across the top of the page, and{" "}
         <a href="/api/origin/rules">
           <code>/api/origin/rules</code>
         </a>{" "}
@@ -225,12 +267,92 @@ export function MethodsPage() {
         <code>reading</code> (a buoy depth's newest hourly temperature), <code>status</code> (a series entering or
         leaving a heatwave, or changing category; depth 0 is the satellite) and <code>ping</code>, every 30 seconds.
       </p>
+      <h2 id="data">The data as files</h2>
       <p>
-        The same record is published as files, NetCDF following the CF and ACDD conventions and CSV, with an ERDDAP
-        configuration to serve them; the <Link to="/data">Data page</Link> lists them and shows how to open one.
+        Everything on this site as files: each buoy depth's daily record and every heatwave, as NetCDF following the CF
+        and ACDD conventions and as CSV. The sync job rewrites them whenever new data arrive, so they are as current as
+        the charts.
+      </p>
+
+      <h3>Open one in Python</h3>
+      <pre>
+        <code>{`import xarray as xr
+ds = xr.open_dataset("${site}/api/data/A01/50.nc#mode=bytes")
+ds.temperature_anomaly.sel(time="2021").plot()`}</code>
+      </pre>
+      <p>
+        With <code>#mode=bytes</code> the netCDF library reads only the parts it needs over HTTP. The events table
+        works as it is in pandas:
+      </p>
+      <pre>
+        <code>{`import pandas as pd
+events = pd.read_csv(
+    "${site}/api/data/events.csv",
+    parse_dates=["start_date", "end_date", "peak_date"],
+)
+events[events.origin == "offshore"].groupby("depth").duration.sum()`}</code>
+      </pre>
+      <p>
+        Or download a file: <code>curl -OJ {site}/api/data/A01/50.nc</code>
+      </p>
+
+      <h3>Files</h3>
+      {catalog.isError && <p className="note">The list of files didn't load.</p>}
+      {catalog.data &&
+        (catalog.data.products.length ? (
+          <>
+            <ProductTable products={catalog.data.products} names={names} />
+            {written && <p className="muted">Written {new Date(written).toUTCString().slice(5, 22)} UTC.</p>}
+          </>
+        ) : (
+          <p className="note">No files yet: the sync job writes them at the end of its first run.</p>
+        ))}
+
+      <h3>The daily files</h3>
+      <p>
+        One file per buoy and depth, with a row for every UTC day from its first with data to its last. Time is the
+        middle of each day, as in NOAA's OISST. Missing values are NaN in NetCDF and empty in CSV, where the origin is
+        written as a word. The values are the ones the charts and <a href="/docs">the API</a> show, and a test checks
+        that they match exactly.
+      </p>
+      {catalog.data && <VariableTable variables={catalog.data.variables} />}
+
+      <h3>The events table</h3>
+      <p>
+        One row per heatwave at the buoys, oldest first, with the fields of{" "}
+        <a href="/api/events">
+          <code>/api/events</code>
+        </a>
+        : buoy and depth, first, last and peak day, duration in days, the peak and mean anomaly in °C, the category
+        (1 Moderate to 4 Extreme), and at 20 and 50 m the origin. In NetCDF each heatwave is a point at its buoy and
+        depth, timed at its first day, with the category and origin as flags.
+      </p>
+
+      <h3>Conventions and ERDDAP</h3>
+      <p>
+        The NetCDF files are NetCDF-3, the format ERDDAP serves, and follow the{" "}
+        <a href="https://cfconventions.org/">CF conventions</a> 1.11 as discrete sampling geometries: each daily file
+        is one time series (<code>featureType = timeSeries</code>) named by <code>series_id</code>, such as{" "}
+        <code>A01_050m</code>, and the events file is a set of points. Their metadata follows{" "}
+        <a href="https://wiki.esipfed.org/Attribute_Convention_for_Data_Discovery_1-3">ACDD 1.3</a>. Every build checks
+        each file with the <a href="https://github.com/ioos/compliance-checker">IOOS compliance checker</a>: they pass
+        its CF check, and its ACDD check apart from standard names for quantities CF has none for (a normal or a
+        threshold, say) and a contact email.
+      </p>
+      <p>
+        The repository's <a href={`${REPOSITORY}/tree/main/erddap`}>erddap/datasets.xml</a> serves the files from an
+        ERDDAP server as two datasets, <code>gom_heatwaves_daily</code> and <code>gom_heatwaves_events</code>, with{" "}
+        <code>EDDTableFromNcCFFiles</code>, the way NERACOOS serves its buoys; Compose's <code>erddap</code> profile
+        runs one beside this site.
       </p>
     </article>
   );
+}
+
+/** The pages this one replaced: a link to /methods#origin, say, lands on the same section here. */
+export function MovedToAbout({ section }: { section?: string }) {
+  const { hash } = useLocation();
+  return <Navigate replace to={{ pathname: "/about", hash: hash || (section ? `#${section}` : "") }} />;
 }
 
 /** The five signals, what each says for either origin, and the thresholds it's judged by. */

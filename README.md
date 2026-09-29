@@ -109,7 +109,7 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   more votes than the other side, else Unclear. The rules are pure functions,
   unit-tested on synthetic series, checked against the 2021 and 2012 onsets
   before any UI existed, and their thresholds are served at
-  `/api/origin/rules` so the Methods page can't drift from the code. Labels and
+  `/api/origin/rules` so the About page can't drift from the code. Labels and
   their evidence are stored on each event and recomputed with it.
 - **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
   After a sync round that stores new data, the job rewrites one NetCDF file
@@ -188,8 +188,11 @@ works:
   header says whether the feed is connected. The connection reconnects with
   backoff, drops itself if the server's 30-second pings stop, and refetches
   everything on screen once it's back, to cover what it missed.
-- **Data** (`/data`). Every file with its size, the variables in them, and
-  how to open one in xarray, pandas or curl.
+- **About** (`/about`). The method behind the heatwaves, their origins and the
+  satellite comparison, what to keep in mind, the API, and every file with its
+  size, the variables in them and how to open one in xarray, pandas or curl,
+  with the sections listed at the top. The old `/methods` and `/data` pages
+  redirect to their sections.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
   stacked by origin with Unclear kept in view; click a year to see it below:
   every buoy's year from east to west, in the order slope water reaches them,
@@ -312,7 +315,7 @@ heatwaves/
   api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
-  pages/         now, buoys, one buoy, heatwaves, one heatwave, origins, satellite, data, methods
+  pages/         now, buoys, one buoy, heatwaves, one heatwave, origins, satellite, about
   components/    map, heatmap, range brush, depth charts, tables
   api/           typed API client, TanStack Query hooks and the live feed
   state/         the buoys' view <-> URL

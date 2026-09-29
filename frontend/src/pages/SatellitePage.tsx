@@ -39,7 +39,7 @@ export function SatellitePage() {
           Most heatwave monitoring in the Gulf of Maine uses satellite sea surface temperature, which sees only the top
           millimeters of the water. Each buoy here is compared with NOAA's OISST, the satellite record behind GMRI's
           Gulf of Maine temperature reports, in the nearest grid cell: on the days a buoy logged a heatwave, did the
-          satellite show one at the surface above? <Link to="/methods#satellite">How the comparison is made</Link>.
+          satellite show one at the surface above? <Link to="/about#satellite">How the comparison is made</Link>.
         </p>
       </section>
 

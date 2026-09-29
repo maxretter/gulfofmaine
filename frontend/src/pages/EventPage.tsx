@@ -65,7 +65,7 @@ export function EventPage() {
           ) : (
             <span className="muted">
               No origin label: only heatwaves at {rules.data.depths.join(" and ")} m get one.{" "}
-              <Link to="/methods#origin">Why</Link>
+              <Link to="/about#origin">Why</Link>
             </span>
           )}
         </div>

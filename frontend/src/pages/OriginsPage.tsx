@@ -56,7 +56,7 @@ export function OriginsPage() {
           Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty slope water enters through the
           Northeast Channel and spreads west along the bottom; or heat taken up at the surface is mixed down, by wind or
           the autumn overturn. Five signals tell them apart for each heatwave, and plain rules turn them into a label,
-          or into Unclear when they disagree. <Link to="/methods#origin">How the labels are made</Link>.
+          or into Unclear when they disagree. <Link to="/about#origin">How the labels are made</Link>.
         </p>
       </section>
 
