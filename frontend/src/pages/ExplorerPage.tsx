@@ -13,10 +13,18 @@ import { SatelliteMisses } from "../components/SatelliteMisses";
 import { StateBadge, StateLegend, Swatch } from "../components/StateBadge";
 import { missedShare } from "../lib/agreement";
 import { categories, colors } from "../lib/colors";
-import { addDays, daysBetween, maxDay, minDay } from "../lib/dates";
-import { eventsInRange } from "../lib/events";
+import { addDays, daysBetween, earliest, latest, maxDay, minDay } from "../lib/dates";
+import { eventRange, eventsInRange } from "../lib/events";
 import { formatDate, formatSigned, formatTemp } from "../lib/format";
 import { DEPTHS, useExplorerState } from "../state/explorer";
+
+/** The requested period clamped to a buoy's record, falling back to its past year. */
+function clampRange(requestedFrom: string | null, requestedTo: string | null, firstDate: string, lastDate: string) {
+  let from = maxDay(requestedFrom ?? addDays(lastDate, -364), firstDate);
+  let to = minDay(requestedTo ?? lastDate, lastDate);
+  if (from >= to) [from, to] = [maxDay(addDays(lastDate, -364), firstDate), lastDate];
+  return { from, to, firstDate, lastDate };
+}
 
 /** Defaults to the first buoy in a heatwave at the chosen depth, so the first view is the interesting one. */
 function pickBuoy(buoys: Buoy[], requested: string | null, depth: number): Buoy {
@@ -60,38 +68,24 @@ export function ExplorerPage() {
     );
 
   const buoy = pickBuoy(buoys.data, state.buoy, state.depth);
-  const dates = buoy.series.flatMap((s) => (s.date ? [s.date] : []));
-  const firsts = buoy.series.flatMap((s) => (s.first_date ? [s.first_date] : []));
-  const lastDate = dates.reduce(maxDay);
-  const firstDate = firsts.reduce(minDay);
+  const lastDate = latest(buoy.series.map((s) => s.date));
+  const firstDate = earliest(buoy.series.map((s) => s.first_date));
 
-  // Clamp the requested period to this buoy's record; fall back to the past year.
-  let from = maxDay(state.from ?? addDays(lastDate, -364), firstDate);
-  let to = minDay(state.to ?? lastDate, lastDate);
-  if (from >= to) [from, to] = [maxDay(addDays(lastDate, -364), firstDate), lastDate];
+  const range = lastDate && firstDate ? clampRange(state.from, state.to, firstDate, lastDate) : null;
 
   const buoyEvents = (events.data ?? []).filter((e) => e.buoy_id === buoy.id);
   // The detail follows the chosen depth when this buoy has it, else its shallowest.
   const condition = buoy.series.find((s) => s.depth === state.depth) ?? buoy.series[0];
   const detailDepth = condition?.depth ?? state.depth;
-  const zoomTo = (event: HeatwaveEvent) => {
-    const pad = Math.max(14, Math.round(event.duration / 2));
-    update({ from: maxDay(addDays(event.start_date, -pad), firstDate), to: minDay(addDays(event.end_date, pad), lastDate) });
-  };
-  const presets = [
-    { label: "Past 12 months", from: addDays(lastDate, -364) },
-    { label: "Past 5 years", from: addDays(lastDate, -5 * 365) },
-    { label: "Full record", from: firstDate },
-  ];
 
   return (
     <>
       <section className="intro">
         <h1>Marine heatwaves below the surface of the Gulf of Maine</h1>
         <p className="lead">
-          Daily water temperature at 1, 20 and 50 metres on six University of Maine buoys, compared with each spot's
-          2003–2022 normal. A marine heatwave is five or more days warmer than the 90th percentile for that time of
-          year. Updated hourly from NERACOOS.
+          Daily water temperature at 1, 20 and 50 metres on seven University of Maine buoys, two of them retired and
+          kept for their history, compared with each spot's 2003–2022 normal. A marine heatwave is five or more days
+          warmer than the 90th percentile for that time of year. Updated hourly from NERACOOS.
         </p>
         <Headline />
       </section>
@@ -139,8 +133,8 @@ export function ExplorerPage() {
           depth={state.depth}
           buoys={buoys.data}
           selectedBuoy={buoy.id}
-          from={from}
-          to={to}
+          from={range?.from ?? null}
+          to={range?.to ?? null}
           onSelect={selectYear}
         />
       </section>
@@ -152,7 +146,63 @@ export function ExplorerPage() {
           </h2>
           {condition && <StateBadge condition={condition} />}
         </div>
+        {range ? (
+          <BuoyDetail
+            buoy={buoy}
+            events={buoyEvents}
+            depth={detailDepth}
+            {...range}
+            onRange={(from, to) => update({ from, to })}
+            onBrush={setRange}
+          />
+        ) : (
+          // A new buoy whose first sync hasn't found data yet.
+          <p className="note">No data yet from this buoy.</p>
+        )}
+      </section>
 
+      {buoy.satellite && (
+        <section className="card">
+          <h2>
+            What the satellite misses at <span className="code">{buoy.id}</span> {buoy.name}
+          </h2>
+          <p className="caption">
+            Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the
+            surface above. Only days with data from both count.
+          </p>
+          <SatelliteMisses buoy={buoy.id} />
+        </section>
+      )}
+    </>
+  );
+}
+
+interface BuoyDetailProps {
+  buoy: Buoy;
+  events: HeatwaveEvent[]; // this buoy's, every depth
+  depth: number; // of the range brush
+  firstDate: string;
+  lastDate: string;
+  from: string;
+  to: string;
+  onRange: (from: string, to: string) => void; // a new entry in the browser history
+  onBrush: (from: string, to: string) => void; // replaces the current one
+}
+
+/** One buoy's latest readings, its record over the chosen period, and the heatwaves in it. */
+function BuoyDetail({ buoy, events, depth, firstDate, lastDate, from, to, onRange, onBrush }: BuoyDetailProps) {
+  const presets = [
+    { label: "Past 12 months", from: addDays(lastDate, -364) },
+    { label: "Past 5 years", from: addDays(lastDate, -5 * 365) },
+    { label: "Full record", from: firstDate },
+  ];
+  const zoomTo = (event: HeatwaveEvent) => {
+    const { from, to } = eventRange(event);
+    onRange(from, to);
+  };
+
+  return (
+    <>
         <div className="tiles">
           {buoy.satellite && (
             <div className="tile">
@@ -184,7 +234,7 @@ export function ExplorerPage() {
                   key={preset.label}
                   type="button"
                   aria-pressed={from === start && to === lastDate}
-                  onClick={() => update({ from: start, to: lastDate })}
+                  onClick={() => onRange(start, lastDate)}
                 >
                   {preset.label}
                 </button>
@@ -198,16 +248,16 @@ export function ExplorerPage() {
         </div>
         <RangeBrush
           buoy={buoy.id}
-          depth={detailDepth}
+          depth={depth}
           firstDate={firstDate}
           lastDate={lastDate}
           from={from}
           to={to}
-          events={buoyEvents.filter((e) => e.depth === detailDepth)}
-          onChange={setRange}
+          events={events.filter((e) => e.depth === depth)}
+          onChange={onBrush}
         />
         <p className="caption">
-          The whole record at {detailDepth} m, with heatwaves shaded. Drag across it to choose a period.
+          The whole record at {depth} m, with heatwaves shaded. Drag across it to choose a period.
         </p>
 
         <div className="legend series-legend">
@@ -238,11 +288,11 @@ export function ExplorerPage() {
             </span>
           ))}
         </div>
-        <DepthCharts buoy={buoy} from={from} to={to} events={buoyEvents} />
+        <DepthCharts buoy={buoy} from={from} to={to} events={events} />
 
         <h3>Heatwaves in this period</h3>
         <EventList
-          events={eventsInRange(buoyEvents, buoy.id, from, to).sort((a, b) => a.start_date.localeCompare(b.start_date))}
+          events={eventsInRange(events, buoy.id, from, to).sort((a, b) => a.start_date.localeCompare(b.start_date))}
           onZoom={zoomTo}
         />
         <p className="sources">
@@ -260,20 +310,6 @@ export function ExplorerPage() {
             </>
           )}
         </p>
-      </section>
-
-      {buoy.satellite && (
-        <section className="card">
-          <h2>
-            What the satellite misses at <span className="code">{buoy.id}</span> {buoy.name}
-          </h2>
-          <p className="caption">
-            Heatwave days at 20 and 50 m each year, split by whether the satellite record also showed a heatwave at the
-            surface above. Only days with data from both count.
-          </p>
-          <SatelliteMisses buoy={buoy.id} />
-        </section>
-      )}
     </>
   );
 }

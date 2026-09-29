@@ -1,5 +1,6 @@
 """Reads of the stored record, shared by the API and anything else that reports on it."""
 
+import datetime as dt
 from collections import defaultdict
 from collections.abc import Collection
 
@@ -7,7 +8,48 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from heatwaves.models import DailyMean, Event
+from heatwaves import origin
+from heatwaves.hobday import day_of_year
+from heatwaves.models import ClimatologyDay, DailyMean, Event, Series
+
+
+def daily(
+    session: Session, series_id: int, start: dt.date | None = None, end: dt.date | None = None
+) -> pd.DataFrame | None:
+    """A series' daily values beside their climatology, heatwave threshold and anomaly.
+
+    Every day from `start` to `end` has a row, indexed by day; days without
+    a value keep it as NaN. Gaps aren't filled here: only heatwave detection
+    interpolates. `start` and `end` default to the first and last days with
+    data. None if the series has no climatology yet.
+    """
+    climatology = pd.DataFrame(
+        session.execute(
+            select(ClimatologyDay.day_of_year, ClimatologyDay.mean, ClimatologyDay.threshold).where(
+                ClimatologyDay.series_id == series_id
+            )
+        ).all(),
+        columns=["day_of_year", "climatology", "threshold"],
+    ).set_index("day_of_year")
+    if climatology.empty:
+        return None
+
+    query = select(DailyMean.date, DailyMean.value).where(DailyMean.series_id == series_id)
+    if start is not None:
+        query = query.where(DailyMean.date >= start)
+    if end is not None:
+        query = query.where(DailyMean.date <= end)
+    rows = session.execute(query.order_by(DailyMean.date)).all()
+    values = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
+
+    if start is None and end is None and values.empty:
+        days = pd.DatetimeIndex([], name="date")
+    else:
+        days = pd.date_range(start or values.index.min(), end or values.index.max(), freq="D", name="date")
+    frame = climatology.reindex(day_of_year(days)).set_index(days)
+    frame.insert(0, "value", values.reindex(days).astype(float))
+    frame["anomaly"] = frame["value"] - frame["climatology"]
+    return frame
 
 
 def heatwave_days(session: Session, series_ids: Collection[int]) -> dict[int, pd.Series]:
@@ -37,6 +79,32 @@ def observed_days(session: Session, series_ids: Collection[int]) -> dict[int, pd
     ):
         days[series_id].append(date)
     return {series_id: pd.DatetimeIndex(sorted(days[series_id]), name="date") for series_id in series_ids}
+
+
+def origin_record(
+    session: Session, start: dt.date | None = None, end: dt.date | None = None
+) -> origin.Record:
+    """Every buoy series the origins of heatwaves are judged from, from `start` to `end`.
+
+    The whole record by default. Heatwave days are always complete.
+    """
+    series = session.scalars(select(Series).where(Series.source == "buoy")).all()
+    frames = {each.id: daily(session, each.id, start, end) for each in series}
+    temperatures = [each for each in series if each.variable == "temperature"]
+    days = heatwave_days(session, [each.id for each in temperatures])
+    return origin.Record(
+        temperature={
+            (each.buoy_id, each.depth): frame
+            for each in temperatures
+            if (frame := frames[each.id]) is not None
+        },
+        salinity={
+            (each.buoy_id, each.depth): frame
+            for each in series
+            if each.variable == "salinity" and (frame := frames[each.id]) is not None
+        },
+        heatwave_days={(each.buoy_id, each.depth): days[each.id] for each in temperatures},
+    )
 
 
 _NO_DAYS = pd.Series([], index=pd.DatetimeIndex([], name="date"), dtype=int)

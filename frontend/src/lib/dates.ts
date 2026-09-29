@@ -31,3 +31,13 @@ export function minDay(a: string, b: string): string {
 export function maxDay(a: string, b: string): string {
   return a > b ? a : b;
 }
+
+/** The latest of some ISO days or UTC timestamps, skipping missing ones; null if there are none. */
+export function latest(values: (string | null | undefined)[]): string | null {
+  return values.reduce<string | null>((found, value) => (value && (!found || value > found) ? value : found), null);
+}
+
+/** The earliest of some ISO days or UTC timestamps, skipping missing ones; null if there are none. */
+export function earliest(values: (string | null | undefined)[]): string | null {
+  return values.reduce<string | null>((found, value) => (value && (!found || value < found) ? value : found), null);
+}

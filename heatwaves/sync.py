@@ -19,10 +19,10 @@ from collections.abc import Mapping, Sequence
 
 import httpx
 import pandas as pd
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import hobday
+from heatwaves import hobday, origin, queries
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
@@ -91,7 +91,11 @@ def sync_series(session: Session, sources: Mapping[str, Source], series: Series)
 
 
 def store(session: Session, series: Sequence[Series], download: Download) -> None:
-    """Replace each series' daily means over the downloaded span, then recompute its heatwaves."""
+    """Replace each series' daily means over the downloaded span, then recompute its heatwaves.
+
+    Every heatwave's origin is then judged again, since the evidence for one
+    comes from other series too.
+    """
     for each in series:
         daily = download.daily[each.id]
         session.execute(
@@ -122,10 +126,14 @@ def store(session: Session, series: Sequence[Series], download: Download) -> Non
             download.last_day,
             len(daily),
         )
+    update_origins(session)
 
 
 def update_heatwaves(session: Session, series: Series) -> None:
-    """Recompute a series' climatology, events and latest status from its daily means."""
+    """Recompute a series' climatology, events and latest status from its daily means.
+
+    Every variable gets a climatology, as its normal; only temperature gets events.
+    """
     rows = session.execute(
         select(DailyMean.date, DailyMean.value)
         .where(DailyMean.series_id == series.id)
@@ -160,7 +168,7 @@ def update_heatwaves(session: Session, series: Series) -> None:
         ],
     )
     session.execute(delete(Event).where(Event.series_id == series.id))
-    if analysis.events:
+    if analysis.events and series.variable == "temperature":
         session.execute(
             insert(Event),
             [
@@ -182,6 +190,27 @@ def update_heatwaves(session: Session, series: Series) -> None:
     series.latest_climatology = status.climatology
     series.latest_threshold = status.threshold
     series.days_above = status.days_above
+
+
+def update_origins(session: Session) -> None:
+    """Label every heatwave at the depths heatwaves.origin covers with where its heat likely came from."""
+    record = queries.origin_record(session)
+    events = session.execute(
+        select(Event.id, Event.start_date, Series.buoy_id, Series.depth)
+        .join(Series)
+        .where(Series.source == "buoy", Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
+    ).all()
+    judged = [
+        (event.id, origin.judge(record, event.buoy_id, event.depth, event.start_date)) for event in events
+    ]
+    if judged:
+        session.execute(
+            update(Event),
+            [
+                {"id": event_id, "origin": evidence.origin, "evidence": evidence.to_json()}
+                for event_id, evidence in judged
+            ],
+        )
 
 
 def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], series_id: int) -> bool:
@@ -239,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
             for series in session.scalars(select(Series)):
                 update_heatwaves(session, series)
                 log.info("%s: recomputed", series.label)
+            update_origins(session)
             session.commit()
         return 0
 

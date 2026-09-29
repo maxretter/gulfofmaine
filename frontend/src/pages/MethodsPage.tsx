@@ -1,8 +1,12 @@
-import { useBuoys } from "../api/queries";
+import { useBuoys, useOriginRules } from "../api/queries";
+import type { OriginRules } from "../api/types";
+import { OriginLabel } from "../components/Label";
 import { categories } from "../lib/colors";
+import { formatSigned } from "../lib/format";
 
 export function MethodsPage() {
   const buoys = useBuoys();
+  const rules = useOriginRules();
   return (
     <article className="prose">
       <h1>Methods</h1>
@@ -23,11 +27,14 @@ export function MethodsPage() {
 
       <h2>Data</h2>
       <p>
-        Temperatures come from the University of Maine buoys A01, B01, E01, F01, I01 and M01, read from the{" "}
-        <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a> as NetCDF (datasets{" "}
-        <code>A01_ocean_001m</code>, <code>A01_ocean_020m</code> and so on). Readings flagged bad by UMaine's own
-        quality flag, or suspect or failed by the QARTOD aggregate flag, are dropped. The rest are averaged into hourly
-        bins and then into UTC days; a day needs 18 hourly bins to count.
+        Temperature and salinity come from the University of Maine buoys A01, B01, E01, F01, I01, M01 and N01, read
+        from the <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a> as NetCDF (datasets{" "}
+        <code>A01_ocean_001m</code>, <code>A01_ocean_020m</code> and so on), at 1, 20 and 50 m, and at M01 also 100,
+        150, 200 and 250 m. Two buoys are retired and kept for their history: M01, deep in Jordan Basin, stopped
+        reporting in September 2025, and N01, in the Northeast Channel, in October 2021. Readings flagged bad by
+        UMaine's own quality flag, or suspect or failed by the QARTOD aggregate flag, are dropped, for each variable
+        separately. The rest are averaged into hourly bins and then into UTC days; a day needs 18 hourly bins to
+        count.
       </p>
       <p>
         An hourly job asks ERDDAP which rows changed since its last visit, using the <code>time_modified</code> column,
@@ -39,11 +46,54 @@ export function MethodsPage() {
       <p>
         For each buoy and depth, the normal and the threshold for a calendar day are the mean and 90th percentile of
         every value within five days of it across 2003–2022, each smoothed with a 31-day running mean. Gaps of up to
-        two days are interpolated; longer gaps are left empty and can't be part of a heatwave. On all 18 buoy records
-        here, the detected events (688 of them, with their dates and categories) are identical to those from the
-        reference implementation, <a href="https://github.com/ecjoliver/marineHeatWaves">marineHeatWaves</a>; the
+        two days are interpolated; longer gaps are left empty and can't be part of a heatwave. On all 25 buoy
+        temperature records here, the detected events (856 of them, with their dates and categories) are identical to
+        those from the reference implementation, <a href="https://github.com/ecjoliver/marineHeatWaves">marineHeatWaves</a>; the
         repository has the script that compares them.
       </p>
+
+      <p>
+        Salinity gets a normal the same way, so each day has a salinity anomaly, but it isn't searched for heatwaves.
+      </p>
+
+      <h2 id="origin">Where the heat came from</h2>
+      <p>
+        Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty water from the continental slope enters
+        through the Northeast Channel and spreads west along the bottom from Jordan Basin. Or heat taken up at the
+        surface is mixed down, by wind or by the autumn overturn. Each heatwave at 20 and 50 m is labelled{" "}
+        <OriginLabel origin="offshore" />, <OriginLabel origin="surface" /> or <OriginLabel origin="unclear" /> from
+        five signals, read around its onset. The labels are plain rules rather than a fitted model, so each can be
+        traced to its evidence on the heatwave's own page.
+      </p>
+      {rules.data && <OriginTable rules={rules.data} />}
+      <p>
+        Each signal votes one way, or not at all when it has fewer than {rules.data?.min_days ?? 7} days of data in
+        its window or can't tell. A label needs {rules.data?.margin ?? 2} more votes than the other side; anything
+        closer is Unclear. The rules were checked against two onsets whose origins are known before any of this was
+        built: the 2021 heatwave at 50 m, which began at M01 in January and reached A01 in April, comes out offshore,
+        and the 2012 one, which began at B01 after an unusually warm winter, comes out surface.
+      </p>
+      <ul>
+        <li>
+          <strong>About half are Unclear, and that is shown.</strong> Signals often disagree, and sensors go quiet:
+          since N01 stopped in 2021 and M01 in 2025, recent heatwaves have fewer signals to vote.
+        </li>
+        <li>
+          <strong>The same fixed baseline.</strong> Anomalies are against 2003–2022, like the heatwaves. The deep
+          water at M01 has warmed so much that it is warmer than that normal most of the time, so the deep-water
+          signal asks whether it was in a heatwave itself, not just above normal.
+        </li>
+        <li>
+          <strong>Salinity sensors drift.</strong> A fouling conductivity cell reads fresh, so a salinity anomaly
+          below {rules.data ? formatSigned(rules.data.drift, "", 1) : "−1"} over the window is treated as a sensor
+          problem and doesn't vote.
+        </li>
+        <li>
+          <strong>Winter columns are already mixed.</strong> When 1 m is less than{" "}
+          {rules.data ? formatSigned(rules.data.mixed) : "1 °C"} warmer than the depth, the surface can't lead and
+          the column can't collapse, so those two signals stay out.
+        </li>
+      </ul>
 
       <h2>The satellite comparison</h2>
       <p>
@@ -153,8 +203,82 @@ export function MethodsPage() {
         <a href="/api/agreement?depth=50">
           <code>/api/agreement?depth=50</code>
         </a>{" "}
-        compares the 50 m heatwave days with the satellite's, per buoy and year.
+        compares the 50 m heatwave days with the satellite's, per buoy and year.{" "}
+        <a href="/api/events/A01/50/2021-04-14">
+          <code>/api/events/A01/50/2021-04-14</code>
+        </a>{" "}
+        gives one heatwave with the evidence for its origin,{" "}
+        <a href="/api/onsets?year=2021&depth=50">
+          <code>/api/onsets?year=2021&amp;depth=50</code>
+        </a>{" "}
+        every buoy's anomalies through a year, and{" "}
+        <a href="/api/origin/rules">
+          <code>/api/origin/rules</code>
+        </a>{" "}
+        the thresholds above.
       </p>
     </article>
+  );
+}
+
+/** The five signals, what each says for either origin, and the thresholds it's judged by. */
+function OriginTable({ rules }: { rules: OriginRules }) {
+  const salt = (value: number) => formatSigned(value, "", 2);
+  const east = rules.offshore_buoys.join(" or ");
+  const west = rules.western_buoys.join(" or ");
+  const before = `${rules.before} days before onset`;
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Signal</th>
+            <th scope="col">Offshore</th>
+            <th scope="col">Surface</th>
+            <th scope="col">Read over</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Salinity anomaly at the heatwave's depth</td>
+            <td>{salt(rules.salty)} or more</td>
+            <td>{salt(rules.fresh)} or less</td>
+            <td>
+              {rules.before} days before onset to {rules.after} after
+            </td>
+          </tr>
+          <tr>
+            <td>Heatwave at 1 m</td>
+            <td>None, in a stratified column</td>
+            <td>At least one day</td>
+            <td>{before}</td>
+          </tr>
+          <tr>
+            <td>1 m minus the heatwave's depth</td>
+            <td>Holds</td>
+            <td>Falls below {Math.round(rules.collapse * 100)}% of what it was</td>
+            <td>{before}, against onset to {rules.after} days after</td>
+          </tr>
+          <tr>
+            <td>
+              {rules.deep_buoy} at {rules.deep_depths[0]}–{rules.deep_depths.at(-1)} m
+            </td>
+            <td>In a heatwave</td>
+            <td>Not in a heatwave</td>
+            <td>{before}</td>
+          </tr>
+          <tr>
+            <td>First heatwave onset at the same depth</td>
+            <td>
+              {east} more than {rules.together} days before {west}
+            </td>
+            <td>
+              {west} first, or both within {rules.together} days
+            </td>
+            <td>{rules.lookback} days before onset</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }

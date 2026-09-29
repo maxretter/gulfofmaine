@@ -177,7 +177,9 @@ td .swatch { position: relative; top: 1px; }
 .readout-label { color: var(--ink-2); }
 
 .event-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; }
+.event-list li { display: flex; align-items: center; gap: 0.5rem; }
 .event-list button {
+  flex: 1; min-width: 0;
   width: 100%; display: grid; grid-template-columns: 7rem 3rem minmax(12rem, 1fr) 5rem 7rem; gap: 0.75rem;
   align-items: center; text-align: left; border: 1px solid transparent; border-radius: 6px;
   background: none; padding: 0.4rem 0.5rem; cursor: pointer; font-size: 0.9rem;
@@ -185,7 +187,35 @@ td .swatch { position: relative; top: 1px; }
 .event-list button:hover { background: var(--page); border-color: var(--border); }
 @media (max-width: 640px) { .event-list button { grid-template-columns: 1fr 1fr; } }
 
+.event-origin { font-size: 0.9rem; white-space: nowrap; padding: 0.4rem 0.5rem; }
+
 .sources { color: var(--ink-2); font-size: 0.85rem; margin: 1.25rem 0 0; }
+
+/* --- Origins page --- */
+.playback { display: flex; align-items: center; gap: 0.75rem; margin: 0.25rem 0 1rem; flex-wrap: wrap; }
+.playback input[type="range"] { flex: 1; min-width: 180px; accent-color: var(--ink); }
+.play { font: inherit; font-size: 0.9rem; padding: 0.3rem 0.9rem; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); cursor: pointer; min-width: 5rem; }
+.play:hover { border-color: var(--ink-2); }
+.playback-date { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 8rem; }
+.onset-now { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
+.onset-now { align-items: start; }
+.onset-now .map { height: 400px; min-height: 0; border-radius: 8px; }
+.onset-cell { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
+.heatwave-flag { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 4px; background: var(--ink); color: var(--surface); font-size: 0.75rem; }
+.strip-frame { position: relative; }
+.day-marker { position: absolute; top: 0; bottom: 26px; width: 2px; margin-left: -1px; background: var(--ink); pointer-events: none; }
+.heatwave-bar { display: inline-block; width: 18px; height: 5px; background: var(--ink); }
+.anomaly-legend svg { display: block; }
+@media (max-width: 760px) { .onset-now { grid-template-columns: 1fr; } }
+
+/* --- A heatwave's page --- */
+.crumbs { margin: 0 0 0.5rem; font-size: 0.9rem; }
+.event-labels { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-top: 0.75rem; }
+.signals { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem 2rem; margin-top: 1rem; }
+.signal { min-width: 0; }
+.signal-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.signal-head h3 { margin: 0; }
+.signal-reading { color: var(--ink-2); font-size: 0.875rem; margin: 0.25rem 0 0.5rem; min-height: 3.9em; }
 
 /* --- Methods page --- */
 .prose { max-width: 70ch; padding-top: 1.5rem; }

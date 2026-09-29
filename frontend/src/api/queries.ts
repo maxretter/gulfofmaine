@@ -1,7 +1,17 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
-import type { Agreement, Buoy, Day, HeatwaveEvent, YearSummary } from "./types";
+import type {
+  Agreement,
+  Buoy,
+  Day,
+  EventDetail,
+  HeatwaveEvent,
+  Onsets,
+  OriginRules,
+  Variable,
+  YearSummary,
+} from "./types";
 
 export interface DayPoint extends Omit<Day, "date"> {
   date: Date;
@@ -39,11 +49,13 @@ export function useAgreement(depth: number) {
 }
 
 /** Depth 0 is the satellite. */
-function dailyQuery(buoy: string, depth: number, start: string, end: string) {
+function dailyQuery(buoy: string, depth: number, start: string, end: string, variable: Variable = "temperature") {
   return {
-    queryKey: ["daily", buoy, depth, start, end],
+    queryKey: ["daily", buoy, depth, start, end, variable],
     queryFn: async (): Promise<DayPoint[]> => {
-      const days = await getJSON<Day[]>(`/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}`);
+      const days = await getJSON<Day[]>(
+        `/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}&variable=${variable}`,
+      );
       return days.map((day) => ({ ...day, date: parseDay(day.date) }));
     },
     // Keep showing the previous range while a new one loads.
@@ -51,10 +63,44 @@ function dailyQuery(buoy: string, depth: number, start: string, end: string) {
   };
 }
 
-export function useDaily(buoy: string, depth: number, start: string | null, end: string | null) {
-  return useQuery({ ...dailyQuery(buoy, depth, start ?? "", end ?? ""), enabled: Boolean(start && end) });
+export function useDaily(
+  buoy: string,
+  depth: number,
+  start: string | null,
+  end: string | null,
+  variable: Variable = "temperature",
+) {
+  return useQuery({
+    ...dailyQuery(buoy, depth, start ?? "", end ?? "", variable),
+    enabled: Boolean(start && end),
+  });
 }
 
 export function useDailyByDepth(buoy: string, depths: number[], start: string, end: string) {
   return useQueries({ queries: depths.map((depth) => dailyQuery(buoy, depth, start, end)) });
+}
+
+/** One heatwave with the evidence for its origin. Heatwaves are addressed by buoy, depth and start date. */
+export function useEvent(buoy: string, depth: number, start: string) {
+  return useQuery({
+    queryKey: ["event", buoy, depth, start],
+    queryFn: () => getJSON<EventDetail>(`/api/events/${buoy}/${depth}/${start}`),
+  });
+}
+
+/** Every buoy's anomalies and heatwave days at one depth through one year. */
+export function useOnsets(year: number, depth: number) {
+  return useQuery({
+    queryKey: ["onsets", year, depth],
+    queryFn: () => getJSON<Onsets>(`/api/onsets?year=${year}&depth=${depth}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOriginRules() {
+  return useQuery({
+    queryKey: ["origin-rules"],
+    queryFn: () => getJSON<OriginRules>("/api/origin/rules"),
+    staleTime: Infinity,
+  });
 }

@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
-import type { HeatwaveEvent } from "../api/types";
-import { Swatch } from "../components/StateBadge";
-import { categories } from "../lib/colors";
-import { addDays } from "../lib/dates";
+import type { Origin } from "../api/types";
+import { CategoryLabel, OriginLabel } from "../components/Label";
+import { categories, origins } from "../lib/colors";
 import {
   type EventFilters,
+  eventPath,
   filterEvents,
   parseEventParams,
   type SortKey,
@@ -15,21 +15,8 @@ import {
   toEventParams,
 } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
-import { toSearchParams } from "../state/explorer";
 
 const PAGE = 100;
-
-/** The explorer view for an event: its buoy and depth, zoomed to it with some context either side. */
-function explorerLink(event: HeatwaveEvent): string {
-  const pad = Math.max(14, Math.round(event.duration / 2));
-  const params = toSearchParams({
-    buoy: event.buoy_id,
-    depth: event.depth,
-    from: addDays(event.start_date, -pad),
-    to: addDays(event.end_date, pad),
-  });
-  return `/?${params}#detail`;
-}
 
 export function EventsPage() {
   const [params, setParams] = useSearchParams();
@@ -56,6 +43,7 @@ export function EventsPage() {
   const years = [...new Set(events.data.map((e) => Number(e.start_date.slice(0, 4))))].sort((a, b) => b - a);
   const depths = [...new Set(events.data.map((e) => e.depth))].sort((a, b) => a - b);
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
+  const buoyCount = new Set(events.data.map((e) => e.buoy_id)).size;
 
   const header = (label: string, key: SortKey, numeric = false) => (
     <th
@@ -75,8 +63,8 @@ export function EventsPage() {
       <section className="intro">
         <h1>Every heatwave on record</h1>
         <p className="lead">
-          All {events.data.length} marine heatwaves detected at the six buoys since 2001. Filter and sort them, then
-          open one to see it in the explorer.
+          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001. Filter and sort them,
+          then open one to see where its heat came from.
         </p>
       </section>
 
@@ -140,6 +128,21 @@ export function EventsPage() {
             ))}
           </select>
         </label>
+        <label>
+          <span className="filter-label">Origin</span>
+          <select
+            className="select"
+            value={filters.origin ?? ""}
+            onChange={(e) => setFilters({ origin: (e.target.value || null) as Origin | null })}
+          >
+            <option value="">All</option>
+            {Object.entries(origins).map(([key, { name }]) => (
+              <option key={key} value={key}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
         {params.size > 0 && (
           <button type="button" className="link-button" onClick={() => setParams({}, { replace: true })}>
             Reset
@@ -150,7 +153,7 @@ export function EventsPage() {
       <section className="card">
         <p className="caption" aria-live="polite">
           {matching.length} heatwave{matching.length === 1 ? "" : "s"}, {totalDays.toLocaleString()} days in all.
-          Intensity is degrees above the normal for that day.
+          Intensity is degrees above the normal for that day. Only heatwaves at 20 and 50 m get an origin.
         </p>
         <div className="table-scroll">
           <table className="events">
@@ -166,11 +169,12 @@ export function EventsPage() {
                   Mean
                 </th>
                 {header("Category", "category")}
+                <th scope="col">Origin</th>
               </tr>
             </thead>
             <tbody>
               {matching.slice(0, shown).map((event) => {
-                const href = explorerLink(event);
+                const href = eventPath(event);
                 return (
                   <tr
                     key={`${event.buoy_id}-${event.depth}-${event.start_date}`}
@@ -189,11 +193,9 @@ export function EventsPage() {
                     <td className="num">{formatSigned(event.max_intensity)}</td>
                     <td className="num">{formatSigned(event.mean_intensity)}</td>
                     <td>
-                      <span className="state">
-                        <Swatch color={categories[event.category].color} />
-                        {event.category_name}
-                      </span>
+                      <CategoryLabel category={event.category} />
                     </td>
+                    <td>{event.origin ? <OriginLabel origin={event.origin} /> : <span className="muted">–</span>}</td>
                   </tr>
                 );
               })}

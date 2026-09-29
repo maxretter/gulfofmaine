@@ -126,13 +126,13 @@ def test_catalog_adds_each_series_once_with_its_buoy_position(session):
     ensure_catalog(session, erddap)
     ensure_catalog(session, erddap)
 
-    assert (
-        len(session.scalars(select(Series)).all()) == len(SERIES) == 24
-    )  # 18 buoy depths, 6 satellite cells
+    # Temperature and salinity at 25 buoy depths, and 6 satellite cells.
+    assert len(session.scalars(select(Series)).all()) == len(SERIES) == 2 * 25 + 6
     a01 = session.get_one(Buoy, "A01")
     assert (a01.name, a01.latitude, a01.longitude) == ("Massachusetts Bay", 42.5183, -70.5681)
     # Positions come from each buoy's shallowest dataset.
     assert 'datasetID=~"^(A01_ocean_001m|B01_ocean_001m|E01_ocean_001m|' in requests[0]
+    assert session.get_one(Buoy, "N01").latitude == 42.3207
 
 
 def test_a_failing_dataset_doesnt_stop_the_others(session_factory):
@@ -140,11 +140,12 @@ def test_a_failing_dataset_doesnt_stop_the_others(session_factory):
     # an error, and there's no source for the satellite dataset at all.
     erddap = recorded_erddap([*CATALOG, ("/A01_", NO_MATCH)], [])
 
-    assert sync_all(session_factory, erddap, buoy_sources(erddap)) == 15 + 1
+    assert sync_all(session_factory, erddap, buoy_sources(erddap)) == 22 + 1
 
     with session_factory() as session:
         synced = session.scalars(select(Series.dataset_id).where(Series.synced_at.is_not(None))).all()
-    assert sorted(synced) == ["A01_ocean_001m", "A01_ocean_020m", "A01_ocean_050m"]
+    # Temperature and salinity from each of A01's datasets.
+    assert sorted(synced) == sorted(["A01_ocean_001m", "A01_ocean_020m", "A01_ocean_050m"] * 2)
 
 
 @pytest.mark.parametrize(("failures", "status"), [(0, 0), (2, 1)])

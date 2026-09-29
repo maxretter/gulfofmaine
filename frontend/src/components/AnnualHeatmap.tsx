@@ -19,8 +19,8 @@ interface Props {
   depth: number;
   buoys: Buoy[];
   selectedBuoy: string;
-  from: string;
-  to: string;
+  from: string | null; // the period the detail panel shows, outlined; null when it shows none
+  to: string | null;
   onSelect: (buoy: string, year: number) => void;
 }
 
@@ -95,7 +95,7 @@ interface HeatmapProps extends Omit<Props, "depth"> {
 function Heatmap({ cells, width, buoys, names, selectedBuoy, from, to, onSelect }: HeatmapProps) {
   const options = useMemo((): Plot.PlotOptions => {
     const [first, last] = extent(cells, (d) => d.year) as [number, number];
-    const [fromYear, toYear] = [Number(from.slice(0, 4)), Number(to.slice(0, 4))];
+    const [fromYear, toYear] = from && to ? [Number(from.slice(0, 4)), Number(to.slice(0, 4))] : [NaN, NaN];
     const chartWidth = Math.max(width, 640);
     const describe = (d: Cell) =>
       `${d.buoy_id} ${names.get(d.buoy_id)}, ${d.year}\n` +

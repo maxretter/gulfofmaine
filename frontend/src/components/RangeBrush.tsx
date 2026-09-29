@@ -91,7 +91,7 @@ function Brush({ record, width, firstDate, lastDate, from, to, events, onChange 
           fill: (e: HeatwaveEvent) => categories[e.category].color,
           fillOpacity: 0.55,
         }),
-        Plot.lineY(record, { x: "date", y: "temperature", stroke: colors.observed, strokeWidth: 1 }),
+        Plot.lineY(record, { x: "date", y: "value", stroke: colors.observed, strokeWidth: 1 }),
       ],
     }),
     [width, record, events, firstDate, lastDate],

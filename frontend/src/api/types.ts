@@ -37,12 +37,21 @@ export interface Buoy {
   satellite: SatelliteCondition | null;
 }
 
+export type Variable = "temperature" | "salinity";
+
+/** A daily mean beside its normal and heatwave threshold: degrees C, or practical salinity. */
 export interface Day {
   date: string;
-  temperature: number | null;
+  value: number | null; // null when the day has too little data
   climatology: number;
   threshold: number;
+  anomaly: number | null; // value minus climatology
 }
+
+/** Where a heatwave's heat likely came from (heatwaves/origin.py). Only heatwaves at 20 and 50 m have one. */
+export type Origin = "offshore" | "surface" | "unclear";
+export type Vote = "offshore" | "surface" | null;
+export type Signal = "salinity" | "surface_heatwave" | "stratification" | "deep" | "onset_order";
 
 export interface HeatwaveEvent {
   buoy_id: string;
@@ -55,6 +64,78 @@ export interface HeatwaveEvent {
   mean_intensity: number;
   category: number;
   category_name: string;
+  origin: Origin | null;
+}
+
+/** The signals behind a heatwave's origin, and how each voted. Null where there was no data. */
+export interface Evidence {
+  salinity_anomaly: number | null; // at the event's depth, mean over the evidence window
+  surface_heatwave_days: number | null; // at 1 m, in the 30 days before onset
+  stratification_before: number | null; // 1 m minus the event's depth, °C, 30 days before
+  stratification_after: number | null; // the same, onset to 14 days after
+  deep_heatwave_days: number | null; // days M01 was in a heatwave at 100–250 m, 30 days before
+  offshore_onset: string | null; // first onset at N01 or M01 at this depth, 90 days before
+  western_onset: string | null; // the same at A01 or B01
+  votes: Record<Signal, Vote>;
+}
+
+/** One day of the evidence window. */
+export interface SignalDay {
+  date: string;
+  anomaly: number | null; // temperature at the event's depth minus normal, °C
+  salinity_anomaly: number | null;
+  stratification: number | null; // 1 m minus the event's depth, °C
+  surface_heatwave: boolean;
+  deep_anomaly: number | null; // M01, mean over 100–250 m, °C
+  deep_heatwave: boolean;
+}
+
+export interface Onset {
+  buoy_id: string;
+  date: string;
+  group: "offshore" | "western" | null;
+}
+
+export interface EventDetail extends HeatwaveEvent {
+  evidence: Evidence | null;
+  signals: SignalDay[]; // 30 days before onset to 14 after; empty without an origin
+  onsets: Onset[]; // every buoy's onsets at this depth in the 90 days to this one
+}
+
+/** The thresholds the origin labels come from, served by the API so the page can't drift from the code. */
+export interface OriginRules {
+  depths: number[];
+  before: number;
+  after: number;
+  lookback: number;
+  min_days: number;
+  salty: number;
+  fresh: number;
+  drift: number;
+  mixed: number;
+  collapse: number;
+  together: number;
+  margin: number;
+  offshore_buoys: string[];
+  western_buoys: string[];
+  deep_buoy: string;
+  deep_depths: number[];
+}
+
+/** One buoy's year at one depth, a value per day of `Onsets.dates`. */
+export interface BuoyYear {
+  buoy_id: string;
+  onset: string | null; // its first heatwave starting in the year
+  origin: Origin | null; // of that heatwave
+  anomaly: (number | null)[];
+  heatwave: boolean[];
+}
+
+export interface Onsets {
+  year: number;
+  depth: number;
+  dates: string[];
+  buoys: BuoyYear[];
 }
 
 /** Days in a year with data at both a buoy depth and the satellite, by which saw a heatwave. */

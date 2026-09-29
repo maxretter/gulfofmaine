@@ -10,8 +10,8 @@ import { formatDay, parseDay } from "../lib/dates";
 import { heatwaveBands } from "../lib/events";
 import { formatDate, formatSigned, formatTemp } from "../lib/format";
 import { Chart } from "./Chart";
+import { CategoryLabel } from "./Label";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
-import { Swatch } from "./StateBadge";
 
 interface Props {
   buoy: Buoy;
@@ -54,7 +54,7 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
   });
   const surface = useMemo(() => new Map(satelliteDays.map((d) => [formatDay(d.date), d])), [satelliteDays]);
   const rows = (label: string, days: DayPoint[]) =>
-    days.map((d) => [formatDay(d.date), label, formatTemp(d.temperature), formatTemp(d.climatology), formatTemp(d.threshold)]);
+    days.map((d) => [formatDay(d.date), label, formatTemp(d.value), formatTemp(d.climatology), formatTemp(d.threshold)]);
 
   return (
     <Chart
@@ -99,7 +99,7 @@ interface ReadoutProps {
 
 /** Values at the hovered day, or the newest day in the period. */
 function Readout({ panels, surface, hover }: ReadoutProps) {
-  const newest = max(panels.flatMap((p) => p.days.filter((d) => d.temperature !== null).map((d) => d.date)));
+  const newest = max(panels.flatMap((p) => p.days.filter((d) => d.value !== null).map((d) => d.date)));
   const date = hover ?? newest;
   if (!date) return <div className="readout">No data in this period.</div>;
   const day = formatDay(date);
@@ -110,12 +110,7 @@ function Readout({ panels, surface, hover }: ReadoutProps) {
         const event = activeEvent(panel.events, day);
         return (
           <ReadoutValue key={panel.depth} label={`${panel.depth} m`} point={panel.byDate.get(day)}>
-            {event && (
-              <span className="state">
-                <Swatch color={categories[event.category].color} />
-                {event.category_name}
-              </span>
-            )}
+            {event && <CategoryLabel category={event.category} />}
           </ReadoutValue>
         );
       })}
@@ -134,11 +129,11 @@ function ReadoutValue({ label, point, children }: ReadoutValueProps) {
   return (
     <span className="readout-depth">
       <span className="readout-label">{label}</span>
-      {point?.temperature == null ? (
+      {point?.value == null ? (
         "no data"
       ) : (
         <>
-          {formatTemp(point.temperature)} <span className="muted">({formatSigned(point.temperature - point.climatology)})</span>
+          {formatTemp(point.value)} <span className="muted">({formatSigned(point.anomaly)})</span>
         </>
       )}
       {children}
@@ -178,13 +173,13 @@ function DepthChart({ panel, from, to, width, hover, onHover }: ChartProps) {
         Plot.lineY(panel.days, { x: "date", y: "threshold", stroke: colors.ink2, strokeWidth: 1.25, strokeDasharray: "4,3" }),
         Plot.lineY(panel.satellite, {
           x: "date",
-          y: "temperature",
+          y: "value",
           stroke: colors.satellite,
           strokeWidth: 2,
           strokeDasharray: "6,4",
         }),
         // Missing days are null, which breaks the line: gaps stay visible.
-        Plot.lineY(panel.days, { x: "date", y: "temperature", stroke: colors.observed, strokeWidth: 2 }),
+        Plot.lineY(panel.days, { x: "date", y: "value", stroke: colors.observed, strokeWidth: 2 }),
       ],
     }),
     [panel.days, panel.events, panel.depth, panel.satellite, from, to, width],

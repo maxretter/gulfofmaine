@@ -7,7 +7,7 @@ heatwaves.sync and rewritten whenever they change.
 
 import datetime as dt
 
-from sqlalchemy import DateTime, ForeignKey, String, TypeDecorator, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, String, TypeDecorator, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from heatwaves.hobday import CATEGORIES
@@ -111,6 +111,10 @@ class Event(Base):
     max_intensity: Mapped[float]  # degrees C above climatology
     mean_intensity: Mapped[float]
     category: Mapped[int]  # 1-4
+    # Where the heat likely came from, for heatwaves at 20 and 50 m (heatwaves.origin):
+    # "offshore", "surface" or "unclear", with the signals behind the label.
+    origin: Mapped[str | None]
+    evidence: Mapped[dict | None] = mapped_column(JSON)
 
     series: Mapped[Series] = relationship()
 

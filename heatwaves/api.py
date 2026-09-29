@@ -2,7 +2,7 @@
 
 import datetime as dt
 from collections import Counter
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 import httpx
 import pandas as pd
@@ -11,10 +11,10 @@ from pydantic import BaseModel
 from sqlalchemy import extract, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from heatwaves import compare, queries
+from heatwaves import compare, origin, queries
 from heatwaves.db import get_session
-from heatwaves.hobday import day_of_year
-from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
+from heatwaves.models import Buoy, DailyMean, Event, Series
+from heatwaves.origin import Origin, Vote
 from heatwaves.sources import connect
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
@@ -71,11 +71,15 @@ class BuoyOut(BaseModel):
     satellite: SatelliteCondition | None
 
 
+Variable = Literal["temperature", "salinity"]
+
+
 class Day(BaseModel):
     date: dt.date
-    temperature: float | None  # null when the day has too little data
+    value: float | None  # null when the day has too little data
     climatology: float
     threshold: float
+    anomaly: float | None  # value minus climatology
 
 
 class EventOut(BaseModel):
@@ -89,6 +93,85 @@ class EventOut(BaseModel):
     mean_intensity: float
     category: int
     category_name: str
+    origin: Origin | None  # where the heat likely came from; only at the depths heatwaves.origin covers
+
+
+class Evidence(BaseModel):
+    """The signals behind a heatwave's origin (heatwaves.origin), and how each voted. Null without data."""
+
+    salinity_anomaly: float | None  # at the event's depth, mean over the evidence window
+    surface_heatwave_days: int | None  # at 1 m, in the 30 days before onset
+    stratification_before: float | None  # 1 m minus the event's depth, degrees C, 30 days before
+    stratification_after: float | None  # the same, onset to 14 days after
+    deep_heatwave_days: int | None  # days M01 was in a heatwave at any of 100-250 m, 30 days before
+    offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, 90 days before
+    western_onset: dt.date | None  # the same at A01 or B01
+    votes: dict[str, Vote]  # by signal: salinity, surface_heatwave, stratification, deep, onset_order
+
+
+class SignalDay(BaseModel):
+    """One day of the evidence window, for charting each signal."""
+
+    date: dt.date
+    anomaly: float | None  # temperature at the event's depth minus normal, degrees C
+    salinity_anomaly: float | None
+    stratification: float | None  # 1 m minus the event's depth, degrees C
+    surface_heatwave: bool  # at 1 m
+    deep_anomaly: float | None  # M01, mean over 100-250 m, degrees C
+    deep_heatwave: bool  # M01 at any of 100-250 m
+
+
+Group = Literal["offshore", "western"]
+
+
+class Onset(BaseModel):
+    buoy_id: str
+    date: dt.date
+    group: Group | None  # which side of the onset-order signal it counts for
+
+
+class EventDetail(EventOut):
+    evidence: Evidence | None
+    signals: list[SignalDay]  # from 30 days before onset to 14 after; empty without an origin
+    onsets: list[Onset]  # every buoy's onsets at this depth in the 90 days to this one
+
+
+class OriginRules(BaseModel):
+    """The thresholds heatwaves.origin labels with."""
+
+    depths: list[int]  # metres: the depths whose heatwaves get a label
+    before: int  # days before onset in the evidence window
+    after: int  # days after onset in the evidence window
+    lookback: int  # days before onset searched for other buoys' onsets
+    min_days: int  # days of data a signal needs in its window to vote
+    salty: float  # salinity anomaly at or above which the water votes offshore
+    fresh: float  # at or below which it votes surface
+    drift: float  # below which a salinity sensor is taken to be drifting, and doesn't vote
+    mixed: float  # degrees C: 1 m less than this warmer than the depth means an already mixed column
+    collapse: float  # the stratification collapses below this fraction of its value before onset
+    together: int  # days: onsets this close count as together
+    margin: int  # votes a label needs over the other side
+    offshore_buoys: list[str]
+    western_buoys: list[str]
+    deep_buoy: str
+    deep_depths: list[int]
+
+
+class BuoyYear(BaseModel):
+    """One buoy's year at one depth: its first heatwave and each day's anomaly."""
+
+    buoy_id: str
+    onset: dt.date | None  # when its first heatwave starting in the year began
+    origin: Origin | None  # of that heatwave
+    anomaly: list[float | None]  # degrees C above normal, one per day of `Onsets.dates`
+    heatwave: list[bool]  # whether each day was part of a heatwave
+
+
+class Onsets(BaseModel):
+    year: int
+    depth: int
+    dates: list[dt.date]
+    buoys: list[BuoyYear]
 
 
 class YearSummary(BaseModel):
@@ -117,6 +200,11 @@ def now() -> dt.datetime:
 
 def today() -> dt.date:
     return now().date()
+
+
+def _number(value: float) -> float | None:
+    """A value for JSON: NaN, pandas' missing value, becomes null."""
+    return None if pd.isna(value) else float(value)
 
 
 def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
@@ -192,12 +280,14 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
     )
 
 
-def get_series(session: Session, buoy_id: str, depth: int) -> Series:
+def get_series(session: Session, buoy_id: str, depth: int, variable: Variable = "temperature") -> Series:
     series = session.scalar(
-        select(Series).where(TEMPERATURE, Series.buoy_id == buoy_id.upper(), Series.depth == depth)
+        select(Series).where(
+            Series.variable == variable, Series.buoy_id == buoy_id.upper(), Series.depth == depth
+        )
     )
     if series is None:
-        raise HTTPException(404, f"No series for buoy {buoy_id} at {depth} m")
+        raise HTTPException(404, f"No {variable} series for buoy {buoy_id} at {depth} m")
     return series
 
 
@@ -213,6 +303,7 @@ def event_out(event: Event) -> EventOut:
         mean_intensity=event.mean_intensity,
         category=event.category,
         category_name=event.category_name,
+        origin=cast(Origin | None, event.origin),
     )
 
 
@@ -237,42 +328,40 @@ def daily(
     session: SessionDep,
     start: dt.date | None = None,
     end: dt.date | None = None,
+    variable: Variable = "temperature",
 ) -> list[Day]:
-    """Daily mean temperature with its climatology and heatwave threshold.
+    """Daily means of a variable with its climatology and heatwave threshold.
 
-    Depth 0 is the satellite's sea surface temperature at the buoy. Defaults
-    to the 365 days ending on the newest observation. Days without enough
-    data are included with a null temperature, so gaps stay visible.
+    Temperature is in degrees C and salinity on the practical salinity
+    scale. Depth 0 is the satellite's sea surface temperature at the buoy.
+    Defaults to the 365 days ending on the newest observation. Days without
+    enough data are included with a null value, so gaps stay visible.
     """
-    series = get_series(session, buoy_id, depth)
+    series = get_series(session, buoy_id, depth, variable)
     end = end or series.latest_date or today()
     start = start or end - dt.timedelta(days=364)
     if start > end:
         raise HTTPException(422, "start must be on or before end")
 
-    climatology = {
-        row.day_of_year: row
-        for row in session.scalars(select(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
-    }
-    if not climatology:
-        raise HTTPException(404, f"No climatology yet for {series.dataset_id}")
-    temperatures = dict(
-        session.execute(
-            select(DailyMean.date, DailyMean.value).where(
-                DailyMean.series_id == series.id, DailyMean.date.between(start, end)
-            )
-        ).all()
-    )
-
-    days = pd.date_range(start, end, freq="D")
+    frame = queries.daily(session, series.id, start, end)
+    if frame is None:
+        raise HTTPException(404, f"No climatology yet for {series.label}")
     return [
         Day(
             date=date,
-            temperature=temperatures.get(date),
-            climatology=climatology[doy].mean,
-            threshold=climatology[doy].threshold,
+            value=_number(value),
+            climatology=climatology,
+            threshold=threshold,
+            anomaly=_number(anomaly),
         )
-        for date, doy in zip(days.date, day_of_year(days), strict=True)
+        for date, value, climatology, threshold, anomaly in zip(
+            pd.DatetimeIndex(frame.index).date,
+            frame["value"],
+            frame["climatology"],
+            frame["threshold"],
+            frame["anomaly"],
+            strict=True,
+        )
     ]
 
 
@@ -283,6 +372,7 @@ def list_events(
     depth: int | None = None,
     year: int | None = None,
     min_category: Annotated[int, Query(ge=1, le=4)] = 1,
+    origin_: Annotated[Origin | None, Query(alias="origin")] = None,
 ) -> list[EventOut]:
     """Marine heatwaves at the buoys, newest first. `year` matches events overlapping that year."""
     query = (
@@ -297,7 +387,120 @@ def list_events(
         query = query.where(Series.depth == depth)
     if year is not None:
         query = query.where(Event.start_date <= dt.date(year, 12, 31), Event.end_date >= dt.date(year, 1, 1))
+    if origin_ is not None:
+        query = query.where(Event.origin == origin_)
     return [event_out(event) for event in session.scalars(query.order_by(Event.start_date.desc()))]
+
+
+@router.get("/events/{buoy_id}/{depth}/{start}")
+def get_event(buoy_id: str, depth: int, start: dt.date, session: SessionDep) -> EventDetail:
+    """One heatwave, with the evidence for where its heat came from, day by day.
+
+    Heatwaves are addressed by buoy, depth and start date: their database
+    IDs change whenever the sync recomputes them.
+    """
+    event = session.scalar(
+        select(Event)
+        .join(Series)
+        .options(selectinload(Event.series))
+        .where(AT_BUOY, Series.buoy_id == buoy_id.upper(), Series.depth == depth, Event.start_date == start)
+    )
+    if event is None:
+        raise HTTPException(404, f"No heatwave at {buoy_id} {depth} m starting {start}")
+    detail = EventDetail(**event_out(event).model_dump(), evidence=None, signals=[], onsets=[])
+    if event.evidence is None:
+        return detail
+
+    record = queries.origin_record(
+        session, start - dt.timedelta(days=origin.LOOKBACK), start + dt.timedelta(days=origin.AFTER)
+    )
+    signals = origin.signals(record, event.series.buoy_id, depth, start)
+    groups: dict[str, Group] = {buoy: "offshore" for buoy in origin.OFFSHORE_BUOYS} | {
+        buoy: "western" for buoy in origin.WESTERN_BUOYS
+    }
+    detail.evidence = Evidence.model_validate(event.evidence)
+    detail.signals = [
+        SignalDay(
+            date=day.date(),
+            anomaly=_number(anomaly),
+            salinity_anomaly=_number(salinity_anomaly),
+            stratification=_number(stratification),
+            surface_heatwave=bool(surface_heatwave),
+            deep_anomaly=_number(deep_anomaly),
+            deep_heatwave=bool(deep_heatwave),
+        )
+        for day, anomaly, salinity_anomaly, stratification, surface_heatwave, deep_anomaly, deep_heatwave in (
+            signals.itertuples()
+        )
+    ]
+    detail.onsets = [
+        Onset(buoy_id=buoy, date=date, group=groups.get(buoy))
+        for buoy, date in origin.recent_onsets(record, depth, start)
+    ]
+    return detail
+
+
+@router.get("/origin/rules")
+def origin_rules() -> OriginRules:
+    """The thresholds behind every heatwave's origin label."""
+    return OriginRules(
+        depths=list(origin.DEPTHS),
+        before=origin.BEFORE,
+        after=origin.AFTER,
+        lookback=origin.LOOKBACK,
+        min_days=origin.MIN_DAYS,
+        salty=origin.SALTY,
+        fresh=origin.FRESH,
+        drift=origin.DRIFT,
+        mixed=origin.MIXED,
+        collapse=origin.COLLAPSE,
+        together=origin.TOGETHER,
+        margin=origin.MARGIN,
+        offshore_buoys=list(origin.OFFSHORE_BUOYS),
+        western_buoys=list(origin.WESTERN_BUOYS),
+        deep_buoy=origin.DEEP_BUOY,
+        deep_depths=list(origin.DEEP_DEPTHS),
+    )
+
+
+@router.get("/onsets")
+def onsets(year: Annotated[int, Query(ge=2001, le=2100)], depth: int, session: SessionDep) -> Onsets:
+    """Every buoy's heatwaves at one depth through a year, for mapping how one spread.
+
+    For each buoy with a series at `depth`: when its first heatwave starting
+    in the year began, that heatwave's origin, and for each day the
+    temperature anomaly and whether it was a heatwave day.
+    """
+    series = session.scalars(
+        select(Series).where(AT_BUOY, Series.depth == depth).order_by(Series.buoy_id)
+    ).all()
+    if not series:
+        raise HTTPException(404, f"No buoy measures {depth} m")
+    ids = [each.id for each in series]
+    first_day, last_day = dt.date(year, 1, 1), dt.date(year, 12, 31)
+    days = pd.date_range(first_day, last_day, name="date")
+    heatwaves = queries.heatwave_days(session, ids)
+    first: dict[int, Event] = {}
+    for event in session.scalars(
+        select(Event)
+        .where(Event.series_id.in_(ids), Event.start_date.between(first_day, last_day))
+        .order_by(Event.start_date)
+    ):
+        first.setdefault(event.series_id, event)
+
+    def buoy_year(each: Series) -> BuoyYear:
+        frame = queries.daily(session, each.id, first_day, last_day)
+        anomaly = frame["anomaly"].reindex(days) if frame is not None else pd.Series(float("nan"), index=days)
+        event = first.get(each.id)
+        return BuoyYear(
+            buoy_id=each.buoy_id,
+            onset=event.start_date if event else None,
+            origin=cast(Origin | None, event.origin) if event else None,
+            anomaly=[_number(value) for value in anomaly],
+            heatwave=days.isin(heatwaves[each.id].index).tolist(),
+        )
+
+    return Onsets(year=year, depth=depth, dates=list(days.date), buoys=[buoy_year(each) for each in series])
 
 
 @router.get("/annual")

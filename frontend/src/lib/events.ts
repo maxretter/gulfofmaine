@@ -1,13 +1,16 @@
 import type { DayPoint } from "../api/queries";
-import type { HeatwaveEvent } from "../api/types";
-import { parseDay } from "./dates";
+import type { HeatwaveEvent, Origin } from "../api/types";
+import { addDays, parseDay } from "./dates";
 
 export interface EventFilters {
   buoy: string | null;
   depth: number | null;
   year: number | null;
   minCategory: number;
+  origin: Origin | null;
 }
+
+const ORIGINS: Origin[] = ["offshore", "surface", "unclear"];
 
 export type SortKey = "start_date" | "duration" | "max_intensity" | "category";
 export interface Sort {
@@ -23,7 +26,8 @@ export function filterEvents(events: HeatwaveEvent[], filters: EventFilters): He
       (filters.depth === null || event.depth === filters.depth) &&
       (filters.year === null ||
         (event.start_date <= `${filters.year}-12-31` && event.end_date >= `${filters.year}-01-01`)) &&
-      event.category >= filters.minCategory,
+      event.category >= filters.minCategory &&
+      (filters.origin === null || event.origin === filters.origin),
   );
 }
 
@@ -34,6 +38,17 @@ export function sortEvents(events: HeatwaveEvent[], sort: Sort): HeatwaveEvent[]
     const primary = a[sort.key] < b[sort.key] ? -1 : a[sort.key] > b[sort.key] ? 1 : 0;
     return primary * direction || b.start_date.localeCompare(a.start_date);
   });
+}
+
+/** The period to show a heatwave in: itself with half its length either side, and at least two weeks. */
+export function eventRange(event: Pick<HeatwaveEvent, "start_date" | "end_date" | "duration">) {
+  const pad = Math.max(14, Math.round(event.duration / 2));
+  return { from: addDays(event.start_date, -pad), to: addDays(event.end_date, pad) };
+}
+
+/** A heatwave's own page, addressed as the API addresses it: buoy, depth and start date. */
+export function eventPath(event: Pick<HeatwaveEvent, "buoy_id" | "depth" | "start_date">): string {
+  return `/events/${event.buoy_id}/${event.depth}/${event.start_date}`;
 }
 
 /** Events overlapping [from, to] (ISO days), for one buoy. */
@@ -52,7 +67,7 @@ export interface Band {
 
 /**
  * The band to shade on each day of each heatwave: from the threshold up to the
- * temperature. Days in a joined gap can sit below the threshold, so the band
+ * daily mean. Days in a joined gap can sit below the threshold, so the band
  * is clamped to zero height there.
  */
 export function heatwaveBands(days: DayPoint[], events: HeatwaveEvent[]): Band[] {
@@ -64,7 +79,7 @@ export function heatwaveBands(days: DayPoint[], events: HeatwaveEvent[]): Band[]
       .map((day) => ({
         date: day.date,
         low: day.threshold,
-        high: day.temperature === null ? day.threshold : Math.max(day.temperature, day.threshold),
+        high: day.value === null ? day.threshold : Math.max(day.value, day.threshold),
         event: index,
         category: event.category,
       }));
@@ -86,6 +101,7 @@ export function parseEventParams(params: URLSearchParams): { filters: EventFilte
       depth: number("depth"),
       year: number("year"),
       minCategory: Math.min(Math.max(number("min_category") ?? 1, 1), 4),
+      origin: ORIGINS.find((origin) => origin === params.get("origin")) ?? null,
     },
     sort: { key: SORT_KEYS.includes(key) ? key : "start_date", descending: params.get("order") !== "asc" },
   };
@@ -97,6 +113,7 @@ export function toEventParams(filters: EventFilters, sort: Sort): URLSearchParam
   if (filters.depth !== null) params.set("depth", String(filters.depth));
   if (filters.year !== null) params.set("year", String(filters.year));
   if (filters.minCategory > 1) params.set("min_category", String(filters.minCategory));
+  if (filters.origin) params.set("origin", filters.origin);
   if (sort.key !== "start_date") params.set("sort", sort.key);
   if (!sort.descending) params.set("order", "asc");
   return params;

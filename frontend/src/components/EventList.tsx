@@ -1,14 +1,16 @@
+import { Link } from "react-router";
+
 import type { HeatwaveEvent } from "../api/types";
-import { categories } from "../lib/colors";
+import { eventPath } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
-import { Swatch } from "./StateBadge";
+import { CategoryLabel, OriginLabel } from "./Label";
 
 interface Props {
   events: HeatwaveEvent[];
   onZoom: (event: HeatwaveEvent) => void;
 }
 
-/** A compact list of heatwaves; each one zooms the charts to itself. */
+/** A compact list of heatwaves; each one zooms the charts to itself, or opens its own page. */
 export function EventList({ events, onZoom }: Props) {
   if (!events.length) return <p className="caption">No heatwaves in this period.</p>;
   return (
@@ -16,10 +18,7 @@ export function EventList({ events, onZoom }: Props) {
       {events.map((event) => (
         <li key={`${event.depth}-${event.start_date}`}>
           <button type="button" onClick={() => onZoom(event)}>
-            <span className="state">
-              <Swatch color={categories[event.category].color} />
-              {event.category_name}
-            </span>
+            <CategoryLabel category={event.category} />
             <span>{event.depth} m</span>
             <span>
               {formatDate(event.start_date)} – {formatDate(event.end_date)}
@@ -27,6 +26,9 @@ export function EventList({ events, onZoom }: Props) {
             <span className="num">{event.duration} days</span>
             <span className="num">peak {formatSigned(event.max_intensity)}</span>
           </button>
+          <Link to={eventPath(event)} className="event-origin">
+            {event.origin ? <OriginLabel origin={event.origin} /> : "Details"}
+          </Link>
         </li>
       ))}
     </ul>

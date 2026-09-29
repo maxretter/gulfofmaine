@@ -48,7 +48,7 @@ def test_daily_series_keeps_gaps_as_nulls(client, heatwave_now):
     assert response.status_code == 200
     days = response.json()
     assert len(days) == 41
-    assert sum(day["temperature"] is None for day in days) == 5
+    assert sum(day["value"] is None for day in days) == 5
     assert all(day["threshold"] > day["climatology"] for day in days)
 
 

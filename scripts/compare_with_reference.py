@@ -62,7 +62,11 @@ def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
     analysis = hobday.analyse(daily, BASELINE)
     ours = {(e.start, e.end, e.category) for e in analysis.events}
 
-    days = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
+    # The reference needs its climatology period inside the series, so a record
+    # shorter than the baseline (N01's, 2004-2021) is padded with missing days.
+    first = min(daily.index.min(), pd.Timestamp(f"{BASELINE[0]}-01-01"))
+    last = max(daily.index.max(), pd.Timestamp(f"{BASELINE[1]}-12-31"))
+    days = pd.date_range(first, last, freq="D")
     ordinals = np.array([day.toordinal() for day in days.date])
     found, clim = reference.detect(
         ordinals,
@@ -76,7 +80,8 @@ def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
         for s, e, c in zip(found["time_start"], found["time_end"], found["category"], strict=True)
     }
 
-    threshold_gap = np.nanmax(np.abs(clim["thresh"] - analysis.frame["threshold"].to_numpy()))
+    thresholds = pd.Series(clim["thresh"], index=days).reindex(analysis.frame.index)
+    threshold_gap = np.nanmax(np.abs(thresholds - analysis.frame["threshold"]))
     print(
         f"{dataset_id}: {len(ours)} events here, {len(theirs)} in the reference; "
         f"thresholds agree to {threshold_gap:.3f} °C"

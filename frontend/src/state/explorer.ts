@@ -1,7 +1,9 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router";
 
+import type { HeatwaveEvent } from "../api/types";
 import { isDay } from "../lib/dates";
+import { eventRange } from "../lib/events";
 
 /** The depths the map can show. Each buoy's own depths come from the API and can include others. */
 export const DEPTHS = [1, 20, 50] as const;
@@ -45,6 +47,12 @@ export function toSearchParams(state: ExplorerState): URLSearchParams {
     params.set("to", state.to);
   }
   return params;
+}
+
+/** The explorer zoomed to a heatwave, at its buoy and depth. */
+export function explorerPath(event: HeatwaveEvent): string {
+  const params = toSearchParams({ buoy: event.buoy_id, depth: event.depth, ...eventRange(event) });
+  return `/?${params}#detail`;
 }
 
 /**

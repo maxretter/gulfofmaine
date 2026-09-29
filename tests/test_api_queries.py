@@ -129,7 +129,7 @@ def test_daily_series_serves_the_satellite_at_depth_0(client):
     days = client.get("/api/buoys/B01/0/daily?start=2021-07-01&end=2021-07-10").json()
 
     assert len(days) == 10
-    assert all(day["temperature"] > day["threshold"] for day in days[4:])
+    assert all(day["value"] > day["threshold"] for day in days[4:])
 
 
 def test_agreement_compares_a_depth_with_the_satellite_over_days_both_observed(client):

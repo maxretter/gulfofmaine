@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, ScrollRestoration } from "react-router";
 
 import { useBuoys } from "../api/queries";
+import { latest } from "../lib/dates";
 import { formatDate } from "../lib/format";
 
 export function Layout() {
@@ -17,6 +18,7 @@ export function Layout() {
               Explorer
             </NavLink>
             <NavLink to="/events">Heatwaves</NavLink>
+            <NavLink to="/origins">Origins</NavLink>
             <NavLink to="/methods">Methods</NavLink>
             <a href="/docs">API</a>
             <a href="https://github.com/maxretter/gulfofmaine">Source</a>
@@ -35,8 +37,8 @@ export function Layout() {
 function Footer() {
   const buoys = useBuoys();
   const series = buoys.data?.flatMap((b) => b.series) ?? [];
-  const dataThrough = series.map((s) => s.date).reduce<string | null>((a, b) => (b && (!a || b > a) ? b : a), null);
-  const checked = series.map((s) => s.synced_at).reduce<string | null>((a, b) => (b && (!a || b > a) ? b : a), null);
+  const dataThrough = latest(series.map((s) => s.date));
+  const checked = latest(series.map((s) => s.synced_at));
   return (
     <footer className="site-footer">
       <div className="wrap">

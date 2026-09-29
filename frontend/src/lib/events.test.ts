@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { HeatwaveEvent } from "../api/types";
-import { filterEvents, heatwaveBands, parseEventParams, sortEvents, toEventParams } from "./events";
+import {
+  eventPath,
+  eventRange,
+  filterEvents,
+  heatwaveBands,
+  parseEventParams,
+  sortEvents,
+  toEventParams,
+} from "./events";
 
 function event(overrides: Partial<HeatwaveEvent>): HeatwaveEvent {
   return {
@@ -15,18 +23,19 @@ function event(overrides: Partial<HeatwaveEvent>): HeatwaveEvent {
     mean_intensity: 1.5,
     category: 1,
     category_name: "Moderate",
+    origin: null,
     ...overrides,
   };
 }
 
 const events = [
-  event({ start_date: "2012-05-29", end_date: "2012-10-14", duration: 139, buoy_id: "I01", depth: 50 }),
+  event({ start_date: "2012-05-29", end_date: "2012-10-14", duration: 139, buoy_id: "I01", depth: 50, origin: "surface" }),
   event({ start_date: "2020-12-20", end_date: "2021-01-12", duration: 24, category: 2 }),
   event({ start_date: "2021-06-15", end_date: "2021-11-24", duration: 163, buoy_id: "F01", depth: 20 }),
 ];
 
 describe("filterEvents", () => {
-  const none = { buoy: null, depth: null, year: null, minCategory: 1 };
+  const none = { buoy: null, depth: null, year: null, minCategory: 1, origin: null };
 
   it("matches a year by overlap, so events crossing New Year count in both", () => {
     expect(filterEvents(events, { ...none, year: 2021 }).map((e) => e.start_date)).toEqual([
@@ -40,6 +49,11 @@ describe("filterEvents", () => {
     expect(filterEvents(events, { ...none, buoy: "F01", depth: 20 })).toHaveLength(1);
     expect(filterEvents(events, { ...none, minCategory: 2 }).map((e) => e.category)).toEqual([2]);
   });
+
+  it("filters by origin, which only some depths have", () => {
+    expect(filterEvents(events, { ...none, origin: "surface" }).map((e) => e.buoy_id)).toEqual(["I01"]);
+    expect(filterEvents(events, { ...none, origin: "offshore" })).toEqual([]);
+  });
 });
 
 describe("sortEvents", () => {
@@ -52,20 +66,24 @@ describe("sortEvents", () => {
 
 describe("event URL params", () => {
   it("round-trip, clamping the category and ignoring unknown sorts", () => {
-    const { filters, sort } = parseEventParams(new URLSearchParams("buoy=f01&depth=20&min_category=9&sort=nope"));
-    expect(filters).toEqual({ buoy: "F01", depth: 20, year: null, minCategory: 4 });
+    const { filters, sort } = parseEventParams(
+      new URLSearchParams("buoy=f01&depth=20&min_category=9&sort=nope&origin=offshore"),
+    );
+    expect(filters).toEqual({ buoy: "F01", depth: 20, year: null, minCategory: 4, origin: "offshore" });
     expect(sort).toEqual({ key: "start_date", descending: true });
-    expect(toEventParams(filters, sort).toString()).toBe("buoy=F01&depth=20&min_category=4");
+    expect(toEventParams(filters, sort).toString()).toBe("buoy=F01&depth=20&min_category=4&origin=offshore");
+    expect(parseEventParams(new URLSearchParams("origin=tropical")).filters.origin).toBeNull();
   });
 });
 
 describe("heatwaveBands", () => {
   it("shades from the threshold up, and not at all on joined days below it", () => {
-    const day = (date: string, temperature: number | null) => ({
+    const day = (date: string, value: number | null) => ({
       date: new Date(`${date}T00:00:00Z`),
-      temperature,
+      value,
       climatology: 10,
       threshold: 11,
+      anomaly: value === null ? null : value - 10,
     });
     const days = [day("2021-06-30", 12), day("2021-07-01", 12.5), day("2021-07-02", 10.5), day("2021-07-03", null)];
 
@@ -76,5 +94,21 @@ describe("heatwaveBands", () => {
       [11, 11],
       [11, 11],
     ]);
+  });
+});
+
+describe("eventRange", () => {
+  it("pads an event by half its length, and at least two weeks", () => {
+    expect(eventRange(event({ duration: 10 }))).toEqual({ from: "2021-06-17", to: "2021-07-24" });
+    expect(eventRange(event({ start_date: "2021-06-15", end_date: "2021-11-24", duration: 163 }))).toEqual({
+      from: "2021-03-25",
+      to: "2022-02-14",
+    });
+  });
+});
+
+describe("eventPath", () => {
+  it("addresses an event by buoy, depth and start date, as the API does", () => {
+    expect(eventPath(event({ buoy_id: "A01", depth: 50, start_date: "2021-04-14" }))).toBe("/events/A01/50/2021-04-14");
   });
 });

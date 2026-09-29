@@ -1,9 +1,10 @@
 # Gulf of Maine heatwaves, below the surface
 
-Live marine heatwave status at 1, 20 and 50 metres on six University of Maine
+Live marine heatwave status at 1, 20 and 50 metres on seven University of Maine
 buoys in the Gulf of Maine, with the full record back to 2001, set beside the
-satellite record at each buoy. A Python job reads NERACOOS's ERDDAP server (and
-NOAA's, for the satellite) hourly and applies the standard marine heatwave
+satellite record at each buoy, and a label on every heatwave at 20 and 50 m for
+where its heat likely came from. A Python job reads NERACOOS's ERDDAP server
+(and NOAA's, for the satellite) hourly and applies the standard marine heatwave
 definition (Hobday et al. 2016) to each depth; a FastAPI JSON API serves the
 results to a React app for exploring them.
 
@@ -27,9 +28,20 @@ surface above. At 1 m, where the two measure nearly the same water, that share
 is 35%, so the gap at depth is about twice what two surface records alone
 produce.
 
-The record is striking. In 2021, the buoys' 20 m and 50 m sensors together
-logged 1,046 and 1,033 heatwave days, against 566 at 1 m. The longest event in
-the record ran 163 days at 20 m at F01 (West Penobscot Bay), from June to
+Heat reaches depth in two ways: warm, salty slope water arriving from
+offshore, or surface heat mixed down. Salinity, the water at 100–250 m in
+Jordan Basin, and the order in which the buoys warmed tell them apart, and
+plain rules turn that evidence into a label for each heatwave at 20 and 50 m,
+or Unclear when it disagrees. The 2021 heatwave comes out offshore: it began at
+M01 in January and reached A01 in April, in salty water. Of the 77 heatwaves at
+20 and 50 m that began that year, 46 are offshore and 2 surface. The 2012
+onset, after a warm winter, began in the west and comes out surface. Across the whole
+record about half are Unclear, and the site says so.
+
+The record is striking. Heatwaves that began in 2021 lasted 1,076 days in all at
+20 m and 1,033 at 50 m, summed over the buoys, against 571 at 1 m. The longest
+events in the record ran 165 days at 150 m in Jordan Basin (M01), from January
+to June 2023, and 163 days at 20 m at F01 (West Penobscot Bay), from June to
 November 2021. (Figures as of 2026-09-28.)
 
 ![Detail panel for F01 in 2021: the full record with a brushed range, and daily temperature at three depths against the normal and heatwave threshold](docs/detail.png)
@@ -50,9 +62,10 @@ CoastWatch ERDDAP ─────┘
   hour the sync job asks ERDDAP for the newest stamp and the span of days
   touched since its last visit (two tiny requests, reduced server-side with
   `orderByMax` and `orderByMinMax`), then downloads only those whole days as
-  NetCDF. When UMaine replaces real-time data with post-recovery data, the
-  reprocessed days come in the same way. The first run reads about 25 years
-  for 18 series in under a minute.
+  NetCDF, every variable of a dataset in one request. When UMaine replaces
+  real-time data with post-recovery data, the reprocessed days come in the same
+  way. The first run reads about 25 years of temperature and salinity for 25
+  buoy depths in under a minute and a half.
 - **Satellite sea surface temperature** (`GriddapSource` in the same file).
   NOAA OISST v2.1 from CoastWatch's ERDDAP, in the nearest quarter-degree cell
   with data to each buoy (OISST masks coastal cells as land). One request
@@ -71,9 +84,20 @@ CoastWatch ERDDAP ─────┘
   from an 11-day window pooled over 2003–2022 and smoothed over 31 days;
   events are five or more days above the threshold, joined across gaps of up to
   two days; categories run Moderate to Extreme.
-- **Validated against the reference implementation.** On all 18 buoy/depth
-  records, the detected events (688 of them, with their dates and categories)
-  are identical to those from Eric Oliver's
+- **Where the heat came from** ([`heatwaves/origin.py`](heatwaves/origin.py)).
+  Five signals, read from 30 days before a heatwave's onset to 14 after, each
+  vote offshore, surface, or not at all: the salinity anomaly at its depth; a
+  heatwave at 1 m beforehand; whether the 1 m minus depth temperature
+  difference holds or collapses; whether M01's water at 100–250 m was in a
+  heatwave; and whether N01 or M01 warmed before A01 or B01. A label needs two
+  more votes than the other side, else Unclear. The rules are pure functions,
+  unit-tested on synthetic series, checked against the 2021 and 2012 onsets
+  before any UI existed, and their thresholds are served at
+  `/api/origin/rules` so the Methods page can't drift from the code. Labels and
+  their evidence are stored on each event and recomputed with it.
+- **Validated against the reference implementation.** On all 25 buoy/depth
+  temperature records, the detected events (856 of them, with their dates and
+  categories) are identical to those from Eric Oliver's
   [marineHeatWaves](https://github.com/ecjoliver/marineHeatWaves), and the
   thresholds agree to within 0.005 °C. The comparison
   script is [`scripts/compare_with_reference.py`](scripts/compare_with_reference.py).
@@ -101,17 +125,28 @@ Vite. Everything on screen is linked:
   each year's heatwave days at 20 and 50 m into days the satellite also saw a
   heatwave and days it saw none. The explorer leads with the share for 50 m,
   beside the same share at 1 m as a yardstick.
-- **Heatwaves explorer** (`/events`). All ~690 events, filterable by buoy, depth,
-  year and category and sortable by date, length, intensity or category, with
-  the filters in the URL. Each row opens the explorer zoomed to that event.
+- **Heatwaves explorer** (`/events`). All ~860 events, filterable by buoy, depth,
+  year, category and origin and sortable by date, length, intensity or category,
+  with the filters in the URL. Each row opens that heatwave's page.
+- **A page per heatwave** (`/events/A01/50/2021-04-14`, addressed as the API
+  addresses it). Its origin, with each of the five signals as a small chart
+  over the onset window, its vote and a sentence on what it measured, and a
+  temperature–salinity diagram of the water before and after the onset.
+- **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
+  stacked by origin with Unclear kept in view; click a year to map it. The map
+  plays the year day by day, each buoy coloured by its anomaly and ringed while
+  in a heatwave, over a strip of every buoy's year from east to west, which
+  shows a heatwave travelling from Jordan Basin to Massachusetts Bay at a
+  glance and doubles as the scrubber.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one
 small React frame that handles width, loading, errors and the table view; the
 brush is d3-brush on top of a Plot chart. Every chart has a table view. Data
 colours come from two ordinal ramps checked for lightness order, hue spread and
-contrast, and the satellite's colours were checked the same way against the
-ones beside them.
+contrast, and the satellite's and the origins' colours were checked the same
+way against the ones beside them; anomalies use a blue–grey–orange diverging
+scale.
 
 ### API
 
@@ -119,8 +154,11 @@ ones beside them.
 | --- | --- |
 | `GET /api/buoys` | Every buoy with the latest conditions at each depth, and the satellite's with its grid cell |
 | `GET /api/buoys/{id}` | One buoy |
-| `GET /api/buoys/{id}/{depth}/daily?start=&end=` | Daily mean, normal and threshold; gaps are `null`; depth 0 is the satellite |
-| `GET /api/events?buoy_id=&depth=&year=&min_category=` | Heatwaves at the buoys, newest first |
+| `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`; gaps are `null`; depth 0 is the satellite |
+| `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin |
+| `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
+| `GET /api/onsets?year=&depth=` | Each buoy's first heatwave of a year, and its daily anomaly and heatwave days |
+| `GET /api/origin/rules` | The thresholds the origin labels come from |
 | `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
 | `GET /healthz` | 200 while the sync job is current, 503 once it falls behind |
@@ -179,6 +217,7 @@ Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 ```
 heatwaves/
   hobday.py      heatwave science: climatology, events, status (no I/O)
+  origin.py      where a heatwave's heat came from: signals, votes, label (no I/O)
   qc.py          quality flags and daily means, for any variable (no I/O)
   compare.py     buoy against satellite heatwave days (no I/O)
   erddap.py      the few ERDDAP tabledap and griddap requests the app makes
@@ -189,7 +228,7 @@ heatwaves/
   api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
-  pages/         explorer, heatwaves list, methods
+  pages/         explorer, heatwaves list, one heatwave, origins, methods
   components/    map, heatmap, range brush, depth charts, tables
   api/           typed API client and TanStack Query hooks
   state/         explorer view <-> URL
@@ -206,8 +245,13 @@ tests/           backend tests; frontend tests sit beside their code
   the Gulf warms, which is the point.
 - **Heat at depth isn't always new heat.** Autumn storms mix warm surface water
   down, pushing 50 m temperatures well above normal within a day or two. The
-  Methods page says so; a heatwave there is still real for anything living at
-  that depth.
+  origin labels say which heatwaves look like that; a heatwave there is still
+  real for anything living at that depth.
+- **Rules, not a model, for origins.** Every label has to be explainable on the
+  page, so it comes from five thresholds and a vote rather than anything fitted.
+  The cost is a lot of Unclear (about half), which the site shows rather than
+  hides. The retired buoys (N01 since 2021, M01 since 2025) mean recent
+  heatwaves have fewer signals to go on.
 - **A separate frontend, one origin.** The API serves only JSON; the React app is
   static files behind Caddy, which proxies `/api`. No CORS configuration, and
   the two can be deployed and scaled independently. The trade-off is that the
@@ -223,7 +267,7 @@ change notifications instead of polling.
 
 ## Data and credits
 
-Temperature data from buoys operated by the
+Temperature and salinity data from buoys operated by the
 [University of Maine Physical Oceanography Group](https://gyre.umeoce.maine.edu),
 funded in part by NOAA through [NERACOOS](https://neracoos.org) and U.S. IOOS,
 served by [NERACOOS ERDDAP](https://data.neracoos.org/erddap). The providers'
