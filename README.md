@@ -155,8 +155,8 @@ works:
 - **A page per buoy** (`/buoys/F01?depth=20&from=2021-05-01&to=2021-12-31`).
   Its latest readings and status at each depth, and its record: a strip of the
   whole record at one depth, with heatwaves shaded, sits above the detailed
-  charts; drag across it to pick any period. Presets and the heatwave list move
-  the brush too. Links into the single-page explorer this replaced
+  charts; drag across it to pick any period, or choose one with the presets, a
+  year, or from and to dates. The heatwave list moves the brush too. Links into the single-page explorer this replaced
   (`/?buoy=F01&…`) redirect here.
 - **Synchronized hover.** One chart per depth shares a time axis; hovering any of
   them moves a crosshair across all three and reads out every depth's

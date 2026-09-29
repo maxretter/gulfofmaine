@@ -3,12 +3,13 @@ import { Link, useParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
 import type { Buoy, Condition, HeatwaveEvent } from "../api/types";
+import { DateField } from "../components/DateField";
 import { DepthCharts, SeriesLegend } from "../components/DepthCharts";
 import { EventList } from "../components/EventList";
 import { RangeBrush } from "../components/RangeBrush";
 import { SatelliteMisses } from "../components/SatelliteMisses";
 import { StateBadge } from "../components/StateBadge";
-import { addDays, daysBetween, earliest, latest, maxDay, minDay } from "../lib/dates";
+import { addDays, daysBetween, earliest, latest, maxDay, minDay, wholeYear, yearSpan } from "../lib/dates";
 import { eventRange, eventsInRange } from "../lib/events";
 import { formatDate, formatList, formatSigned, formatTemp, formatTime } from "../lib/format";
 import { useBuoyView } from "../state/buoyView";
@@ -180,6 +181,9 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
     const { from, to } = eventRange(event);
     onRange(from, to);
   };
+  const lastYear = Number(lastDate.slice(0, 4));
+  const years = Array.from({ length: lastYear - Number(firstDate.slice(0, 4)) + 1 }, (_, i) => lastYear - i);
+  const year = wholeYear(from, to, firstDate, lastDate);
 
   return (
     <>
@@ -190,7 +194,7 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
         </p>
       </div>
 
-      <div className="range-head">
+      <div className="range-controls">
         <div className="presets" role="group" aria-label="Period">
           {presets.map((preset) => {
             const start = maxDay(preset.from, firstDate);
@@ -206,6 +210,40 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
             );
           })}
         </div>
+        <label className="field">
+          <span className="filter-label">Year</span>
+          <select
+            className="select"
+            value={year ?? ""}
+            onChange={(e) => {
+              const span = yearSpan(Number(e.target.value), firstDate, lastDate);
+              onRange(span.from, span.to);
+            }}
+          >
+            {year === null && <option value="">–</option>}
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="field-group" role="group" aria-label="Dates">
+          <label className="field">
+            <span className="filter-label">From</span>
+            <DateField value={from} min={firstDate} max={addDays(to, -1)} onCommit={(day) => onRange(day, to)} />
+          </label>
+          <label className="field">
+            <span className="filter-label">To</span>
+            <DateField value={to} min={addDays(from, 1)} max={lastDate} onCommit={(day) => onRange(from, day)} />
+          </label>
+        </div>
+      </div>
+
+      <div className="range-head">
+        <p className="caption">
+          The whole record at {depth} m, with its heatwaves shaded. Drag across it to choose a period.
+        </p>
         {buoy.series.length > 1 && (
           <div className="filters" role="group" aria-label="Depth of the record strip">
             <span className="filter-label">Strip at</span>
@@ -229,10 +267,6 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
         events={events.filter((e) => e.depth === depth)}
         onChange={onBrush}
       />
-      <p className="caption">
-        The whole record at {depth} m, with its heatwaves shaded. Drag across it to choose a period.
-      </p>
-
       <SeriesLegend buoy={buoy} />
       <DepthCharts buoy={buoy} from={from} to={to} events={events} />
 

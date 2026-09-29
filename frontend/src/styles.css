@@ -209,8 +209,15 @@ td .swatch { position: relative; top: 1px; }
   .latest .tile-value { font-size: 1.6rem; }
 }
 
-.range-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.5rem; }
-.range-head .filters { margin: 0; }
+/* Choosing the period: presets, a year, or two dates. */
+.range-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-bottom: 1rem; }
+.field, .field-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+.field { gap: 0.5rem; }
+.date-input { font-variant-numeric: tabular-nums; }
+/* On phones the fields stack; a common label width lines their inputs up. */
+@media (max-width: 640px) { .range-controls .field .filter-label { min-width: 2.75rem; } }
+.range-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.25rem; }
+.range-head .filters, .range-head .caption { margin: 0; }
 .range-label { margin: 0; font-size: 0.9rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .range-brush { margin-bottom: 0.25rem; }
 .range-brush .selection { fill: var(--ink); fill-opacity: 0.08; stroke: var(--ink); stroke-opacity: 0.6; }

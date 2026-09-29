@@ -41,3 +41,15 @@ export function latest(values: (string | null | undefined)[]): string | null {
 export function earliest(values: (string | null | undefined)[]): string | null {
   return values.reduce<string | null>((found, value) => (value && (!found || value < found) ? value : found), null);
 }
+
+/** A calendar year, clamped to a record running from `first` to `last`. */
+export function yearSpan(year: number, first: string, last: string): { from: string; to: string } {
+  return { from: maxDay(`${year}-01-01`, first), to: minDay(`${year}-12-31`, last) };
+}
+
+/** The year [from, to] spans exactly, as `yearSpan` gives it, or null when it isn't one whole year. */
+export function wholeYear(from: string, to: string, first: string, last: string): number | null {
+  const year = Number(from.slice(0, 4));
+  const span = yearSpan(year, first, last);
+  return span.from === from && span.to === to ? year : null;
+}
