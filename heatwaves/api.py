@@ -10,7 +10,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
 from fastapi import Path as PathParameter
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import extract, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -32,6 +32,14 @@ SOURCES = connect(httpx.Client())
 # satellite's are at depth 0, and appear only where named.
 TEMPERATURE = Series.variable == "temperature"
 AT_BUOY = TEMPERATURE & (Series.source == "buoy")
+
+# No record begins before this day; heatwaves.sources reads the satellite from it.
+FIRST_DAY = dt.date(2001, 1, 1)
+
+# Parameters bounded so that a wild value is a 422, not a database error.
+# Depths are in meters, 0 being the satellite; the deepest sensor is at 250 m.
+Depth = Annotated[int, Field(ge=0, le=1000)]
+Year = Annotated[int, Field(ge=FIRST_DAY.year, le=2100)]
 
 
 class Condition(BaseModel):
@@ -355,10 +363,10 @@ def get_buoy(buoy_id: str, session: SessionDep) -> BuoyOut:
 @router.get("/buoys/{buoy_id}/{depth}/daily")
 def daily(
     buoy_id: str,
-    depth: int,
+    depth: Depth,
     session: SessionDep,
-    start: dt.date | None = None,
-    end: dt.date | None = None,
+    start: Annotated[dt.date | None, Field(ge=FIRST_DAY)] = None,
+    end: Annotated[dt.date | None, Field(ge=FIRST_DAY)] = None,
     variable: Variable = "temperature",
 ) -> list[Day]:
     """Daily means of a variable with its climatology and heatwave threshold.
@@ -367,12 +375,19 @@ def daily(
     scale. Depth 0 is the satellite's sea surface temperature at the buoy.
     Defaults to the 365 days ending on the newest observation. Days without
     enough data are included with a null value, so gaps stay visible.
+    `start` and `end` must fall between 2001-01-01, before which no record
+    begins, and a year from today.
     """
     series = get_series(session, buoy_id, depth, variable)
     end = end or series.latest_date or today()
     start = start or end - dt.timedelta(days=364)
     if start > end:
         raise HTTPException(422, "start must be on or before end")
+    # Every day asked for costs a row, whether or not it has data, so the
+    # range is bounded to keep any request to about a full record.
+    last = today() + dt.timedelta(days=365)
+    if end > last:
+        raise HTTPException(422, f"end must be on or before {last}, a year from today")
 
     frame = queries.daily(session, series.id, start, end)
     if frame is None:
@@ -400,8 +415,8 @@ def daily(
 def list_events(
     session: SessionDep,
     buoy_id: str | None = None,
-    depth: int | None = None,
-    year: int | None = None,
+    depth: Depth | None = None,
+    year: Year | None = None,
     min_category: Annotated[int, Query(ge=1, le=4)] = 1,
     origin_: Annotated[Origin | None, Query(alias="origin")] = None,
 ) -> list[EventOut]:
@@ -424,7 +439,7 @@ def list_events(
 
 
 @router.get("/events/{buoy_id}/{depth}/{start}")
-def get_event(buoy_id: str, depth: int, start: dt.date, session: SessionDep) -> EventDetail:
+def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -> EventDetail:
     """One heatwave, with the evidence behind its origin label, day by day.
 
     Heatwaves are addressed by buoy, depth and start date: their database
@@ -503,7 +518,7 @@ def origin_rules() -> OriginRules:
 
 
 @router.get("/onsets")
-def onsets(year: Annotated[int, Query(ge=2001, le=2100)], depth: int, session: SessionDep) -> Onsets:
+def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
     """Every buoy's heatwaves at one depth through a year, for charting that year at every buoy.
 
     For each buoy with a series at `depth`: when its first heatwave starting
@@ -543,7 +558,7 @@ def onsets(year: Annotated[int, Query(ge=2001, le=2100)], depth: int, session: S
 
 
 @router.get("/annual")
-def annual(depth: int, session: SessionDep) -> list[YearSummary]:
+def annual(depth: Depth, session: SessionDep) -> list[YearSummary]:
     """Heatwave days and observed days per buoy and year, at one depth."""
     year = extract("year", DailyMean.date)
     observed = session.execute(
@@ -570,7 +585,7 @@ def annual(depth: int, session: SessionDep) -> list[YearSummary]:
 
 
 @router.get("/stripes")
-def stripes(depth: int, session: SessionDep) -> list[MonthAnomaly]:
+def stripes(depth: Depth, session: SessionDep) -> list[MonthAnomaly]:
     """Each month's temperature against normal at one depth, averaged over the buoys.
 
     A buoy counts toward a month with at least 15 days of data in it, against
@@ -591,7 +606,7 @@ def stripes(depth: int, session: SessionDep) -> list[MonthAnomaly]:
 
 
 @router.get("/agreement")
-def agreement(depth: int, session: SessionDep) -> list[Agreement]:
+def agreement(depth: Depth, session: SessionDep) -> list[Agreement]:
     """How often the satellite saw the heatwaves at one depth, per buoy and year.
 
     Compares each buoy's heatwave days at `depth` with the satellite's at the
@@ -682,7 +697,7 @@ def download_events(format: products.Format, directory: ProductsDir) -> FileResp
 @router.get("/data/{buoy_id}/{depth}.{format}", response_class=FileResponse)
 def download_daily(
     buoy_id: Annotated[str, PathParameter(pattern=r"^[A-Za-z0-9]{1,8}$")],
-    depth: int,
+    depth: Depth,
     format: products.Format,
     directory: ProductsDir,
 ) -> FileResponse:

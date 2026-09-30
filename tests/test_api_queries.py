@@ -90,6 +90,45 @@ def test_daily_series_rejects_a_reversed_range_and_a_series_without_a_normal(cli
     assert client.get("/api/buoys/B01/20/daily").status_code == 404
 
 
+def test_daily_series_runs_from_2001_to_a_year_from_today(client):
+    def daily(start: dt.date | str, end: dt.date | str):
+        return client.get(f"/api/buoys/A01/1/daily?start={start}&end={end}")
+
+    # A heatwave's page asks for two weeks past its onset, which can reach past today.
+    ahead = daily(TODAY, TODAY + dt.timedelta(days=14)).json()
+    assert len(ahead) == 15
+    assert all(day["value"] is None and day["threshold"] > day["climatology"] for day in ahead[1:])
+    longest = daily("2001-01-01", TODAY + dt.timedelta(days=365)).json()
+    assert len(longest) == (TODAY - dt.date(2001, 1, 1)).days + 366
+
+    assert daily("2000-12-31", "2001-12-31").status_code == 422
+    assert daily(TODAY, TODAY + dt.timedelta(days=366)).status_code == 422
+    # A default start counted back from this would be out of the calendar.
+    assert client.get("/api/buoys/A01/1/daily?end=0001-01-01").status_code == 422
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/events?year=0",
+        "/api/events?year=99999",
+        "/api/onsets?year=2000&depth=1",
+        "/api/events?depth=-1",
+        f"/api/events?depth={10**23}",
+        f"/api/events/A01/{10**23}/2021-07-01",
+        f"/api/buoys/A01/{10**23}/daily",
+        f"/api/onsets?year=2021&depth={10**23}",
+        f"/api/annual?depth={10**23}",
+        f"/api/stripes?depth={10**23}",
+        f"/api/agreement?depth={10**23}",
+        f"/api/data/A01/{10**23}.csv",
+    ],
+)
+def test_implausible_years_and_depths_are_rejected(client, path):
+    # Before they reach the calendar or the database's integers.
+    assert client.get(path).status_code == 422
+
+
 def test_events_filter_by_buoy_depth_year_and_category(client):
     def events(query: str = "") -> list[dict]:
         return client.get(f"/api/events?{query}").json()

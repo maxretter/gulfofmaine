@@ -42,6 +42,10 @@ services:
     <<: *backend
     volumes:
       - products:/data/products:ro
+    # A safety net for a runaway request. On a full-size synthetic database, M01's
+    # page over its full record peaked near 230 MB, and 40 of the longest daily
+    # series at once, as many as its thread pool runs, near 330 MB.
+    mem_limit: 1g
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
