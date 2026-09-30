@@ -221,7 +221,7 @@ every page as the site's mark.
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
 | `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |
-| `GET /healthz` | 200 while the sync job is current, 503 once it falls behind |
+| `GET /healthz` | 200 while a buoy still reporting has synced within `SYNC_STALE_AFTER_HOURS` (3), 503 once none has; lists any series behind or never synced, the satellite's and retired buoys' included |
 
 Interactive documentation (OpenAPI) is served at `/docs`.
 

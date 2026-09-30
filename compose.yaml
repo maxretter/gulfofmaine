@@ -45,7 +45,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      # Fails if the sync job has fallen behind, as well as if the API is down.
+      # Fails once no buoy still reporting has synced in SYNC_STALE_AFTER_HOURS (3), as well as if the API is down.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
       interval: 60s
       timeout: 5s

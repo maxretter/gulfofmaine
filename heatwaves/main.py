@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 
-from heatwaves import api, live
+from heatwaves import api, live, state
 from heatwaves.api import SessionDep
 from heatwaves.config import settings
 from heatwaves.models import Series
@@ -73,10 +73,31 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.get("/healthz", include_in_schema=False)
 def healthz(session: SessionDep) -> JSONResponse:
-    """503 until the sync job has run, and again if it stops."""
-    last_sync = session.scalar(select(func.min(Series.synced_at)))
-    healthy = last_sync is not None and api.now() - last_sync < settings.sync_stale_after
+    """503 until the sync job has synced a buoy still reporting, and again once none has lately.
+
+    Every round checks all the buoy depths still reporting, so if none has
+    synced within sync_stale_after, the job, or NERACOOS, has stopped. Anything
+    else behind (one buoy's failing dataset, a retired buoy, the satellite from
+    CoastWatch) doesn't fail the check, but is listed, as is any series never synced.
+    """
+    now = api.now()
+    # Temperature at the buoy depths sync_all checks every round: those whose newest day isn't offline.
+    reporting = api.AT_BUOY & (Series.latest_date >= now.date() - state.OFFLINE_AFTER)
+    last_sync = session.scalar(select(func.max(Series.synced_at)).where(reporting))
+    healthy = last_sync is not None and now - last_sync < settings.sync_stale_after
+    series = session.scalars(
+        select(Series).order_by(Series.buoy_id, Series.source, Series.depth, Series.variable)
+    ).all()
+    synced = {each.label: each.synced_at for each in series if each.synced_at is not None}
+    oldest_sync = min(synced.values(), default=None)
     return JSONResponse(
-        {"status": "ok" if healthy else "stale", "oldest_sync": last_sync.isoformat() if last_sync else None},
+        {
+            "status": "ok" if healthy else "stale",
+            # The newest sync of a buoy still reporting, which the status is judged on.
+            "last_sync": last_sync.isoformat() if last_sync else None,
+            "oldest_sync": oldest_sync.isoformat() if oldest_sync else None,  # of any series
+            "stale": [label for label, at in synced.items() if now - at >= settings.sync_stale_after],
+            "never_synced": [each.label for each in series if each.synced_at is None],
+        },
         status_code=200 if healthy else 503,
     )

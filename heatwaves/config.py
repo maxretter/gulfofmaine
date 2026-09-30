@@ -13,7 +13,7 @@ class Settings:
     coastwatch_url: str  # NOAA CoastWatch, for satellite sea surface temperature
     erddap_timeout: float
     user_agent: str
-    # /healthz fails once the last successful sync is older than this.
+    # /healthz fails once no buoy still reporting has synced within this, and lists any series that hasn't.
     sync_stale_after: dt.timedelta
     # Browsers the live feed serves at once (heatwaves.live).
     live_max_clients: int
