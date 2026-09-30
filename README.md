@@ -188,11 +188,10 @@ works:
   header says whether the feed is connected. The connection reconnects with
   backoff, drops itself if the server's 30-second pings stop, and refetches
   everything on screen once it's back, to cover what it missed.
-- **About** (`/about`). The method behind the heatwaves, their origins and the
-  satellite comparison, what to keep in mind, the API, and every file with its
-  size, the variables in them and how to open one in xarray, pandas or curl,
-  with the sections listed at the top. The old `/methods` and `/data` pages
-  redirect to their sections.
+- **About** (`/about`). How heatwaves are found, the origin rules signal by
+  signal, the data and the satellite comparison, and the API and files, with
+  every file listed. The old `/methods` and `/data` pages redirect to their
+  sections.
 - **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
   stacked by origin with Unclear kept in view; click a year to see it below:
   every buoy's year from east to west, in the order slope water reaches them,

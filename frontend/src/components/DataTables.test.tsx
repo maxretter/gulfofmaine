@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { DataProduct } from "../api/types";
-import { ProductTable, VariableTable } from "./DataTables";
+import { ProductTable } from "./DataTables";
 
 afterEach(cleanup);
 
@@ -37,33 +37,5 @@ describe("ProductTable", () => {
     expect(screen.getByRole("link", { name: "Events table, NetCDF, 100 KB" }).getAttribute("href")).toBe(
       "/api/data/events.nc",
     );
-  });
-});
-
-describe("VariableTable", () => {
-  it("spells out flag values and names the CF standard name", () => {
-    render(
-      <VariableTable
-        variables={[
-          {
-            name: "temperature",
-            long_name: "Sea water temperature, daily mean",
-            units: "degree_Celsius",
-            standard_name: "sea_water_temperature",
-            flag_meanings: null,
-          },
-          {
-            name: "heatwave_origin",
-            long_name: "Where the heat in the marine heatwave likely came from",
-            units: null,
-            standard_name: null,
-            flag_meanings: "none offshore surface unclear",
-          },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText("CF: sea_water_temperature")).toBeTruthy();
-    expect(screen.getByText("0 none, 1 offshore, 2 surface, 3 unclear")).toBeTruthy();
   });
 });

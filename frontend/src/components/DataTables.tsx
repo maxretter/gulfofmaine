@@ -1,4 +1,4 @@
-import type { DataProduct, DataVariable } from "../api/types";
+import type { DataProduct } from "../api/types";
 import { formatBytes } from "../lib/format";
 
 const FORMATS = { nc: "NetCDF", csv: "CSV" } as const;
@@ -74,49 +74,5 @@ function Downloads({ product, label }: { product: DataProduct; label: string }) 
         );
       })}
     </>
-  );
-}
-
-/** CF units as a reader would say them: "1" is practical salinity's (it has no unit), flags have none. */
-function units(variable: DataVariable): string {
-  if (variable.units === "1") return "1 (practical salinity)";
-  return variable.units ?? "flag";
-}
-
-/** The daily files' variables: name and units, then what it is, with flag meanings and the CF standard name. */
-export function VariableTable({ variables }: { variables: DataVariable[] }) {
-  return (
-    <div className="table-scroll">
-      <table className="variables">
-        <thead>
-          <tr>
-            <th scope="col">Variable and units</th>
-            <th scope="col">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {variables.map((variable) => (
-            <tr key={variable.name}>
-              <th scope="row">
-                <code>{variable.name}</code>
-                <span className="secondary">{units(variable)}</span>
-              </th>
-              <td>
-                {variable.long_name}
-                {variable.flag_meanings && (
-                  <span className="secondary">
-                    {variable.flag_meanings
-                      .split(" ")
-                      .map((meaning, value) => `${value} ${meaning}`)
-                      .join(", ")}
-                  </span>
-                )}
-                {variable.standard_name && <span className="secondary">CF: {variable.standard_name}</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

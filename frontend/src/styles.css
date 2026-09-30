@@ -320,13 +320,6 @@ td .swatch { position: relative; top: 1px; }
 .prose h2 { margin-top: 2.5rem; }
 .prose h2[id] { scroll-margin-top: 1.25rem; }
 .prose h3 { margin-top: 2rem; font-size: 1rem; }
-/* The About page's sections, listed under its title. */
-.contents { margin: 2rem 0 0; padding: 0.9rem 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--grid); }
-.contents ol { margin: 0; padding: 0; list-style: none; columns: 2 16rem; column-gap: 2rem; counter-reset: section; }
-.contents li { margin: 0; padding: 0.2rem 0; break-inside: avoid; counter-increment: section; }
-.contents li::before { content: counter(section) "  "; color: var(--muted); font-variant-numeric: tabular-nums; }
-.contents a { text-decoration: none; font-weight: 500; }
-.contents a:hover { text-decoration: underline; }
 /* Long-form text reads in the serif, like an article; tables and code stay in the sans and mono. */
 .prose > p:not(.kicker, .lead), .prose > ul, .prose > ol { font: 400 1.125rem/1.6 var(--serif); }
 .prose li { margin-bottom: 0.6rem; }
