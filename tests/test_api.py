@@ -1,8 +1,12 @@
 import datetime as dt
 
 import pytest
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from heatwaves.main import revalidate_api_responses
 from heatwaves.models import Event, UTCDateTime
 from heatwaves.sync import update_heatwaves
 from tests.conftest import add_series, seasonal_temperatures
@@ -40,13 +44,16 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     assert condition["synced_at"] is not None
 
 
-@pytest.mark.parametrize("path", ["/api/buoys", "/api/events", "/api/buoys/A01/1/daily?start=2003-01-01"])
+@pytest.mark.parametrize(
+    "path", ["/api/buoys", "/api/events", "/api/buoys/A01/1/daily?start=2003-01-01", "/api/data"]
+)
 def test_responses_are_revalidated_by_etag(client, path, heatwave_now):
     # The live feed can change any of them at any moment, so no cache may reuse a copy unchecked.
     first = client.get(path)
     assert first.headers["cache-control"] == "no-cache"
+    [etag] = first.headers.get_list("etag")
 
-    unchanged = client.get(path, headers={"If-None-Match": first.headers["etag"]})
+    unchanged = client.get(path, headers={"If-None-Match": etag})
 
     assert unchanged.status_code == 304
     assert unchanged.content == b""
@@ -64,6 +71,21 @@ def test_a_changed_response_gets_a_new_etag(client, session, heatwave_now):
     assert changed.status_code == 200
     assert changed.headers["etag"] != first.headers["etag"]
     assert changed.json()[0]["series"][0]["reading"] == 18.2
+
+
+def test_the_etag_replaces_one_the_route_set():
+    tagged = FastAPI()
+    tagged.middleware("http")(revalidate_api_responses)
+
+    @tagged.get("/api/tagged")
+    def route() -> JSONResponse:
+        return JSONResponse([], headers={"ETag": '"route"', "Cache-Control": "max-age=60"})
+
+    response = TestClient(tagged).get("/api/tagged")
+
+    [etag] = response.headers.get_list("etag")
+    assert etag != '"route"'
+    assert response.headers.get_list("cache-control") == ["no-cache"]
 
 
 def test_times_come_back_in_utc_whatever_the_database_zone():

@@ -10,9 +10,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import cast
 
 from fastapi import FastAPI, Request, Response
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from heatwaves import api, live, state
 from heatwaves.api import SessionDep
@@ -50,25 +50,36 @@ async def revalidate_api_responses(
 
     The live feed can change any of them at any moment, and a browser
     refetching after a message mustn't be handed a copy from its own cache,
-    or a proxy's. An unchanged response costs a 304 with no body.
+    or a proxy's. An unchanged response costs a 304 with no body. The
+    downloads under /api/data/ are streamed from disk as they are, with the
+    file's own ETag (see api._download), rather than read into memory here.
     """
     response = await call_next(request)
-    if not request.url.path.startswith("/api/") or response.status_code != 200:
+    path = request.url.path
+    if not path.startswith("/api/") or path.startswith("/api/data/") or response.status_code != 200:
         return response
     chunks = [chunk async for chunk in cast(StreamingResponse, response).body_iterator]
     body = b"".join(chunk.encode() if isinstance(chunk, str) else bytes(chunk) for chunk in chunks)
     etag = f'W/"{hashlib.sha256(body).hexdigest()[:20]}"'
     headers = {"ETag": etag, "Cache-Control": "no-cache"}
-    cached = {tag.strip().removeprefix("W/") for tag in request.headers.get("if-none-match", "").split(",")}
-    if etag.removeprefix("W/") in cached:
+    if etag.removeprefix("W/") in api.if_none_match(request):
         return Response(status_code=304, headers=headers)
-    return Response(body, headers={**response.headers, **headers})
+    # Replaces any ETag or Cache-Control the route set, whatever its case, rather than adding a second.
+    response.headers.update(headers)
+    return Response(body, headers=response.headers)
 
 
 # Added last, so it's outermost and compresses what the rest return. The ETag
 # above is of the uncompressed JSON, since gzip's output varies with its timestamp.
-# A buoy's full daily record is ~1 MB of JSON; it compresses about tenfold.
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# A buoy's full daily record is 1.3 MB of JSON. Level 5 gzips it 3.3-fold in
+# about 36 ms; the default, 9, takes 88 ms to make it 2% smaller. The downloads
+# go as they are, so their Content-Length, ETag and byte ranges are of the file's bytes.
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,
+    compresslevel=5,
+    exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, *api.MEDIA_TYPES.values()),
+)
 
 
 @app.get("/healthz", include_in_schema=False)

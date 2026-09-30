@@ -7,7 +7,7 @@ from typing import Annotated, Literal, cast
 
 import httpx
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
 from fastapi import Path as PathParameter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -689,23 +689,42 @@ def data_catalog(directory: ProductsDir) -> DataCatalog:
 
 
 @router.get("/data/events.{format}", response_class=FileResponse)
-def download_events(format: products.Format, directory: ProductsDir) -> FileResponse:
+@router.head("/data/events.{format}", include_in_schema=False)
+def download_events(format: products.Format, directory: ProductsDir, request: Request) -> Response:
     """Every heatwave at the buoys: a CF point file, or a CSV with the fields of /api/events."""
-    return _download(products.events_path(directory, format), format)
+    return _download(products.events_path(directory, format), format, request)
 
 
 @router.get("/data/{buoy_id}/{depth}.{format}", response_class=FileResponse)
+@router.head("/data/{buoy_id}/{depth}.{format}", include_in_schema=False)
 def download_daily(
     buoy_id: Annotated[str, PathParameter(pattern=r"^[A-Za-z0-9]{1,8}$")],
     depth: Depth,
     format: products.Format,
     directory: ProductsDir,
-) -> FileResponse:
+    request: Request,
+) -> Response:
     """A buoy depth's daily series: a CF time series in NetCDF, or CSV. See /api/data for the variables."""
-    return _download(products.daily_path(directory, buoy_id.upper(), depth, format), format)
+    return _download(products.daily_path(directory, buoy_id.upper(), depth, format), format, request)
 
 
-def _download(path: Path, format: products.Format) -> FileResponse:
+def _download(path: Path, format: products.Format, request: Request) -> Response:
+    """The file, with Starlette's ETag and byte ranges, or a 304 if the request has its ETag.
+
+    Like the rest of the API, it's revalidated before a cache reuses it: the
+    sync rewrites the files.
+    """
     if not path.is_file():
         raise HTTPException(404, f"No product {path.name}; it appears after the sync job's next run")
-    return FileResponse(path, media_type=MEDIA_TYPES[format], filename=path.name)
+    headers = {"Cache-Control": "no-cache"}
+    response = FileResponse(
+        path, headers=headers, media_type=MEDIA_TYPES[format], filename=path.name, stat_result=path.stat()
+    )
+    if response.headers["etag"] in if_none_match(request):
+        return Response(status_code=304, headers={"ETag": response.headers["etag"], **headers})
+    return response
+
+
+def if_none_match(request: Request) -> set[str]:
+    """The ETags in a request's If-None-Match, without their W/, since it matches weak ones too."""
+    return {tag.strip().removeprefix("W/") for tag in request.headers.get("if-none-match", "").split(",")}

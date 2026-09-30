@@ -199,6 +199,9 @@ def test_catalog_lists_each_product_in_both_formats(client, directory):
             download = client.get(file["url"])
             assert download.status_code == 200
             assert len(download.content) == file["size"]
+            head = client.head(file["url"])
+            assert (head.status_code, head.content) == (200, b"")
+            assert head.headers["content-length"] == str(file["size"])
     assert catalog["products"][1]["depth"] == 50
     assert [variable["name"] for variable in catalog["variables"]] == list(products.DAILY_VARIABLES)
     assert client.get("/api/data/A01/50.nc").headers["content-type"] == "application/x-netcdf"
@@ -209,8 +212,26 @@ def test_downloads_serve_byte_ranges_and_revalidate(client):
     part = client.get("/api/data/A01/50.nc", headers={"Range": "bytes=0-99"})
     assert (part.status_code, len(part.content)) == (206, 100)
     assert part.content.startswith(b"CDF")  # NetCDF-3
-    etag = client.get("/api/data/A01/50.nc").headers["etag"]
-    assert client.get("/api/data/A01/50.nc", headers={"If-None-Match": etag}).status_code == 304
+    whole = client.get("/api/data/A01/50.nc")
+    [etag] = whole.headers.get_list("etag")
+    assert whole.headers["cache-control"] == "no-cache"
+    unchanged = client.get("/api/data/A01/50.nc", headers={"If-None-Match": etag})
+    assert (unchanged.status_code, unchanged.headers["etag"]) == (304, etag)
+
+    # A download resumed with the ETag it started with gets the rest, not the whole file again.
+    rest = client.get("/api/data/A01/50.nc", headers={"Range": "bytes=100-", "If-Range": etag})
+    assert rest.status_code == 206
+    assert part.content + rest.content == whole.content
+
+
+def test_downloads_go_as_the_files_are(client):
+    # Not gzipped, so the Content-Length, ETag and byte ranges are all of the file's own bytes.
+    download = client.get("/api/data/A01/50.csv", headers={"Accept-Encoding": "gzip"})
+    same_days = client.get("/api/buoys/A01/50/daily", headers={"Accept-Encoding": "gzip"})
+
+    assert "content-encoding" not in download.headers
+    assert download.headers["content-length"] == str(len(download.content))
+    assert same_days.headers["content-encoding"] == "gzip"  # the JSON still is
 
 
 def test_downloads_are_404_until_the_sync_writes_them(client, directory, tmp_path):
