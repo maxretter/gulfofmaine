@@ -35,9 +35,24 @@ export const keys = {
   originRules: ["origin-rules"],
 } as const;
 
+/** A response that wasn't OK, with its status. */
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(path: string, status: number) {
+    super(`${path} returned ${status}`);
+    this.status = status;
+  }
+}
+
+/** Whether a query failed with a 404. For a series' days, that means the series has no normal yet. */
+export function isNotFound(error: Error | null): boolean {
+  return error instanceof HttpError && error.status === 404;
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+  if (!response.ok) throw new HttpError(path, response.status);
   return response.json() as Promise<T>;
 }
 
@@ -112,6 +127,8 @@ function dailyQuery(buoy: string, depth: number, start: string, end: string, var
     },
     // Keep showing the previous range while a new one loads.
     placeholderData: keepPreviousData,
+    // A 404 is a series without a normal: asking again won't change that.
+    retry: (failures: number, error: Error) => !isNotFound(error) && failures < 3,
   };
 }
 

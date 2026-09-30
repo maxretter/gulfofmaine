@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { max, utcDay } from "d3";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 
-import { type DayPoint, useDaily, useDailyByDepth } from "../api/queries";
+import { type DayPoint, isNotFound, useDaily, useDailyByDepth } from "../api/queries";
 import type { Buoy, HeatwaveEvent } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { categories, colors } from "../lib/colors";
@@ -27,6 +27,7 @@ const PLOT_TOP = 10; // px above each panel's plot area, where the crosshair sta
 interface Panel {
   depth: number;
   days: DayPoint[];
+  noNormal: boolean; // the API has no normal for this depth, so no days either
   byDate: Map<string, DayPoint>;
   events: HeatwaveEvent[];
   satellite: DayPoint[]; // drawn on the shallowest panel only
@@ -85,6 +86,7 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
     return {
       depth,
       days,
+      noNormal: isNotFound(results[i].error),
       byDate: new Map(days.map((d) => [formatDay(d.date), d])),
       events: events.filter((e) => e.depth === depth),
       satellite: i === 0 ? satelliteDays : [],
@@ -98,8 +100,9 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
     <Chart
       className="depth-charts"
       loading={results.some((r) => r.isPlaceholderData) || satellite.isPlaceholderData}
-      // The buoy's own series are the chart; without the satellite's it just loses the dashed line.
-      error={results.some((r) => r.isError) && "Couldn't load the temperature series."}
+      // The buoy's own series are the chart; without the satellite's it just loses the dashed line, and a depth
+      // without a normal says so in its own panel.
+      error={results.some((r) => r.isError && !isNotFound(r.error)) && "Couldn't load the temperature series."}
       table={{
         columns: [
           { label: "Date" },
@@ -148,7 +151,12 @@ function Readout({ panels, surface, hover }: ReadoutProps) {
       {panels.map((panel) => {
         const event = activeEvent(panel.events, day);
         return (
-          <ReadoutValue key={panel.depth} label={`${panel.depth} m`} point={panel.byDate.get(day)}>
+          <ReadoutValue
+            key={panel.depth}
+            label={`${panel.depth} m`}
+            point={panel.byDate.get(day)}
+            missing={panel.noNormal ? "no normal" : undefined}
+          >
             {event && <CategoryLabel category={event.category} />}
           </ReadoutValue>
         );
@@ -161,15 +169,16 @@ function Readout({ panels, surface, hover }: ReadoutProps) {
 interface ReadoutValueProps {
   label: string;
   point: DayPoint | undefined;
+  missing?: string; // said in place of a missing value
   children?: ReactNode;
 }
 
-function ReadoutValue({ label, point, children }: ReadoutValueProps) {
+function ReadoutValue({ label, point, missing = "no data", children }: ReadoutValueProps) {
   return (
     <span className="readout-depth">
       <span className="readout-label">{label}</span>
       {point?.value == null ? (
-        "no data"
+        missing
       ) : (
         <>
           {formatTemp(point.value)} <span className="muted">({formatSigned(point.anomaly)})</span>
@@ -234,20 +243,24 @@ function DepthChart({ panel, from, to, width, hover, onHover }: ChartProps) {
       <h3 className="chart-panel-title">
         {panel.depth} m <span className="unit">daily mean, °C</span>
       </h3>
-      <div
-        className="depth-chart"
-        onPointerMove={(event) => {
-          if (!x?.invert) return;
-          const px = event.clientX - event.currentTarget.getBoundingClientRect().left;
-          onHover(px < left || px > right ? null : utcDay.round(x.invert(px)));
-        }}
-        onPointerLeave={() => onHover(null)}
-      >
-        <PlotFigure options={options} onRender={onRender} />
-        {hoverX !== null && hoverX >= left && hoverX <= right && (
-          <div className="crosshair" style={{ top: PLOT_TOP, left: hoverX }} aria-hidden="true" />
-        )}
-      </div>
+      {panel.noNormal ? (
+        <p className="note">No normal for this depth, so it isn't charted.</p>
+      ) : (
+        <div
+          className="depth-chart"
+          onPointerMove={(event) => {
+            if (!x?.invert) return;
+            const px = event.clientX - event.currentTarget.getBoundingClientRect().left;
+            onHover(px < left || px > right ? null : utcDay.round(x.invert(px)));
+          }}
+          onPointerLeave={() => onHover(null)}
+        >
+          <PlotFigure options={options} onRender={onRender} />
+          {hoverX !== null && hoverX >= left && hoverX <= right && (
+            <div className="crosshair" style={{ top: PLOT_TOP, left: hoverX }} aria-hidden="true" />
+          )}
+        </div>
+      )}
     </section>
   );
 }

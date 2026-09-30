@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 
-import { type DayPoint, useBuoys, useDaily, useEvent, useEvents, useOriginRules } from "../api/queries";
+import { type DayPoint, isNotFound, useBuoys, useDaily, useEvent, useEvents, useOriginRules } from "../api/queries";
 import type { Buoy, EventDetail, Evidence, Onset, OriginRules, Signal, SignalDay } from "../api/types";
 import { Chart } from "../components/Chart";
 import { DepthCharts, SeriesLegend } from "../components/DepthCharts";
@@ -30,7 +30,7 @@ export function EventPage() {
   const events = useEvents();
   const rules = useOriginRules();
 
-  if (!valid || event.error?.message.endsWith("404")) return <NotFoundEvent />;
+  if (!valid || isNotFound(event.error)) return <NotFoundEvent />;
   if (event.isPending || rules.isPending) return <p className="note">Loading…</p>;
   if (event.isError || rules.isError) return <p className="note">Couldn't load this heatwave.</p>;
 
@@ -383,6 +383,8 @@ function TSCard({ detail, rules }: CardProps) {
   const to = addDays(detail.start_date, rules.after);
   const temperature = useDaily(detail.buoy_id, detail.depth, from, to);
   const salinity = useDaily(detail.buoy_id, detail.depth, from, to, "salinity");
+  // Temperature has a normal here, since the heatwave was found against it; salinity may not have one yet.
+  const noSalinityNormal = isNotFound(salinity.error);
   const { points, normal } = useMemo(() => pair(temperature.data, salinity.data, detail.start_date), [
     temperature.data,
     salinity.data,
@@ -398,7 +400,10 @@ function TSCard({ detail, rules }: CardProps) {
       <Chart
         className="chart"
         loading={temperature.isPending || salinity.isPending}
-        error={(temperature.isError || salinity.isError) && "Couldn't load the temperature and salinity."}
+        error={
+          (temperature.isError || (salinity.isError && !noSalinityNormal)) && "Couldn't load the temperature and salinity."
+        }
+        empty={noSalinityNormal && `No normal for salinity at ${detail.depth} m, so it isn't charted.`}
         minHeight={320}
         legend={
           <div className="legend">
