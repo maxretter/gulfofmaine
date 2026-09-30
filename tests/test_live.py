@@ -19,7 +19,7 @@ from heatwaves import live, main
 from heatwaves.live import Hub, ReadingMessage, StatusMessage
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
-from heatwaves.state import SeriesState, state_of
+from heatwaves.state import state_of
 from heatwaves.sync import store, sync_series, update_heatwaves
 from tests.conftest import A01_SYNC, add_series, recorded_erddap, seasonal_temperatures
 
@@ -85,15 +85,39 @@ def test_a_sync_announces_a_new_reading_and_a_heatwave_starting(session, normal_
     assert (series.latest_reading_at, series.latest_reading) == (NOW, 17.3)
 
 
-def test_a_sync_that_changes_neither_reading_nor_state_announces_nothing(session, normal_until_yesterday):
+def test_a_sync_announces_a_heatwave_in_progress_that_grows_or_changes(session, normal_until_yesterday):
+    series = normal_until_yesterday
+    warm = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY) + 2.5
+    store(session, [series], download(series, warm[:-1]))
+
+    # A day longer, in the same category: pages showing it would otherwise say it ended yesterday.
+    [longer] = store(session, [series], download(series, warm[-1:]))
+
+    assert isinstance(longer, StatusMessage)
+    assert (longer.previous_state, longer.state) == ("heatwave", "heatwave")
+    assert longer.previous_category == longer.category is not None
+    assert (longer.date, longer.days_above) == (TODAY, 8)
+
+    # Today's mean again, from more hours: the heatwave's intensity changes.
+    [warmer] = store(session, [series], download(series, warm[-1:] + 0.5))
+
+    assert isinstance(warmer, StatusMessage)
+    assert (warmer.previous_state, warmer.state, warmer.date) == ("heatwave", "heatwave", TODAY)
+    assert warmer.previous_category == warmer.category
+
+
+def test_a_sync_that_changes_neither_reading_nor_heatwave_announces_nothing(session, normal_until_yesterday):
     series = normal_until_yesterday
     warm = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY) + 2.5
     store(session, [series], download(series, warm, Reading(NOW, 17.3)))
 
-    # The same days again, one of them revised, and an older reading arriving late.
-    warm.iloc[0] += 0.1
+    # The same days again, as when their rows are stamped anew, and an older reading arriving late.
     assert store(session, [series], download(series, warm, Reading(NOW - dt.timedelta(hours=1), 17.0))) == []
     assert series.latest_reading == 17.3
+
+    # A day before the heatwave revised, still well below the threshold.
+    cool = seasonal_temperatures(str(TODAY - dt.timedelta(days=8)), TODAY - dt.timedelta(days=8)) - 2.1
+    assert store(session, [series], download(series, cool)) == []
 
 
 def test_only_temperature_goes_on_the_feed(session):
@@ -126,18 +150,19 @@ def test_a_buoy_sync_publishes_its_newest_good_reading(monkeypatch, session):
 @pytest.mark.parametrize(
     ("latest", "days_above", "ongoing", "expected"),
     [
-        (None, 0, None, SeriesState("no_data", None)),
-        (TODAY - dt.timedelta(days=4), 9, 2, SeriesState("offline", None)),
-        (TODAY - dt.timedelta(days=3), 9, 2, SeriesState("heatwave", 2)),
-        (TODAY, 3, None, SeriesState("above_threshold", None)),
-        (TODAY, 0, None, SeriesState("normal", None)),
+        (None, 0, None, ("no_data", None)),
+        (TODAY - dt.timedelta(days=4), 9, 2, ("offline", None)),
+        (TODAY - dt.timedelta(days=3), 9, 2, ("heatwave", 2)),
+        (TODAY, 3, None, ("above_threshold", None)),
+        (TODAY, 0, None, ("normal", None)),
     ],
 )
 def test_state_rules(latest, days_above, ongoing, expected):
     series = Series(latest_date=latest, days_above=days_above)
     event = Event(category=ongoing) if ongoing else None
 
-    assert state_of(series, event, TODAY) == expected
+    result = state_of(series, event, TODAY)
+    assert (result.state, result.category) == expected
 
 
 def test_the_feed_relays_messages_and_pings_when_quiet(monkeypatch):

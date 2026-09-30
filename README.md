@@ -217,7 +217,7 @@ every page as the site's mark.
 | `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
-| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series entering or leaving a heatwave, or changing category) and `ping` every 30 s |
+| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series changing state, such as entering or leaving a heatwave, or the dates, category or intensity of its heatwave in progress changing) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
 | `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |

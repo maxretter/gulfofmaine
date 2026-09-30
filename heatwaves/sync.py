@@ -120,8 +120,9 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
     """Replace each series' daily means over the downloaded span, then recompute its heatwaves.
 
     Every heatwave's origin is then judged again, since the evidence for one
-    comes from other series too. Returns the live feed's messages: each
-    newer temperature reading, and each temperature series whose state changed.
+    comes from other series too. Returns the live feed's messages: each newer
+    temperature reading, and each temperature series whose state changed or
+    whose heatwave in progress grew or changed.
     """
     messages: list[live.Message] = []
     for each in series:

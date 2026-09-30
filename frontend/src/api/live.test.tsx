@@ -206,6 +206,8 @@ describe("live messages", () => {
   it("announces a buoy depth entering a heatwave, not a change within one or at the satellite", () => {
     expect(enteredHeatwave(entered)).toBe(true);
     expect(enteredHeatwave({ ...entered, previous_state: "heatwave", category: 2, previous_category: 1 })).toBe(false);
+    // A day longer in the same category: not a new heatwave.
+    expect(enteredHeatwave({ ...entered, previous_state: "heatwave", previous_category: 1, date: "2026-09-29" })).toBe(false);
     expect(enteredHeatwave({ ...entered, depth: 0 })).toBe(false);
     expect(enteredHeatwave({ ...entered, previous_state: "offline" })).toBe(false);
     expect(enteredHeatwave({ ...entered, previous_state: "no_data" })).toBe(false);

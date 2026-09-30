@@ -176,7 +176,10 @@ export interface ReadingMessage {
   temperature: number;
 }
 
-/** A series entered or left a heatwave, or its state or category changed. Depth 0 is the satellite. */
+/**
+ * A series' state changed, or its heatwave in progress did (its dates, category or intensity). A heatwave that only
+ * grew or changed has "heatwave" as both states. Depth 0 is the satellite.
+ */
 export interface StatusMessage {
   type: "status";
   buoy: string;

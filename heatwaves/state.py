@@ -23,6 +23,9 @@ State = Literal["heatwave", "above_threshold", "normal", "offline", "no_data"]
 class SeriesState:
     state: State
     category: int | None  # of the heatwave in progress
+    # The rest of that heatwave as the API lists it: start, end and peak dates, max and mean intensity,
+    # so that a sync comparing states also announces a heatwave that grows a day or changes.
+    heatwave: tuple[dt.date, dt.date, dt.date, float, float] | None = None
 
 
 def state_of(series: Series, ongoing: Event | None, on: dt.date) -> SeriesState:
@@ -32,7 +35,14 @@ def state_of(series: Series, ongoing: Event | None, on: dt.date) -> SeriesState:
     if on - series.latest_date > OFFLINE_AFTER:
         return SeriesState("offline", None)
     if ongoing is not None:
-        return SeriesState("heatwave", ongoing.category)
+        heatwave = (
+            ongoing.start_date,
+            ongoing.end_date,
+            ongoing.peak_date,
+            ongoing.max_intensity,
+            ongoing.mean_intensity,
+        )
+        return SeriesState("heatwave", ongoing.category, heatwave)
     if series.days_above:
         return SeriesState("above_threshold", None)
     return SeriesState("normal", None)

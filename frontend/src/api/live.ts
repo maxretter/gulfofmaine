@@ -68,8 +68,9 @@ export function alertId(alert: StatusMessage): string {
 /**
  * Brings the cache up to date with one message. A reading is written straight into the latest conditions, so it
  * shows at once; they are refetched too, for what a reading can change but doesn't carry (the day's mean, its
- * anomaly), with that buoy's daily series. A status change can add or end a heatwave, so everything built from
- * heatwaves is refetched as well. Only queries on screen refetch now; the rest when next shown.
+ * anomaly), with that buoy's daily series. A status message can mean a heatwave started, ended, grew a day or
+ * changed, so everything built from heatwaves is refetched as well. Only queries on screen refetch now; the rest when
+ * next shown.
  */
 export function applyMessage(queryClient: QueryClient, message: LiveMessage) {
   if (message.type === "ping") return;
