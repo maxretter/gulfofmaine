@@ -95,7 +95,7 @@ class EventOut(BaseModel):
     mean_intensity: float
     category: int
     category_name: str
-    origin: Origin | None  # where the heat likely came from; only at the depths heatwaves.origin covers
+    origin: Origin | None  # the origin label; only at the depths heatwaves.origin covers
 
 
 class Evidence(BaseModel):
@@ -425,7 +425,7 @@ def list_events(
 
 @router.get("/events/{buoy_id}/{depth}/{start}")
 def get_event(buoy_id: str, depth: int, start: dt.date, session: SessionDep) -> EventDetail:
-    """One heatwave, with the evidence for where its heat came from, day by day.
+    """One heatwave, with the evidence behind its origin label, day by day.
 
     Heatwaves are addressed by buoy, depth and start date: their database
     IDs change whenever the sync recomputes them.
@@ -504,7 +504,7 @@ def origin_rules() -> OriginRules:
 
 @router.get("/onsets")
 def onsets(year: Annotated[int, Query(ge=2001, le=2100)], depth: int, session: SessionDep) -> Onsets:
-    """Every buoy's heatwaves at one depth through a year, for mapping how one spread.
+    """Every buoy's heatwaves at one depth through a year, for charting that year at every buoy.
 
     For each buoy with a series at `depth`: when its first heatwave starting
     in the year began, that heatwave's origin, and for each day the

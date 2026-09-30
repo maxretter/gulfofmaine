@@ -115,7 +115,7 @@ function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
   return (
     <section className="card">
       <div className="detail-head">
-        <h2>Where the heat came from</h2>
+        <h2>Offshore or surface?</h2>
         <OriginLabel origin={detail.origin!} />
       </div>
       <p className="caption">
@@ -256,7 +256,7 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
           y: { label: "°C", grid: true, nice: true },
           marks: [
             Plot.ruleY([0], { stroke: colors.axis }),
-            ...threshold(rules.mixed, "mixed", "below"),
+            ...threshold(rules.mixed, formatSigned(rules.mixed), "below"),
             onsetRule,
             Plot.lineY(days, { x: "date", y: "stratification", stroke: colors.observed, strokeWidth: 2 }),
             // The two means the vote compares.
@@ -296,7 +296,7 @@ function OnsetOrder({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
       minHeight={40 + order.length * 18}
       legend={
         <div className="legend">
-          <Label color={sides.offshore}>{rules.offshore_buoys.join(", ")}: offshore side</Label>
+          <Label color={sides.offshore}>{rules.offshore_buoys.join(", ")}: eastern side</Label>
           <Label color={sides.western}>{rules.western_buoys.join(", ")}: western side</Label>
         </div>
       }
@@ -393,8 +393,7 @@ function TSCard({ detail, rules }: CardProps) {
     <section className="card">
       <h2>Temperature and salinity at {detail.depth} m</h2>
       <p className="caption">
-        Each dot is a day around the onset. Water from offshore moves the dots warmer and saltier; heat mixed down
-        from the surface, warmer only. The dashed line is the normal.
+        Each dot is a day around the onset. The dashed line is the normal for the same days.
       </p>
       <Chart
         className="chart"

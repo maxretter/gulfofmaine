@@ -58,7 +58,7 @@ export function EventFigures({ event, events }: { event: HeatwaveEvent; events: 
           {event.category_name}
         </p>
         <p className="tile-line">
-          At its peak, {multiple(event.category)} the gap between normal and the heatwave threshold
+          Rose to {multiple(event.category)} the gap between normal and the heatwave threshold
         </p>
         <div className="tile-foot">
           <Link to="/about#heatwaves">How heatwaves are categorized</Link>

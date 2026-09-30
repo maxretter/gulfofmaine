@@ -4,13 +4,12 @@ A series is one variable at one depth on one buoy, from one source. The
 buoys are the UMaine-operated NERACOOS buoys with 17+ years of temperature
 and salinity at fixed depths; names follow each dataset's ERDDAP summary.
 Each buoy also has a satellite series: sea surface temperature from NOAA's
-OISST in the nearest grid cell with data, the record GMRI's Gulf of Maine
-temperature reports use.
+OISST in the nearest grid cell with data.
 
 Two buoys are retired but kept for their history, which heatwaves.origin
 uses to tell where the heat at depth came from: M01, deep in Jordan Basin,
-stopped reporting in September 2025, and N01, in the Northeast Channel
-where slope water enters the Gulf, in October 2021.
+stopped reporting in September 2025, and N01, in the Northeast Channel,
+in October 2021.
 """
 
 from dataclasses import dataclass

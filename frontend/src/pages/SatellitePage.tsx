@@ -36,8 +36,8 @@ export function SatellitePage() {
         <p className="kicker">Satellite gap</p>
         <h1>What the satellite misses</h1>
         <p className="lead">
-          Most heatwave monitoring in the Gulf of Maine uses satellite sea surface temperature, which sees only the top
-          millimeters of water. On the days a buoy logged a heatwave, did the satellite show one at the surface above?{" "}
+          Each buoy is set beside NOAA's satellite record of sea surface temperature in the nearest grid cell. On the
+          days a buoy logged a heatwave, did the satellite show one at the surface?{" "}
           <Link to="/about#satellite">How the comparison is made</Link>.
         </p>
       </section>
@@ -61,7 +61,7 @@ export function SatellitePage() {
                   <p className="tile-delta">
                     of {loading ? "the" : days.toLocaleString()} heatwave days had no heatwave at the surface above.
                     {depth === 1 &&
-                      " Buoy and satellite see nearly the same water here, so this is how often two surface records disagree anyway."}
+                      " The buoys' 1 m temperatures track the satellite's closely, so this is the share to compare the others with."}
                   </p>
                 </div>
               );

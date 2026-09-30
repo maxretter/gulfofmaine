@@ -5,7 +5,7 @@ module (the implementation accompanying Hobday et al. 2016, pinned to a
 commit), runs both on the same daily series and reports any difference in
 the detected events.
 
-    uv run --with scipy scripts/compare_with_reference.py A01_ocean_001m B01_ocean_050m
+    PYTHONPATH=. uv run --with scipy scripts/compare_with_reference.py A01_ocean_001m B01_ocean_050m
 
 marineHeatWaves predates NumPy 2, so two one-line compatibility fixes are
 applied to the downloaded copy before it's imported; the algorithm is

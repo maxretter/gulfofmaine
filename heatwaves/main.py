@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Gulf of Maine heatwaves",
-    summary="Marine heatwaves at NERACOOS buoys, at 1, 20 and 50 m, compared with NOAA's satellite record.",
+    summary="Marine heatwaves at University of Maine buoys at 1, 20 and 50 m, beside NOAA's satellite data.",
     version="0.2.0",
     redoc_url=None,
     lifespan=lifespan,

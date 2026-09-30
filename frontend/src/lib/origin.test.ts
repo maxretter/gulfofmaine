@@ -60,11 +60,24 @@ describe("reading", () => {
     );
   });
 
-  it("calls onsets within the together window together, and flags a drifting salinity sensor", () => {
+  it("says why 1 m's heatwave days did or didn't vote", () => {
+    const quiet = { ...offshore, surface_heatwave_days: 0 };
+    const voted = { ...quiet, votes: { ...offshore.votes, surface_heatwave: "offshore" as const } };
+    expect(reading("surface_heatwave", voted, rules, 50)).toBe(
+      "No heatwave at 1 m in the 30 days before onset, which votes offshore.",
+    );
+    expect(reading("surface_heatwave", { ...quiet, stratification_before: 0.4 }, rules, 50)).toMatch(
+      /less than \+1\.0 °C warmer than 50 m, so it doesn't vote\.$/,
+    );
+    expect(reading("surface_heatwave", { ...quiet, stratification_before: 3 }, rules, 50)).toMatch(/too few days/);
+    expect(reading("surface_heatwave", { ...offshore, surface_heatwave_days: 6 }, rules, 50)).toMatch(/votes surface\.$/);
+  });
+
+  it("calls onsets within the together window together, and leaves out salinity far below normal", () => {
     const together = { ...offshore, western_onset: "2021-01-20" };
     expect(reading("onset_order", together, rules, 50)).toMatch(/within 7 days of each other: together\.$/);
     const drift = { ...offshore, salinity_anomaly: -2.5 };
-    expect(reading("salinity", drift, rules, 50)).toMatch(/drifting sensor/);
+    expect(reading("salinity", drift, rules, 50)).toMatch(/leave out anything below −1\.00, so it doesn't vote\.$/);
   });
 });
 

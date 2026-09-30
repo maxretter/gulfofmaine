@@ -51,11 +51,12 @@ export function OriginsPage() {
     <>
       <section className="intro">
         <p className="kicker">Origins</p>
-        <h1>Where the heat came from</h1>
+        <h1>Offshore or surface?</h1>
         <p className="lead">
-          Heat reaches 20 and 50 m in two ways: warm, salty slope water flowing in through the Northeast Channel, or
-          surface heat mixed down by wind or the autumn overturn. Five signals label each heatwave, or leave it Unclear
-          when they disagree. <Link to="/about#origin">How the labels are made</Link>.
+          Each heatwave at 20 and 50 m is labeled by five signals read around its start: Offshore when they point to
+          warm water arriving at depth, Surface when they point to heat from the surface reaching down, and Unclear
+          when they don't agree. The labels are this site's own rules of thumb.{" "}
+          <Link to="/about#origin">How the labels are made</Link>.
         </p>
       </section>
 
@@ -84,7 +85,7 @@ export function OriginsPage() {
           />
         </h2>
         <p className="caption">
-          Buoys from east to west, in the order slope water reaches them. Click a heatwave for its evidence, or{" "}
+          Buoys from east to west. Click a heatwave for its evidence, or{" "}
           <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
         {buoys.data ? (

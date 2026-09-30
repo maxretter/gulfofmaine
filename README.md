@@ -2,8 +2,8 @@
 
 Live marine heatwave status at 1, 20 and 50 meters on seven University of Maine
 buoys in the Gulf of Maine, with the full record back to 2001, set beside the
-satellite record at each buoy, and a label on every heatwave at 20 and 50 m for
-where its heat likely came from. A Python job reads NERACOOS's ERDDAP server
+satellite record at each buoy, and a rule-of-thumb label on every heatwave at
+20 and 50 m for where its heat may have come from. A Python job reads NERACOOS's ERDDAP server
 (and NOAA's, for the satellite) every 10 minutes and applies the standard
 marine heatwave definition (Hobday et al. 2016) to each depth; a FastAPI JSON
 API serves the results to a React app for exploring them, and pushes new
@@ -16,35 +16,30 @@ published as CF NetCDF and CSV files, ready for ERDDAP.
 
 ## Why
 
-Most heatwave monitoring in the Gulf of Maine is based on satellite sea-surface
-temperature, which only sees the top few millimeters; below that, reports lean
-on ocean models. The UMaine/NERACOOS buoys have measured temperature directly
-at fixed depths since 2001–2003, but nothing publicly applies the heatwave
-definition to those records. This does, so you can see whether surface heat
-reaches 20 and 50 m, and when heat at depth has no surface signal at all.
+The University of Maine's buoys have measured temperature at fixed depths
+since as early as 2001. This applies the standard marine heatwave definition
+to every depth, so heatwaves at 20 and 50 m can be seen beside those at the
+surface.
 
-Each buoy is also compared with NOAA's OISST, the satellite record behind
-GMRI's Gulf of Maine temperature reports, in the nearest grid cell. On 68% of
-the days the buoys logged a heatwave at 50 m, the satellite showed none at the
-surface above. At 1 m, where the two measure nearly the same water, that share
-is 35%, so the gap at depth is about twice what two surface records alone
-produce.
+Each buoy is also compared with NOAA's OISST satellite record of sea surface
+temperature, in the nearest grid cell. On 68% of the days the buoys logged a
+heatwave at 50 m, the satellite showed none at the surface. At 1 m, where the
+buoys' temperatures track the satellite's closely (a daily correlation of
+about 0.99), that share is 35%, so at 50 m it is about twice as high.
 
-Heat reaches depth in two ways: warm, salty slope water arriving from
-offshore, or surface heat mixed down. Salinity, the water at 100–250 m in
-Jordan Basin, and the order in which the buoys warmed tell them apart, and
-plain rules turn that evidence into a label for each heatwave at 20 and 50 m,
-or Unclear when it disagrees. The 2021 heatwave comes out offshore: it began at
-M01 in January and reached A01 in April, in salty water. Of the 77 heatwaves at
-20 and 50 m that began that year, 46 are offshore and 2 surface. The 2012
-onset, after a warm winter, began in the west and comes out surface. Across the whole
-record about half are Unclear, and the site says so.
+Each heatwave at 20 and 50 m also gets a label from five signals: Offshore when
+they point to warm water arriving at depth, Surface when they point to heat
+from the surface reaching down, Unclear when they don't agree. These are this
+project's own rules of thumb, not a published or tested method. Of the 77
+heatwaves at 20 and 50 m that began in 2021, 46 are labeled offshore and 2
+surface; of the 85 that began in 2012, 16 offshore and 31 surface. Across the
+whole record about half are Unclear, and the site says so.
 
-The record is striking. Heatwaves that began in 2021 lasted 1,076 days in all at
-20 m and 1,033 at 50 m, summed over the buoys, against 571 at 1 m. The longest
-events in the record ran 165 days at 150 m in Jordan Basin (M01), from January
-to June 2023, and 163 days at 20 m at F01 (West Penobscot Bay), from June to
-November 2021. (Figures as of 2026-09-28.)
+Heatwaves that began in 2021 lasted 1,076 days in all at 20 m and 1,033 at
+50 m, summed over the buoys, against 571 at 1 m. The longest in the record ran
+165 days at 150 m in Jordan Basin (M01), from January to June 2023, and 163
+days at 20 m at F01 (West Penobscot Bay), from June to November 2021.
+(Figures as of 2026-09-29.)
 
 ![F01's page for 2021: the whole record at 20 m with a brushed range, and daily temperature at three depths against the normal, the heatwave threshold and the satellite](docs/buoy.png)
 
@@ -69,10 +64,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   variable of a dataset in one request. The 15 datasets still reporting make
   about 90 requests an hour when nothing has changed. Once an hour it checks
   everything else too: the satellite, and the retired buoys, whose data only
-  changes when it's reprocessed. When UMaine replaces
-  real-time data with post-recovery data, the reprocessed days come in the same
-  way. The first run reads about 25 years of temperature and salinity for 25
-  buoy depths in under a minute and a half.
+  changes when it's reprocessed. Rows revised at the source come in the same
+  way, as long as their `time_modified` stamp changes.
 - **Live updates** ([`heatwaves/live.py`](heatwaves/live.py)). The sync
   sends a Postgres `NOTIFY` with each new reading and each change of heatwave
   state, in the transaction that stores them, so nothing is announced before
@@ -84,9 +77,9 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   from storing at the same time as the scheduled job.
 - **Satellite sea surface temperature** (`GriddapSource` in the same file).
   NOAA OISST v2.1 from CoastWatch's ERDDAP, in the nearest quarter-degree cell
-  with data to each buoy (OISST masks coastal cells as land). One request
-  reads all six cells as a small box, so the first run backfills 2001 onwards
-  in about 26 yearly requests, three minutes. After that, one tiny request an
+  with data to each buoy (a buoy's own cell can be empty near the coast). One
+  request reads all six cells as a small box, so the first run backfills 2001
+  onwards in about 26 yearly requests. After that, one tiny request an
   hour asks for the newest day; each new day re-reads the past 30 from the
   final product where it exists and the preliminary one after, so final values
   replace preliminary ones. Satellite heatwaves use the same method and
@@ -100,15 +93,15 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   from an 11-day window pooled over 2003–2022 and smoothed over 31 days;
   events are five or more days above the threshold, joined across gaps of up to
   two days; categories run Moderate to Extreme.
-- **Where the heat came from** ([`heatwaves/origin.py`](heatwaves/origin.py)).
-  Five signals, read from 30 days before a heatwave's onset to 14 after, each
-  vote offshore, surface, or not at all: the salinity anomaly at its depth; a
-  heatwave at 1 m beforehand; whether the 1 m minus depth temperature
-  difference holds or collapses; whether M01's water at 100–250 m was in a
-  heatwave; and whether N01 or M01 warmed before A01 or B01. A label needs two
-  more votes than the other side, else Unclear. The rules are pure functions,
-  unit-tested on synthetic series, checked against the 2021 and 2012 onsets
-  before any UI existed, and their thresholds are served at
+- **Origin labels** ([`heatwaves/origin.py`](heatwaves/origin.py)). Five
+  signals, read around a heatwave's onset, each vote offshore, surface, or not
+  at all: the salinity anomaly at its depth; a heatwave at 1 m beforehand;
+  whether the 1 m minus depth temperature difference holds or falls below
+  half; whether M01 at 100–250 m was in a heatwave; and whether a heatwave
+  began at N01 or M01 before one at A01 or B01. A label needs two more votes
+  than the other side, else Unclear. These are rules of thumb written for this
+  project, not a published or tested method. They are pure functions,
+  unit-tested on synthetic series, and their thresholds are served at
   `/api/origin/rules` so the About page can't drift from the code. Labels and
   their evidence are stored on each event and recomputed with it.
 - **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
@@ -118,8 +111,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   record at the buoy) and an events table, each also as CSV. They follow the
   CF conventions 1.11 as discrete sampling geometries, one time series per
   file, with ACDD 1.3 metadata, and are built from the same reads as the JSON
-  API; tests check that a download matches the API exactly and run the IOOS
-  compliance checker on every file.
+  API; tests check that a download matches the API exactly, and run the IOOS
+  compliance checker's CF and ACDD checks on sample files.
   [`erddap/datasets.xml`](erddap/datasets.xml), drafted by ERDDAP's
   `GenerateDatasetsXml`, serves them from ERDDAP as two datasets. Opening one
   takes three lines:
@@ -134,11 +127,9 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   temperature records, the detected events (856 of them, with their dates and
   categories) are identical to those from Eric Oliver's
   [marineHeatWaves](https://github.com/ecjoliver/marineHeatWaves), and the
-  thresholds agree to within 0.005 °C. The comparison
-  script is [`scripts/compare_with_reference.py`](scripts/compare_with_reference.py).
-  (It caught one bug during development: the category comes from the day
-  furthest above normal in multiples of the threshold's distance, not from the
-  warmest day.)
+  thresholds agree to within 0.005 °C (last run 2026-09-29). The comparison
+  script is [`scripts/compare_with_reference.py`](scripts/compare_with_reference.py);
+  it needs network access and isn't part of CI.
 
 ### Frontend
 
@@ -192,11 +183,10 @@ works:
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their
   sections.
-- **Where the heat came from** (`/origins`). Heatwaves at 20 or 50 m per year,
-  stacked by origin with Unclear kept in view; click a year to see it below:
-  every buoy's year from east to west, in the order slope water reaches them,
-  with each heatwave a bar colored by its origin under a strip of the daily
-  anomaly. A heatwave opens its page.
+- **Offshore or surface?** (`/origins`). Heatwaves at 20 or 50 m per year,
+  stacked by origin label with Unclear kept in view; click a year to see it
+  below: every buoy's year from east to west, with each heatwave a bar colored
+  by its label under a strip of the daily anomaly. A heatwave opens its page.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one
@@ -279,7 +269,13 @@ uv run pytest --cov      # fails under 90% coverage; SQLite unless TEST_DATABASE
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
 cd frontend && npm run lint && npm test && npm run build   # build includes the type check
-uv run --with scipy scripts/compare_with_reference.py      # needs network
+```
+
+Not in CI, since it downloads every record from NERACOOS: the comparison with
+the reference implementation, with no arguments three datasets, or name them.
+
+```sh
+PYTHONPATH=. uv run --with scipy scripts/compare_with_reference.py A01_ocean_001m B01_ocean_050m
 ```
 
 The sync tests replay real ERDDAP responses recorded in `tests/data` (listed
@@ -326,14 +322,11 @@ tests/           backend tests; frontend tests sit beside their code
 
 ## Decisions and limitations
 
-- **A 20-year baseline.** Hobday et al. recommend 30 years; the buoy records
-  begin in 2001–2003, so 2003–2022 is the longest period they all cover. The
-  baseline is fixed rather than moving, so heatwaves become more frequent as
-  the Gulf warms, which is the point.
-- **Heat at depth isn't always new heat.** Autumn storms mix warm surface water
-  down, pushing 50 m temperatures well above normal within a day or two. The
-  origin labels say which heatwaves look like that; a heatwave there is still
-  real for anything living at that depth.
+- **A 20-year baseline.** Hobday et al. base their definition on 30 years;
+  the longest records here start in 2001, so the normal uses 2003–2022, and
+  each buoy and depth takes the years in it that it has data for (at least
+  half). The baseline is fixed rather than moving, so if the water warms,
+  heatwaves against it become more frequent.
 - **Rules, not a model, for origins.** Every label has to be explainable on the
   page, so it comes from five thresholds and a vote rather than anything fitted.
   The cost is a lot of Unclear (about half), which the site shows rather than
@@ -344,42 +337,40 @@ tests/           backend tests; frontend tests sit beside their code
   the two can be deployed and scaled independently. The trade-off is that the
   site needs JavaScript; the API remains usable on its own.
 - **pandas for resampling.** xarray opens the NetCDF and computes the
-  climatology, but resampling one long 1-D series is about 1,000× faster in pandas
-  than in xarray without the optional `flox` package.
-- **Polling, not ERDDAP's change feed.** ERDDAP announces dataset changes on
-  an MQTT broker, which NERACOOS's buoy_barn subscribes to, but the broker
-  needs credentials. The public alternative, each dataset's newest time in
-  ERDDAP's `allDatasets` table, turned out to lag: measured on 2026-09-29, a
-  reading could be queried at 02:23, but the table only showed it after
-  ERDDAP's hourly reload at 02:52. So the sync asks each reporting dataset
-  directly, every 10 minutes: a new reading reaches open pages within about
-  10 minutes of reaching ERDDAP, at about 90 tiny requests an hour.
+  climatology, but resampling one long 1-D series is far faster in pandas:
+  about 800× for 25 years of 10-minute readings, measured against xarray
+  without the optional `flox` package.
+- **Polling each dataset.** Each dataset's newest time in ERDDAP's
+  `allDatasets` table would be one request for all of them, but it lagged:
+  measured on 2026-09-29, a reading could be queried at 02:23, but the table
+  only showed it after ERDDAP's hourly reload at 02:52. So the sync asks each
+  reporting dataset directly, every 10 minutes: a new reading reaches open
+  pages within about 10 minutes of reaching ERDDAP, at about 90 tiny requests
+  an hour.
 - **Postgres as the message bus.** The sync runs in another process than the
   API, so something has to carry "this changed" across. `NOTIFY` in the
   sync's own transaction does it with no new service, and a message can never
   describe data that didn't commit. The cost: a message sent while the API's
   `LISTEN` connection is down is lost, so the API disconnects every browser
   when it reconnects, and they refetch.
-- **Files in the formats ERDDAP serves.** The products are NetCDF-3 rather
-  than compressed NetCDF-4: twice the size on disk (about 1 MB a file), but
-  it is what ERDDAP itself serves, any netCDF library reads it, and the
-  netCDF4 package from pip can open one straight from a URL with
-  `#mode=bytes`, which it can't do for NetCDF-4. Daily values are timed at
-  the middle of the UTC day, as OISST's are. CF has no standard names for a
-  normal, a threshold or a salinity anomaly, so those variables carry a
-  `long_name` only, and the ACDD check notes their absence.
+- **NetCDF-3 files.** The products are uncompressed NetCDF-3, about 1 MB a
+  file, which any netCDF library reads; the netCDF4 package from pip opens one
+  straight from its URL with `#mode=bytes`. Daily values are timed at the
+  middle of the UTC day, as OISST's are. The normal, threshold and salinity
+  anomaly carry a `long_name` but no CF standard name, and the ACDD check
+  notes that.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
 
-Possible next steps: marine cold spells, and subscribing to ERDDAP's MQTT
-change feed instead of polling, given credentials from NERACOOS.
+Possible next steps: marine cold spells.
 
 ## Data and credits
 
 Temperature and salinity data from buoys operated by the
 [University of Maine Physical Oceanography Group](https://gyre.umeoce.maine.edu),
-funded in part by NOAA through [NERACOOS](https://neracoos.org) and U.S. IOOS,
-served by [NERACOOS ERDDAP](https://data.neracoos.org/erddap). The providers'
+funded in part through NOAA within the U.S. Integrated Ocean Observing System
+(IOOS), as the datasets' metadata says, and served by
+[NERACOOS ERDDAP](https://data.neracoos.org/erddap). The providers'
 license: the data may be used and redistributed for free but are not intended
 for legal use. Satellite sea surface temperature is NOAA's
 [OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst),

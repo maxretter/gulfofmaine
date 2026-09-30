@@ -130,12 +130,13 @@ DAILY_VARIABLES: dict[str, dict] = {
         "comment": CATEGORY,
     },
     "heatwave_origin": {
-        "long_name": "Where the heat in the marine heatwave likely came from",
+        "long_name": "Origin label of the marine heatwave",
         **_flags(ORIGIN_FLAGS),
         "coverage_content_type": "thematicClassification",
         "comment": (
-            "Offshore (slope water through the Northeast Channel) or surface (heat mixed down), from "
-            "five signals around the heatwave's onset; unclear when they disagree. Judged only at "
+            "Offshore when five signals around the heatwave's onset point to warm water arriving at depth, "
+            "surface when they point to heat from the surface reaching down, unclear when they don't agree: "
+            "this project's own rules of thumb, not a published method. Judged only at "
             f"{' and '.join(map(str, origin.DEPTHS))} m, and missing at other depths. See {REPOSITORY}."
         ),
     },
@@ -490,10 +491,10 @@ def daily_dataset(table: pd.DataFrame, buoy: Buoy, depth: int, satellite: Series
     ds.attrs = {
         "title": f"Marine heatwaves at {buoy.id} ({buoy.name}), {depth} m",
         "summary": (
-            f"Daily temperature and salinity at {depth} m on NERACOOS buoy {buoy.id} ({buoy.name}) in the "
-            f"Gulf of Maine, with the {BASELINE[0]}-{BASELINE[1]} normal, the marine heatwave threshold and "
-            "anomalies, and the category of each day's heatwave (Hobday et al. 2016, 2018); where each "
-            f"heatwave's heat likely came from, at {' and '.join(map(str, origin.DEPTHS))} m; and NOAA "
+            f"Daily temperature and salinity at {depth} m on University of Maine buoy {buoy.id} "
+            f"({buoy.name}) in the Gulf of Maine, with the {BASELINE[0]}-{BASELINE[1]} normal, the marine "
+            "heatwave threshold and anomalies, and the category of each day's heatwave (Hobday et al. 2016, "
+            f"2018); each heatwave's origin label, at {' and '.join(map(str, origin.DEPTHS))} m; and NOAA "
             "OISST sea surface temperature at the buoy, treated the same way."
         ),
         "id": f"gom_heatwaves_{series_id}",
@@ -639,10 +640,9 @@ def events_dataset(table: pd.DataFrame) -> xr.Dataset:
     ds.attrs = {
         "title": "Marine heatwaves at Gulf of Maine buoys",
         "summary": (
-            "Every marine heatwave at 1 to 250 m on the University of Maine's NERACOOS buoys in the Gulf of "
+            "Every marine heatwave at 1 to 250 m on the University of Maine's buoys in the Gulf of "
             f"Maine: its dates, intensity and category (Hobday et al. 2016, 2018) against the {BASELINE[0]}-"
-            f"{BASELINE[1]} normal, and at {' and '.join(map(str, origin.DEPTHS))} m where its heat likely "
-            "came from."
+            f"{BASELINE[1]} normal, and at {' and '.join(map(str, origin.DEPTHS))} m its origin label."
         ),
         "id": EVENTS,
         **GLOBAL,
