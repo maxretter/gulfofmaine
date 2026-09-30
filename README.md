@@ -10,7 +10,7 @@ API serves the results to a React app for exploring them, and pushes new
 readings to it over a WebSocket as they're stored. The whole record is also
 published as CF NetCDF and CSV files, ready for ERDDAP.
 
-**Live site:** _coming soon_ · **API docs:** `/docs` on the live site
+**Live site:** <https://gulfofmaine.maxretter.com> · **API docs:** <https://gulfofmaine.maxretter.com/docs>
 
 ![Now: the record at 50 m as warming stripes, a month to a stripe, over the buoys' heatwave status at 50 m on a map and in a table](docs/now.png)
 
