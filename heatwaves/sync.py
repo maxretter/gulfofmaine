@@ -49,20 +49,29 @@ SYNC_LOCK = 0x68656174
 FULL_ROUND = dt.timedelta(hours=1)
 
 
-def ensure_catalog(session: Session, erddap: Erddap) -> None:
-    """Create rows for every buoy and series in `stations`, with positions from ERDDAP."""
+def ensure_catalog(session: Session, erddap: Erddap) -> bool:
+    """Create rows for every buoy and series in `stations`, with positions from ERDDAP.
+
+    False if ERDDAP's catalog couldn't be read: the rows are made all the
+    same, and the buoys keep the positions they had.
+    """
     # Each buoy's position comes from its shallowest dataset.
     surface: dict[str, str] = {}  # dataset ID: buoy
     for spec in sorted(SERIES, key=lambda spec: spec.depth):
         if spec.source == "buoy" and spec.buoy not in surface.values():
             surface[spec.dataset_id] = spec.buoy
-    positions = {
-        surface[row["datasetID"]]: row for row in erddap.catalog(surface, ["minLatitude", "minLongitude"])
-    }
+    try:
+        positions = {
+            surface[row["datasetID"]]: row for row in erddap.catalog(surface, ["minLatitude", "minLongitude"])
+        }
+    except Exception:
+        # An error, or a web page in place of JSON while ERDDAP is down for maintenance.
+        log.exception("Reading the buoys' positions from ERDDAP failed")
+        positions = None
     for code, name in BUOYS.items():
         buoy = session.get(Buoy, code) or Buoy(id=code)
         buoy.name = name
-        if code in positions:
+        if positions and code in positions:
             buoy.latitude = positions[code]["minLatitude"]
             buoy.longitude = positions[code]["minLongitude"]
         session.add(buoy)
@@ -80,6 +89,7 @@ def ensure_catalog(session: Session, erddap: Erddap) -> None:
             session.add(series)
         series.dataset_id = spec.dataset_id
     session.commit()
+    return positions is not None
 
 
 def sync_series(session: Session, sources: Mapping[str, Source], series: Series) -> bool:
@@ -258,6 +268,8 @@ def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], serie
     """Sync one series, and the others fetched with it, in a session of its own."""
     with session_factory() as session:
         series = session.get_one(Series, series_id)
+        # Read now: after a rollback, reading it would query the database, which may be what failed.
+        dataset_id = series.dataset_id
         try:
             if sync_series(session, sources, series):
                 return "updated"
@@ -265,9 +277,9 @@ def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], serie
             # One bad series (an ERDDAP error, a baseline with too little
             # data) shouldn't stop the others from updating.
             session.rollback()
-            log.exception("%s: sync failed", series.dataset_id)
+            log.exception("%s: sync failed", dataset_id)
             return "failed"
-        log.info("%s: no new data", series.dataset_id)
+        log.info("%s: no new data", dataset_id)
         return "unchanged"
 
 
@@ -296,15 +308,18 @@ def sync_all(
     Without `everything`, only the buoy datasets still reporting (not
     offline): all that gets new readings within the hour. The satellite adds
     a day once a day, and a retired buoy's data changes only when it's
-    reprocessed. `erddap` is the NERACOOS server, which lists the buoys' positions.
+    reprocessed. `erddap` is the NERACOOS server, which lists the buoys'
+    positions; when it can't, that counts as a failed fetch and the round
+    goes on.
 
     The products in `products_dir`, if given, are rewritten at the end when
     anything new was stored, or when there are none yet: once a round, as
     a rewrite takes several seconds.
     """
+    failures = 0
     with session_factory() as session:
-        if everything:
-            ensure_catalog(session, erddap)
+        if everything and not ensure_catalog(session, erddap):
+            failures += 1
         # One series from each fetch; sync_one brings the rest along.
         query = (
             select(func.min(Series.id))
@@ -319,7 +334,7 @@ def sync_all(
     outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
     if products_dir is not None and ("updated" in outcomes or not products.listing(products_dir)):
         publish(session_factory, products_dir)
-    return outcomes.count("failed")
+    return failures + outcomes.count("failed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -362,12 +377,15 @@ def main(argv: list[str] | None = None) -> int:
         quick_rounds = 0  # left before the next full round
         while True:
             everything = quick_rounds == 0
+            # Counted whether or not the round succeeds, so failing rounds don't all check everything.
+            quick_rounds = full_every - 1 if everything else quick_rounds - 1
             try:
                 failures = sync_all(SessionLocal, erddap, sources, everything, settings.products_dir)
-                quick_rounds = full_every - 1 if everything else quick_rounds - 1
-            except httpx.HTTPError:
+            except Exception:
                 if args.every is None:
                     raise
+                # ERDDAP, the database or anything else: exiting would have the
+                # container restarted straight into a full round.
                 log.exception("Sync round failed; retrying in %.0f s", args.every)
                 failures = 1
             if args.every is None:

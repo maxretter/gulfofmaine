@@ -1,24 +1,30 @@
 """The sync against recorded ERDDAP responses (see tests/conftest.py)."""
 
 import datetime as dt
+import json
 
 import httpx
 import pandas as pd
 import pytest
 import xarray as xr
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.exc import OperationalError
 
 from heatwaves import sync
 from heatwaves.config import settings
+from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, DailyMean, Event, Series
-from heatwaves.sources import TabledapSource
-from heatwaves.stations import SERIES
+from heatwaves.sources import GriddapSource, TabledapSource
+from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
 from heatwaves.sync import ensure_catalog, publish, sync_all, sync_one, sync_series
 from tests.conftest import (
     A01_SYNC,
     A01_SYNC_WITH_SALINITY,
     CATALOG,
+    COASTWATCH,
+    DATA,
     NO_MATCH,
+    OISST_SYNC,
     add_series,
     recorded_erddap,
     seasonal_temperatures,
@@ -202,18 +208,23 @@ class Stop(Exception):
     """Ends the sync job's loop in a test."""
 
 
-def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_factory):
+def test_sync_job_carries_on_after_a_failed_round(monkeypatch, session_factory):
     rounds: list[bool] = []
+    errors = [
+        httpx.ConnectError("ERDDAP is down"),
+        json.JSONDecodeError("Expecting value", "<html>", 0),  # a maintenance page in place of JSON
+        OperationalError("SELECT", {}, Exception("the database restarted")),
+    ]
 
     def sync_all(session_factory, erddap, sources, everything, products_dir):
         rounds.append(everything)
-        if len(rounds) == 1:
-            raise httpx.ConnectError("ERDDAP is down")
+        if len(rounds) <= len(errors):
+            raise errors[len(rounds) - 1]
         return 0
 
     def sleep(seconds):
         assert seconds == 600
-        if len(rounds) == 2:
+        if len(rounds) == 4:
             raise Stop
 
     monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
@@ -222,11 +233,58 @@ def test_sync_job_retries_after_erddap_is_unreachable(monkeypatch, session_facto
 
     with pytest.raises(Stop):
         sync.main(["--every", "600"])
-    assert rounds == [True, True]  # the failed full round is tried again in full
+    assert rounds == [True, False, False, False]  # a failed full round isn't tried again in full
     # Run once, the job fails instead.
     rounds.clear()
     with pytest.raises(httpx.ConnectError):
         sync.main([])
+
+
+def test_a_failed_catalog_doesnt_stop_the_round(session_factory):
+    with session_factory() as session:
+        ensure_catalog(session, recorded_erddap(CATALOG, []))  # an earlier round placed the buoys
+
+    def neracoos(request: httpx.Request) -> httpx.Response:
+        # A maintenance page where the catalog's JSON should be; nothing new in any dataset.
+        if "/allDatasets." in request.url.path:
+            return httpx.Response(200, html="<html><body>Down for maintenance</body></html>")
+        return httpx.Response(404, content=(DATA / NO_MATCH).read_bytes())
+
+    erddap = Erddap("https://data.neracoos.org/erddap", httpx.Client(transport=httpx.MockTransport(neracoos)))
+    coastwatch = recorded_erddap(OISST_SYNC, [], COASTWATCH)
+    sources = {
+        "buoy": TabledapSource(erddap),
+        "satellite": GriddapSource(coastwatch, OISST, OISST_PRELIMINARY, start=dt.date(2026, 8, 27)),
+    }
+
+    assert sync_all(session_factory, erddap, sources) == 1  # the catalog
+
+    with session_factory() as session:
+        satellites = session.scalars(select(Series).where(Series.source == "satellite")).all()
+        assert {each.modified_through for each in satellites} == {dt.datetime(2026, 9, 27, 12, tzinfo=dt.UTC)}
+        assert session.get_one(Buoy, "A01").latitude == 42.5183  # as stored
+
+
+def test_a_database_error_is_a_failed_fetch(monkeypatch, session_factory, series):
+    engine = session_factory.kw["bind"]
+    down = False
+
+    def refuse(*args):
+        if down:
+            raise OperationalError("SELECT", {}, Exception("server closed the connection"))
+
+    def sync_series(session, sources, series):
+        nonlocal down
+        down = True
+        raise OperationalError("UPDATE", {}, Exception("server closed the connection"))
+
+    monkeypatch.setattr(sync, "sync_series", sync_series)
+    event.listen(engine, "before_cursor_execute", refuse)
+    try:
+        assert sync_one(session_factory, {}, series.id) == "failed"
+    finally:
+        down = False
+        event.remove(engine, "before_cursor_execute", refuse)
 
 
 def test_kept_running_the_job_checks_everything_about_hourly(monkeypatch, session_factory):
