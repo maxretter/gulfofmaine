@@ -68,6 +68,7 @@ def ensure_catalog(session: Session, erddap: Erddap) -> bool:
         # An error, or a web page in place of JSON while ERDDAP is down for maintenance.
         log.exception("Reading the buoys' positions from ERDDAP failed")
         positions = None
+    one_sync_at_a_time(session)
     for code, name in BUOYS.items():
         buoy = session.get(Buoy, code) or Buoy(id=code)
         buoy.name = name
@@ -361,6 +362,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.recompute:
         with SessionLocal() as session:
+            one_sync_at_a_time(session)
             for series in session.scalars(select(Series)):
                 update_heatwaves(session, series)
                 log.info("%s: recomputed", series.label)

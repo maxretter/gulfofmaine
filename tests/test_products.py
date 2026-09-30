@@ -1,6 +1,8 @@
 """The NetCDF and CSV products, against the JSON API and the CF and ACDD conventions."""
 
 import io
+import os
+import stat
 from pathlib import Path
 
 import pandas as pd
@@ -232,3 +234,41 @@ def test_the_command_writes_every_product(monkeypatch, sample_database, director
 
     assert names(tmp_path) == names(directory)
     assert not any(name.endswith(".partial") for name in names(tmp_path))
+
+
+def test_overlapping_writes_dont_share_a_partial_file(tmp_path):
+    # A one-off run writing while the sync job does: in their containers, both are PID 1.
+    path = tmp_path / "A01_heatwaves_050m.nc"
+
+    def outer(partial: Path) -> None:
+        partial.write_text("outer")
+        products._replace(path, lambda inner: inner.write_text("inner"))
+
+    products._replace(path, outer)
+
+    assert path.read_text() == "outer"
+    assert [each.name for each in tmp_path.iterdir()] == [path.name]
+
+
+def test_a_failed_write_leaves_no_partial_file(tmp_path):
+    def fail(partial: Path) -> None:
+        assert partial.name.startswith(".A01_heatwaves_050m.nc.") and partial.suffix == ".partial"
+        partial.write_text("half")
+        raise OSError("No space left on device")
+
+    with pytest.raises(OSError, match="No space"):
+        products._replace(tmp_path / "A01_heatwaves_050m.nc", fail)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(("umask", "mode"), [(0o022, 0o644), (0o002, 0o664)], ids=["022", "002"])
+def test_files_get_the_mode_any_new_file_would(tmp_path, umask, mode):
+    # The API and ERDDAP read them as other users.
+    path = tmp_path / "gom_heatwaves_events.csv"
+    previous = os.umask(umask)
+    try:
+        products._replace(path, lambda partial: partial.write_text("start_date\n"))
+    finally:
+        os.umask(previous)
+
+    assert stat.S_IMODE(path.stat().st_mode) == mode

@@ -8,7 +8,8 @@ import pandas as pd
 import pytest
 import xarray as xr
 from sqlalchemy import event, select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import Session
 
 from heatwaves import sync
 from heatwaves.config import settings
@@ -342,3 +343,35 @@ def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_fact
     session.refresh(series)
     assert series.latest_date == dt.date(2026, 9, 27)
     assert session.scalars(select(Event).where(Event.end_date == series.latest_date)).one().duration >= 8
+
+
+def test_a_recompute_and_the_catalog_wait_for_any_other_sync(monkeypatch, session_factory, session):
+    add_series(session, seasonal_temperatures("2003-01-01", "2026-09-27"))
+    locked: list[Session] = []
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    monkeypatch.setattr(sync, "one_sync_at_a_time", locked.append)
+
+    assert sync.main(["--recompute"]) == 0
+    assert len(locked) == 1
+    ensure_catalog(session, recorded_erddap(CATALOG, []))
+    assert locked[1] is session
+
+
+def test_a_series_has_one_heatwave_starting_on_a_day(session):
+    series = add_series(session, seasonal_temperatures("2021-01-01", "2021-12-31"))
+    day = dt.date(2021, 7, 1)
+    for end in (day + dt.timedelta(days=4), day + dt.timedelta(days=9)):
+        session.add(
+            Event(
+                series_id=series.id,
+                start_date=day,
+                end_date=end,
+                peak_date=day,
+                max_intensity=2.0,
+                mean_intensity=1.0,
+                category=1,
+            )
+        )
+
+    with pytest.raises(IntegrityError):
+        session.commit()

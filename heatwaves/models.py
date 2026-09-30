@@ -107,6 +107,8 @@ class ClimatologyDay(Base):
 
 class Event(Base):
     __tablename__ = "event"
+    # The API addresses a heatwave by its series and first day.
+    __table_args__ = (UniqueConstraint("series_id", "start_date"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     series_id: Mapped[int] = mapped_column(ForeignKey("series.id", ondelete="CASCADE"), index=True)

@@ -25,6 +25,7 @@ import datetime as dt
 import logging
 import os
 import sys
+import tempfile
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from functools import partial
@@ -717,12 +718,29 @@ def write(session: Session, directory: Path) -> None:
 def _replace(path: Path, write: Callable[[Path], object]) -> None:
     """Write a file beside `path`, then move it into place: readers see the old file or the new one.
 
-    The partial file is named for the process, as the sync job and the
-    listener can write at once.
+    Each partial file gets a name of its own: a one-off run can write while
+    the sync job does, and in their containers both are PID 1.
     """
-    partial = path.with_name(f".{path.name}.{os.getpid()}.partial")
-    write(partial)
-    os.replace(partial, path)
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".partial")
+    os.close(fd)
+    partial = Path(name)
+    try:
+        write(partial)
+        # On disk before it takes the name, so a crash can't leave an empty file there.
+        with partial.open("rb+") as file:
+            os.fsync(file.fileno())
+        # mkstemp's file is the owner's alone; the API and ERDDAP read it as other users.
+        partial.chmod(_new_file_mode())
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)  # still there only if the write failed
+
+
+def _new_file_mode() -> int:
+    """The mode open() gives a new file: 0o666 less the umask, which can only be read by setting it."""
+    umask = os.umask(0o022)
+    os.umask(umask)
+    return 0o666 & ~umask
 
 
 def main(argv: list[str] | None = None) -> int:
