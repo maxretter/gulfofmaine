@@ -9,9 +9,14 @@ import pytest
 from heatwaves import queries
 from heatwaves.models import Series
 from heatwaves.sync import update_heatwaves
-from tests.conftest import add_series, api_client, fresh_database, seasonal_temperatures
-
-TODAY = dt.datetime.now(dt.UTC).date()
+from tests.conftest import (
+    TODAY,
+    add_series,
+    api_client,
+    clock_stopped_at,
+    fresh_database,
+    seasonal_temperatures,
+)
 
 
 @pytest.fixture(scope="module")
@@ -20,6 +25,7 @@ def client():
     over B01 a satellite heatwave from Jul 5 to Jul 14.
 
     Days either side of each heatwave are set to normal, so its edges are exact.
+    Today, to the API, stays TODAY.
     """
     typical = seasonal_temperatures("2003-01-01", TODAY, noise=0)
     heatwave = seasonal_temperatures("2003-01-01", TODAY)
@@ -54,7 +60,7 @@ def client():
         session.add(empty)
         update_heatwaves(session, empty)
         session.commit()
-        with api_client(session_factory) as client:
+        with clock_stopped_at(), api_client(session_factory) as client:
             yield client
 
 

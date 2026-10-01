@@ -20,13 +20,18 @@ from sqlalchemy import create_engine, insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from heatwaves.db import get_session
+from heatwaves import api, db
 from heatwaves.erddap import Erddap
 from heatwaves.main import app
 from heatwaves.models import Base, Buoy, DailyMean, Series
 from heatwaves.stations import buoy_series, satellite_series
 
 DATA = Path(__file__).parent / "data"
+
+# "Now" for the tests whose data runs up to today: fixed, with the API's clock
+# stopped at it (stopped_clock), so none depends on when, or how slowly, it runs.
+NOW = dt.datetime(2026, 9, 28, 18, tzinfo=dt.UTC)
+TODAY = NOW.date()
 
 # ERDDAP's answer when nothing matches a request; served as a 404, as ERDDAP does.
 NO_MATCH = "no_match.txt"
@@ -81,17 +86,36 @@ def fresh_database() -> Iterator[sessionmaker]:
 
 @contextmanager
 def api_client(session_factory: sessionmaker) -> Iterator[TestClient]:
-    """The app, reading from `session_factory`'s database."""
+    """The app, reading from `session_factory`'s database as it reads its own (db.reading).
+
+    On Postgres, then, each request reads one snapshot and can't write, as in production.
+    """
+    requests = sessionmaker(db.reading(session_factory.kw["bind"]), expire_on_commit=False)
 
     def override():
-        with session_factory() as session:
+        with requests() as session:
             yield session
 
-    app.dependency_overrides[get_session] = override
+    app.dependency_overrides[db.get_session] = override
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@contextmanager
+def clock_stopped_at(now: dt.datetime = NOW) -> Iterator[dt.datetime]:
+    """The API's clock (api.now, and so api.today) stopped at `now`."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(api, "now", lambda: now)
+        yield now
+
+
+@pytest.fixture
+def stopped_clock() -> Iterator[dt.datetime]:
+    """NOW, where the API's clock stays for the test."""
+    with clock_stopped_at() as now:
+        yield now
 
 
 @pytest.fixture

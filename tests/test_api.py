@@ -10,25 +10,24 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from heatwaves import db
-from heatwaves.main import revalidate_api_responses
+from heatwaves.main import app, revalidate_api_responses
 from heatwaves.models import Buoy, Event, UTCDateTime
 from heatwaves.sync import update_heatwaves
-from tests.conftest import add_series, seasonal_temperatures
+from tests.conftest import NOW, TODAY, add_series, api_client, seasonal_temperatures
 
-TODAY = dt.datetime.now(dt.UTC).date()
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 
 
 @pytest.fixture
-def heatwave_now(session):
-    """A series whose last eight days run 2.5 degrees above normal, with a gap last month."""
+def heatwave_now(session, stopped_clock):
+    """A series whose last eight days, to today, run 2.5 degrees above normal, with a gap last month."""
     temperatures = seasonal_temperatures("2003-01-01", TODAY)
     temperatures.iloc[-8:] += 2.5
     gap = TODAY - dt.timedelta(days=30)
     temperatures = temperatures.drop(temperatures[str(gap - dt.timedelta(days=4)) : str(gap)].index)
     series = add_series(session, temperatures)
     update_heatwaves(session, series)
-    series.synced_at = dt.datetime.now(dt.UTC)
+    series.synced_at = NOW
     session.commit()
     return series
 
@@ -120,7 +119,7 @@ def test_daily_series_rejects_an_unknown_depth(client, heatwave_now):
 def test_health_check_fails_when_sync_stops(client, session, heatwave_now):
     assert client.get("/healthz").status_code == 200
 
-    heatwave_now.synced_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=6)
+    heatwave_now.synced_at = NOW - dt.timedelta(hours=6)
     session.commit()
 
     response = client.get("/healthz")
@@ -145,6 +144,16 @@ def test_each_request_gets_a_read_only_snapshot():
     for session in db.get_session():  # one, as FastAPI gets it for a request
         assert session.scalar(text("SHOW transaction_isolation")) == "repeatable read"
         assert session.scalar(text("SHOW transaction_read_only")) == "on"
+
+
+@pytest.mark.skipif(
+    not TEST_DATABASE_URL.startswith("postgresql"), reason="needs Postgres (TEST_DATABASE_URL)"
+)
+def test_the_api_tests_read_as_requests_do(session_factory):
+    with api_client(session_factory):
+        for session in app.dependency_overrides[db.get_session]():
+            assert session.scalar(text("SHOW transaction_isolation")) == "repeatable read"
+            assert session.scalar(text("SHOW transaction_read_only")) == "on"
 
 
 @pytest.mark.skipif(

@@ -2,10 +2,15 @@
 
 import datetime as dt
 
+import pytest
+
 from heatwaves.models import Buoy, Series
 from heatwaves.stations import buoy_series, satellite_series
+from tests.conftest import NOW, TODAY
 
-TODAY = dt.datetime.now(dt.UTC).date()
+# The API judges each sync against its clock, stopped at NOW, as are the sync times here.
+pytestmark = pytest.mark.usefixtures("stopped_clock")
+
 RETIRED = dt.date(2025, 9, 17)  # M01's last day
 
 
@@ -24,7 +29,7 @@ def add(
     spec = satellite_series(buoy_id) if source == "satellite" else buoy_series(buoy_id, depth, variable)
     synced_at = None
     if hours_since_sync is not None:
-        synced_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours_since_sync)
+        synced_at = NOW - dt.timedelta(hours=hours_since_sync)
     session.add(
         Series(
             buoy_id=buoy_id,
@@ -83,12 +88,9 @@ def test_fails_once_no_buoy_still_reporting_has_synced(client, session):
     body = response.json()
     assert body["status"] == "stale"
     assert body["stale"] == ["A01 1 m temperature (buoy)", "B01 20 m temperature (buoy)"]
-    since = {
-        key: dt.datetime.now(dt.UTC) - dt.datetime.fromisoformat(body[key])
-        for key in ("last_sync", "oldest_sync")
-    }
-    assert dt.timedelta(hours=5) < since["last_sync"] < dt.timedelta(hours=6)  # B01's
-    assert since["oldest_sync"] > dt.timedelta(hours=6)  # A01's
+    since = {key: NOW - dt.datetime.fromisoformat(body[key]) for key in ("last_sync", "oldest_sync")}
+    assert since["last_sync"] == dt.timedelta(hours=5)  # B01's
+    assert since["oldest_sync"] == dt.timedelta(hours=6)  # A01's
 
 
 def test_buoys_no_longer_reporting_dont_count(client, session):
