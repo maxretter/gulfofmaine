@@ -2,18 +2,16 @@ import * as Plot from "@observablehq/plot";
 import { extent, range } from "d3";
 import { useCallback, useMemo, useRef } from "react";
 
-import { type ObservedYear, useObservedDays } from "../api/queries";
-import type { Buoy, HeatwaveEvent, Origin } from "../api/types";
+import { useAnnual } from "../api/queries";
+import type { Buoy, Origin, YearSummary } from "../api/types";
 import { colors, heatDayBin, heatDayBins } from "../lib/colors";
 import { chartDefaults } from "../lib/chart";
 import { daysBetween, formatDay, minDay } from "../lib/dates";
-import { filterEvents, heatwaveDaysByYear } from "../lib/events";
 import { Chart } from "./Chart";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 import { Swatch } from "./StateBadge";
 
-interface Cell extends ObservedYear {
-  heatwave_days: number;
+interface Cell extends YearSummary {
   enough: boolean;
 }
 
@@ -25,7 +23,7 @@ export interface HeatmapSelection {
 
 interface Props {
   buoys: Buoy[];
-  events: HeatwaveEvent[]; // every heatwave; those matching the three filters below are counted
+  // Which heatwaves count, as the event filters pick them.
   depth: number | null; // null: any depth
   minCategory: number;
   origin: Origin | null;
@@ -39,31 +37,22 @@ function daysSoFar(year: number): number {
 }
 
 /**
- * Days inside matching heatwaves per buoy and year, over the years each buoy observed: at `depth`, or at any of its
- * depths, where a day counts once however many depths were in a heatwave.
+ * Days inside matching heatwaves per buoy and year, over the years each buoy observed, as /api/annual counts them: at
+ * `depth`, or at any of its depths, where a day counts once however many depths were in a heatwave.
  */
-export function AnnualHeatmap({ buoys, events, depth, minCategory, origin, selected, onSelect }: Props) {
-  const depths = useMemo(
-    () => (depth === null ? [...new Set(events.map((e) => e.depth))].sort((a, b) => a - b) : [depth]),
-    [events, depth],
-  );
-  const observed = useObservedDays(depths);
+export function AnnualHeatmap({ buoys, depth, minCategory, origin, selected, onSelect }: Props) {
+  const annual = useAnnual(depth, minCategory, origin);
   const names = useMemo(() => new Map(buoys.map((b) => [b.id, b.name])), [buoys]);
-  const cells: Cell[] = useMemo(() => {
-    const matching = filterEvents(events, { buoy: null, year: null, depth, minCategory, origin });
-    const days = new Map(heatwaveDaysByYear(matching).map((d) => [`${d.buoy_id}-${d.year}`, d.days]));
-    return observed.data.map((d) => ({
-      ...d,
-      heatwave_days: days.get(`${d.buoy_id}-${d.year}`) ?? 0,
-      enough: d.observed_days >= daysSoFar(d.year) / 2,
-    }));
-  }, [observed.data, events, depth, minCategory, origin]);
+  const cells: Cell[] = useMemo(
+    () => (annual.data ?? []).map((d) => ({ ...d, enough: d.observed_days >= daysSoFar(d.year) / 2 })),
+    [annual.data],
+  );
 
   return (
     <Chart
       className="chart clickable"
-      loading={observed.loading}
-      error={observed.error && "Couldn't load the yearly summary."}
+      loading={annual.isPlaceholderData}
+      error={annual.isError && "Couldn't load the yearly summary."}
       minHeight={44 + buoys.length * 30}
       legend={
         <div className="legend">

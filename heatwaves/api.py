@@ -179,13 +179,12 @@ class OriginRules(BaseModel):
 
 
 class BuoyYear(BaseModel):
-    """One buoy's year at one depth: its first heatwave and each day's anomaly."""
+    """One buoy's year at one depth: its heatwaves and each day's anomaly."""
 
     buoy_id: str
-    onset: dt.date | None  # when its first heatwave starting in the year began
-    origin: Origin | None  # of that heatwave
+    heatwaves: list[EventOut]  # running in the year, oldest first: one carried over from the year before too
     anomaly: list[float | None]  # degrees C above normal, one per day of `Onsets.dates`
-    heatwave: list[bool]  # whether each day was part of a heatwave
+    heatwave: list[dt.date | None]  # the start date of the heatwave each day was part of; null outside one
 
 
 class Onsets(BaseModel):
@@ -203,7 +202,7 @@ class MonthAnomaly(BaseModel):
 
 class YearSummary(BaseModel):
     buoy_id: str
-    depth: int
+    depth: int | None  # null: every depth
     year: int
     heatwave_days: int
     observed_days: int
@@ -559,54 +558,83 @@ def origin_rules() -> OriginRules:
 def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
     """Every buoy's heatwaves at one depth through a year, for charting that year at every buoy.
 
-    For each buoy with a series at `depth`: when its first heatwave starting
-    in the year began, that heatwave's origin, and for each day the
-    temperature anomaly and whether it was a heatwave day. At a depth no
-    buoy measures, `buoys` is empty.
+    For each buoy with a series at `depth`: its heatwaves running in the
+    year, one carried over from the year before or into the next included,
+    and for each day the temperature anomaly and the start date of the
+    heatwave the day was part of, which with the buoy and depth addresses
+    it. At a depth no buoy measures, `buoys` is empty.
     """
     series = queries.buoy_temperatures(session, depth)
-    ids = [each.id for each in series]
     first_day, last_day = dt.date(year, 1, 1), dt.date(year, 12, 31)
     days = pd.date_range(first_day, last_day, name="date")
-    heatwaves = queries.heatwave_days(session, ids)
-    first: dict[int, Event] = {}
+    running: dict[int, list[Event]] = defaultdict(list)
     for event in session.scalars(
         select(Event)
-        .where(Event.series_id.in_(ids), Event.start_date.between(first_day, last_day))
+        .options(selectinload(Event.series))
+        .where(
+            Event.series_id.in_([each.id for each in series]),
+            Event.start_date <= last_day,
+            Event.end_date >= first_day,
+        )
         .order_by(Event.start_date)
     ):
-        first.setdefault(event.series_id, event)
+        running[event.series_id].append(event)
 
     def buoy_year(each: Series) -> BuoyYear:
         frame = queries.daily(session, each.id, first_day, last_day)
         anomaly = frame["anomaly"].reindex(days) if frame is not None else pd.Series(float("nan"), index=days)
-        event = first.get(each.id)
+        # Every day of a heatwave, the short gaps detection filled in included.
+        start_of = {
+            day: event.start_date
+            for event in running[each.id]
+            for day in pd.date_range(event.start_date, event.end_date).date
+        }
         return BuoyYear(
             buoy_id=each.buoy_id,
-            onset=event.start_date if event else None,
-            origin=cast(Origin | None, event.origin) if event else None,
+            heatwaves=[event_out(event) for event in running[each.id]],
             anomaly=[_number(value) for value in anomaly],
-            heatwave=days.isin(heatwaves[each.id].index).tolist(),
+            heatwave=[start_of.get(day) for day in days.date],
         )
 
     return Onsets(year=year, depth=depth, dates=list(days.date), buoys=[buoy_year(each) for each in series])
 
 
 @router.get("/annual")
-def annual(depth: Depth, session: SessionDep) -> list[YearSummary]:
-    """Heatwave days and observed days per buoy and year, at one depth."""
-    series = queries.buoy_temperatures(session, depth)
-    ids = [s.id for s in series]
+def annual(
+    session: SessionDep,
+    depth: Depth | None = None,
+    min_category: Annotated[int, Query(ge=1, le=4)] = 1,
+    origin_: Annotated[Origin | None, Query(alias="origin")] = None,
+) -> list[YearSummary]:
+    """Heatwave days and observed days per buoy and year, at one depth or at every depth.
+
+    Heatwave days are days inside the heatwaves /api/events lists for
+    `min_category` and `origin`. Without `depth`, a day counts once however
+    many depths were in a heatwave, and is observed if any depth had data.
+    """
+    ids = [each.id for each in queries.buoy_temperatures(session, depth)]
     year = extract("year", DailyMean.date)
     observed = session.execute(
-        select(Series.buoy_id, year, func.count())
+        select(Series.buoy_id, year, func.count(DailyMean.date.distinct()))
         .join(Series)
         .where(Series.id.in_(ids))
         .group_by(Series.buoy_id, year)
     ).all()
 
-    days = queries.heatwave_days(session, ids)
-    heatwave_days = Counter((s.buoy_id, day.year) for s in series for day in days[s.id].index)
+    heatwaves = (
+        select(Series.buoy_id, Event.start_date, Event.end_date)
+        .join(Series)
+        .where(Series.id.in_(ids), Event.category >= min_category)
+    )
+    if origin_ is not None:
+        heatwaves = heatwaves.where(Event.origin == origin_)
+    # Every day of a heatwave, the short gaps detection filled in included.
+    days = {
+        (buoy_id, day)
+        for buoy_id, start, end in session.execute(heatwaves)
+        for day in pd.date_range(start, end).date
+    }
+    heatwave_days = Counter((buoy_id, day.year) for buoy_id, day in days)
 
     return [
         YearSummary(

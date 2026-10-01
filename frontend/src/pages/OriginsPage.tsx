@@ -89,7 +89,7 @@ export function OriginsPage() {
           <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
         {buoys.data ? (
-          <YearByBuoy year={year} depth={depth} buoys={buoys.data} events={events.data ?? []} />
+          <YearByBuoy year={year} depth={depth} buoys={buoys.data} />
         ) : (
           <p className="note">Loading…</p>
         )}

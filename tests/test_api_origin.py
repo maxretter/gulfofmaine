@@ -108,9 +108,14 @@ def test_onsets_follow_each_buoy_through_a_year(client):
 
     assert (year["dates"][0], year["dates"][-1], len(year["dates"])) == ("2021-01-01", "2021-12-31", 365)
     a01, m01 = year["buoys"]
-    assert (a01["buoy_id"], a01["onset"], a01["origin"]) == ("A01", "2021-04-14", "offshore")
-    assert (m01["buoy_id"], m01["onset"]) == ("M01", "2021-02-13")
-    assert sum(a01["heatwave"]) == 15
+    assert a01["buoy_id"] == "A01"
+    assert [(h["start_date"], h["end_date"], h["origin"]) for h in a01["heatwaves"]] == [
+        ("2021-04-14", "2021-04-28", "offshore")
+    ]
+    assert (m01["buoy_id"], m01["heatwaves"][0]["start_date"]) == ("M01", "2021-02-13")
+    # Each of its 15 days names the heatwave by its start.
+    assert (a01["heatwave"].count("2021-04-14"), a01["heatwave"].count(None)) == (15, 350)
+    assert a01["heatwave"][year["dates"].index("2021-04-28")] == "2021-04-14"
     assert a01["anomaly"][year["dates"].index("2021-04-20")] == pytest.approx(2.5, abs=0.2)
     assert a01["anomaly"][-1] is None  # the record ends in June
 

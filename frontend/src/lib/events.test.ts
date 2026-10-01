@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { HeatwaveEvent } from "../api/types";
 import {
-  eventOnEachDay,
   eventPath,
   eventRange,
   filterEvents,
   heatwaveBands,
-  heatwaveDaysByYear,
   overlapping,
   parseEventParams,
   rankAmong,
@@ -142,43 +140,5 @@ describe("a heatwave among others", () => {
       event({ buoy_id: "C01", start_date: "2021-06-01", end_date: "2021-06-30" }),
     ];
     expect(overlapping(others, july).map((e) => `${e.buoy_id} ${e.depth}`)).toEqual(["A01 50", "B01 1"]);
-  });
-});
-
-describe("heatwave days by buoy and year", () => {
-  const days = (events: HeatwaveEvent[]) =>
-    heatwaveDaysByYear(events)
-      .map((d) => `${d.buoy_id} ${d.year}: ${d.days}`)
-      .sort();
-
-  it("counts each heatwave's days in the years they fell in", () => {
-    expect(days([event({ start_date: "2021-07-01", end_date: "2021-07-10" })])).toEqual(["A01 2021: 10"]);
-    expect(days([event({ start_date: "2020-12-25", end_date: "2021-01-05" })])).toEqual(["A01 2020: 7", "A01 2021: 5"]);
-  });
-
-  it("counts a day once when heatwaves at several depths cover it, and keeps buoys apart", () => {
-    const events = [
-      event({ depth: 1, start_date: "2021-07-01", end_date: "2021-07-10" }),
-      event({ depth: 20, start_date: "2021-07-05", end_date: "2021-07-15" }),
-      event({ depth: 50, start_date: "2021-07-06", end_date: "2021-07-08" }),
-      event({ buoy_id: "B01", start_date: "2021-07-01", end_date: "2021-07-02" }),
-    ];
-    expect(days(events)).toEqual(["A01 2021: 15", "B01 2021: 2"]);
-  });
-});
-
-describe("eventOnEachDay", () => {
-  const dates = ["2021-01-01", "2021-01-02", "2021-01-03", "2021-01-04", "2021-01-05", "2021-01-06"];
-  const carried = event({ start_date: "2020-12-20", end_date: "2021-01-02" });
-  const inside = event({ start_date: "2021-01-04", end_date: "2021-01-04" });
-  const leaving = event({ start_date: "2021-01-06", end_date: "2021-02-01" });
-
-  it("finds the heatwave on each day, cut to the dates given", () => {
-    expect(eventOnEachDay([carried, inside, leaving], dates)).toEqual([carried, carried, null, inside, null, leaving]);
-  });
-
-  it("leaves days outside every heatwave empty", () => {
-    expect(eventOnEachDay([event({ start_date: "2021-03-01", end_date: "2021-03-10" })], dates)).toEqual(dates.map(() => null));
-    expect(eventOnEachDay([carried], [])).toEqual([]);
   });
 });

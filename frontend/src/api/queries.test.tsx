@@ -3,8 +3,8 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HttpError, keys, retry, useDaily, useDailyValues, useEvent } from "./queries";
-import type { Day } from "./types";
+import { HttpError, keys, retry, useAnnual, useDaily, useDailyValues, useEvent } from "./queries";
+import type { Day, Origin } from "./types";
 
 /** Answers every request with `status`. */
 function serve(status: number) {
@@ -85,5 +85,23 @@ describe("useDailyValues", () => {
     // As the live feed does with a message from B01.
     await act(() => client.invalidateQueries({ queryKey: [...keys.daily, "B01"] }));
     expect(fetch).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("useAnnual", () => {
+  it("asks the API to count the heatwaves the filters pick, at one depth or at any", async () => {
+    const fetch = vi.fn(async (_path: string) => new Response("[]"));
+    vi.stubGlobal("fetch", fetch);
+    const asked = async (depth: number | null, minCategory: number, origin: Origin | null) => {
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(() => useAnnual(depth, minCategory, origin), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      return fetch.mock.lastCall?.[0];
+    };
+
+    expect(await asked(50, 1, null)).toBe("/api/annual?depth=50");
+    expect(await asked(null, 2, "offshore")).toBe("/api/annual?min_category=2&origin=offshore");
   });
 });

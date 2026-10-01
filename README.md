@@ -223,9 +223,9 @@ every page as the site's mark.
 | `GET /api/buoys/{id}/{depth}/daily/values?start=&end=&variable=` | The same days' means alone, without the normal, in about a third of the bytes |
 | `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin |
 | `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
-| `GET /api/onsets?year=&depth=` | Each buoy's first heatwave of a year, and its daily anomaly and heatwave days |
+| `GET /api/onsets?year=&depth=` | Each buoy's heatwaves through a year, its daily anomaly, and the heatwave each day was part of |
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
-| `GET /api/annual?depth=` | Heatwave days and observed days per buoy and year |
+| `GET /api/annual?depth=&min_category=&origin=` | Heatwave days and observed days per buoy and year, in the heatwaves `/api/events` lists for the same filters; without `depth`, at any depth, a day counting once |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
 | `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series changing state, such as entering or leaving a heatwave, or the dates, category or intensity of its heatwave in progress changing) and `ping` every 30 s |

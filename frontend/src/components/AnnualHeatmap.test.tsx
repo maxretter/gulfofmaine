@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { range } from "d3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,14 +17,13 @@ const years: YearSummary[] = range(2001, 2026).map((year) => ({
 }));
 
 const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-client.setQueryData([...keys.annual, 1], years);
+client.setQueryData([...keys.annual, 1, 1, null], years);
 
 function heatmap(selected: HeatmapSelection) {
   return (
     <QueryClientProvider client={client}>
       <AnnualHeatmap
         buoys={buoys}
-        events={[]}
         depth={1}
         minCategory={1}
         origin={null}
@@ -69,5 +68,38 @@ describe("AnnualHeatmap", () => {
     rerender(heatmap({ buoy: "B01", year: 2005 }));
 
     expect(frame.scrollLeft).toBe(120);
+  });
+
+  it("shows the heatwave days the API counts for the filters, and none for a year too little observed", () => {
+    client.setQueryData(
+      [...keys.annual, null, 2, "offshore"],
+      [
+        { buoy_id: "B01", depth: null, year: 2012, heatwave_days: 40, observed_days: 366 },
+        { buoy_id: "B01", depth: null, year: 2013, heatwave_days: 3, observed_days: 100 },
+      ] satisfies YearSummary[],
+    );
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <AnnualHeatmap
+          buoys={buoys}
+          depth={null}
+          minCategory={2}
+          origin="offshore"
+          selected={{ buoy: null, year: null }}
+          onSelect={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    const table = container.querySelector("details")!;
+    table.open = true;
+    fireEvent(table, new Event("toggle"));
+
+    const rows = [...container.querySelectorAll("tbody tr")].map((row) =>
+      [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+    );
+    expect(rows).toEqual([
+      ["B01 Western Maine Shelf", "2012", "40", "366"],
+      ["B01 Western Maine Shelf", "2013", "–", "100"],
+    ]);
   });
 });

@@ -130,13 +130,12 @@ export interface OriginRules {
   deep_depths: number[];
 }
 
-/** One buoy's year at one depth, a value per day of `Onsets.dates`. */
+/** One buoy's year at one depth: its heatwaves, and a value per day of `Onsets.dates`. */
 export interface BuoyYear {
   buoy_id: string;
-  onset: string | null; // its first heatwave starting in the year
-  origin: Origin | null; // of that heatwave
+  heatwaves: HeatwaveEvent[]; // running in the year, oldest first: one carried over from the year before too
   anomaly: (number | null)[];
-  heatwave: boolean[];
+  heatwave: (string | null)[]; // the start date of the heatwave each day was part of
 }
 
 export interface Onsets {
@@ -164,9 +163,10 @@ export interface MonthAnomaly {
   buoys: number;
 }
 
+/** Heatwave days and observed days in a year at a buoy (/api/annual). */
 export interface YearSummary {
   buoy_id: string;
-  depth: number;
+  depth: number | null; // null: every depth
   year: number;
   heatwave_days: number;
   observed_days: number;

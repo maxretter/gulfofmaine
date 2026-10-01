@@ -184,7 +184,6 @@ export function EventsPage() {
           </p>
           <AnnualHeatmap
             buoys={buoys.data}
-            events={events.data}
             depth={filters.depth}
             minCategory={filters.minCategory}
             origin={filters.origin}

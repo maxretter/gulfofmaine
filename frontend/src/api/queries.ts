@@ -1,4 +1,4 @@
-import { keepPreviousData, type UseQueryResult, useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
 import type {
@@ -11,6 +11,7 @@ import type {
   HeatwaveEvent,
   MonthAnomaly,
   Onsets,
+  Origin,
   OriginRules,
   Variable,
   YearSummary,
@@ -78,37 +79,19 @@ export function useEvents() {
   return useQuery({ queryKey: keys.events, queryFn: () => getJSON<HeatwaveEvent[]>("/api/events") });
 }
 
-/** Days observed per buoy and year, with a year counting as observed as far as the best-observed of its depths. */
-export interface ObservedYear {
-  buoy_id: string;
-  year: number;
-  observed_days: number;
-}
-
-function mostObserved(results: UseQueryResult<YearSummary[]>[]) {
-  const most = new Map<string, ObservedYear>();
-  for (const result of results) {
-    for (const { buoy_id, year, observed_days } of result.data ?? []) {
-      const key = `${buoy_id}-${year}`;
-      if ((most.get(key)?.observed_days ?? -1) < observed_days) most.set(key, { buoy_id, year, observed_days });
-    }
-  }
-  return {
-    data: [...most.values()],
-    loading: results.some((r) => r.isPending || r.isPlaceholderData),
-    error: results.some((r) => r.isError),
-  };
-}
-
-/** How much of each year each buoy observed at any of `depths`. The combined result keeps its identity until a depth's data changes. */
-export function useObservedDays(depths: number[]) {
-  return useQueries({
-    queries: depths.map((depth) => ({
-      queryKey: [...keys.annual, depth],
-      queryFn: () => getJSON<YearSummary[]>(`/api/annual?depth=${depth}`),
-      placeholderData: keepPreviousData,
-    })),
-    combine: mostObserved,
+/**
+ * Heatwave days and observed days per buoy and year, at `depth` or, if null, at any depth, where a day counts once
+ * however many depths were in a heatwave. Only heatwaves of at least `minCategory`, and of `origin` if given, count.
+ */
+export function useAnnual(depth: number | null, minCategory: number, origin: Origin | null) {
+  const params = new URLSearchParams();
+  if (depth !== null) params.set("depth", String(depth));
+  if (minCategory > 1) params.set("min_category", String(minCategory));
+  if (origin !== null) params.set("origin", origin);
+  return useQuery({
+    queryKey: [...keys.annual, depth, minCategory, origin],
+    queryFn: () => getJSON<YearSummary[]>(`/api/annual?${params}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -186,7 +169,7 @@ export function useEvent(buoy: string, depth: number, start: string) {
   });
 }
 
-/** Every buoy's anomalies and heatwave days at one depth through one year. */
+/** Every buoy's heatwaves, anomalies and heatwave days at one depth through one year. */
 export function useOnsets(year: number, depth: number) {
   return useQuery({
     queryKey: [...keys.onsets, year, depth],

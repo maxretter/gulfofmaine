@@ -7,7 +7,7 @@ import type { Buoy, HeatwaveEvent, Onsets, Origin } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { anomalyColor, anomalyScale, colors, origins } from "../lib/colors";
 import { maxDay, minDay, parseDay } from "../lib/dates";
-import { eventOnEachDay, eventPath } from "../lib/events";
+import { eventPath } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
 import { eastToWest } from "../lib/origin";
 import { Chart } from "./Chart";
@@ -28,26 +28,23 @@ interface Props {
   year: number;
   depth: number;
   buoys: Buoy[];
-  events: HeatwaveEvent[];
 }
 
 /**
  * Every buoy's year at one depth, east to west: its heatwaves as bars colored by origin, under a strip of the
  * temperature against normal. A heatwave opens its page.
  */
-export function YearByBuoy({ year, depth, buoys, events }: Props) {
+export function YearByBuoy({ year, depth, buoys }: Props) {
   const onsets = useOnsets(year, depth);
   const order = useMemo(() => eastToWest(buoys, depth), [buoys, depth]);
   const data = onsets.data;
   const rows = useMemo(() => order.map((b) => b.id), [order]);
   const names = useMemo(() => new Map(order.map((b) => [b.id, b.name])), [order]);
-  const shown = useMemo(
-    () =>
-      events
-        .filter((e) => e.depth === depth && e.start_date <= `${year}-12-31` && e.end_date >= `${year}-01-01`)
-        .sort((a, b) => rows.indexOf(a.buoy_id) - rows.indexOf(b.buoy_id) || a.start_date.localeCompare(b.start_date)),
-    [events, depth, year, rows],
-  );
+  // East to west, and each buoy's oldest first.
+  const shown = useMemo(() => {
+    const heatwaves = new Map(data?.buoys.map((b) => [b.buoy_id, b.heatwaves]));
+    return rows.flatMap((buoy) => heatwaves.get(buoy) ?? []);
+  }, [data, rows]);
 
   return (
     <Chart
@@ -110,12 +107,14 @@ function Rows({ data, rows, names, events, width }: RowsProps) {
     const last = data.dates[data.dates.length - 1];
     const byBuoy = new Map(data.buoys.map((b) => [b.buoy_id, b]));
     const cells: Cell[] = rows.flatMap((buoy) => {
-      const days = eventOnEachDay(
-        events.filter((e) => e.buoy_id === buoy),
-        data.dates,
-      );
-      const anomaly = byBuoy.get(buoy)?.anomaly;
-      return data.dates.map((date, i) => ({ buoy, date: parseDay(date), anomaly: anomaly?.[i] ?? null, event: days[i] }));
+      const days = byBuoy.get(buoy);
+      // Each day names its heatwave by its start date.
+      const heatwaves = new Map(days?.heatwaves.map((h) => [h.start_date, h]));
+      return data.dates.map((date, i) => {
+        const start = days?.heatwave[i];
+        const event = start ? (heatwaves.get(start) ?? null) : null;
+        return { buoy, date: parseDay(date), anomaly: days?.anomaly[i] ?? null, event };
+      });
     });
     const unrecorded = rows.filter((buoy) => !byBuoy.get(buoy)?.anomaly.some((a) => a !== null));
     const next = (c: Cell) => new Date(c.date.getTime() + DAY);
