@@ -176,7 +176,7 @@ works:
   year, or from and to dates. The heatwave list moves the brush too. Links into the single-page explorer this replaced
   (`/?buoy=F01&…`) redirect here.
 - **Synchronized hover.** One chart per depth shares a time axis; hovering any of
-  them moves a crosshair across all three and reads out every depth's
+  them moves a crosshair across all of them and reads out every depth's
   temperature, anomaly and heatwave status for that day.
 - **What the satellite misses** (`/satellite`). The share of heatwave days at
   50 and 20 m with no satellite heatwave at the surface above, beside the same

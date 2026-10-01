@@ -69,7 +69,7 @@ class TabledapSource:
     The data provider stamps every row it writes with `time_modified`. Small
     requests, reduced server-side with orderByMax and orderByMinMax, find
     the newest stamp and the span of days touched since the last sync; only
-    those days are then downloaded and re-averaged. A normal hourly sync
+    those days are then downloaded and re-averaged. A sync of new readings
     re-reads a couple of days per dataset. When UMaine replaces real-time
     data with post-recovery data, the new stamps pull the reprocessed days in
     automatically. The first sync reads each dataset's full history, about

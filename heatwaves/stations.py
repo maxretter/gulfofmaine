@@ -24,8 +24,7 @@ BUOYS = {
     "N01": "Northeast Channel",
 }
 
-# Each buoy's fixed depths, in meters. M01's sensors below 50 m sit in the
-# deep water of Jordan Basin, below the reach of winter mixing.
+# Each buoy's fixed depths, in meters: M01 also has sensors at 100-250 m.
 DEPTHS = {
     "A01": (1, 20, 50),
     "B01": (1, 20, 50),
@@ -39,10 +38,11 @@ DEPTHS = {
 # Measured at every depth. Only temperature is searched for heatwaves.
 VARIABLES = ("temperature", "salinity")
 
-# Climatology baseline. Hobday et al. recommend 30 years, but the buoys'
-# records begin in 2001-2003, so this is the longest period every one of them
-# covers. It is fixed rather than moving, so heatwaves become more frequent as
-# the Gulf warms; that is the definition working as intended.
+# Climatology baseline: 20 years where Hobday et al. recommend 30, as the
+# longest records begin in 2001. Not every record covers all of it (N01's
+# runs from June 2004 to October 2021), so each series uses the days in it
+# that it has data for (heatwaves.hobday.climatology). It is fixed rather than
+# moving, so if the water warms, heatwaves against it become more frequent.
 BASELINE = (2003, 2022)
 
 

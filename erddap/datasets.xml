@@ -11,7 +11,7 @@ fileDir is where the products volume is mounted in compose.yaml's erddap service
 
 <dataset type="EDDTableFromNcCFFiles" datasetID="gom_heatwaves_daily" active="true">
     <reloadEveryNMinutes>10080</reloadEveryNMinutes>
-    <!-- The sync job replaces the files hourly; ERDDAP checks for changes on requests at most this often. -->
+    <!-- The sync job replaces the files after a round that stores new data, every 10 minutes at most; ERDDAP checks for changes on requests at most this often. -->
     <updateEveryNMillis>10000</updateEveryNMillis>
     <fileDir>/data/products/daily/</fileDir>
     <fileNameRegex>.*_heatwaves_\d{3}m\.nc</fileNameRegex>

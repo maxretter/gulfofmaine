@@ -74,7 +74,7 @@ export function useBuoys() {
   return useQuery({ queryKey: keys.buoys, queryFn: () => getJSON<Buoy[]>("/api/buoys") });
 }
 
-/** Every heatwave at every buoy and depth: ~700 rows, fetched once and filtered locally. */
+/** Every heatwave at every buoy and depth: ~860 rows, fetched once and filtered locally. */
 export function useEvents() {
   return useQuery({ queryKey: keys.events, queryFn: () => getJSON<HeatwaveEvent[]>("/api/events") });
 }
