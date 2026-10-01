@@ -404,6 +404,12 @@ tests/           backend tests; frontend tests sit beside their code
   middle of the UTC day, as OISST's are. The normal, threshold and salinity
   anomaly carry a `long_name` but no CF standard name, and the ACDD check
   notes that.
+- **Live status is the newest day's.** A series is in a heatwave while its
+  newest day ends one. When a heatwave dips below the threshold for a day or
+  two, the status turns normal, then above the threshold, and back to the
+  heatwave on the fifth day above it, when detection joins the two spells:
+  the live feed announces a leave and a new entry, and the site shows a
+  notice, for what the record shows as one heatwave.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
 

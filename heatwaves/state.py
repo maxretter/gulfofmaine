@@ -2,6 +2,13 @@
 
 The API reports it for every series, and the sync compares it before and
 after each update so the live feed (heatwaves.live) can announce changes.
+
+The state is of the newest day only: "heatwave" while a heatwave ends on
+it. When one dips below the threshold for a day or two, the state turns
+normal, then above_threshold, and heatwave again on the fifth day back
+above, when detection joins the new spell to it (hobday.MAX_GAP). The live
+feed announces a leave and a new entry for what the record shows as one
+heatwave, with the same start.
 """
 
 import datetime as dt
