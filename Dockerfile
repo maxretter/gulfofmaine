@@ -19,5 +19,8 @@ ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PRODUCTS_DIR=/data/products
 USER app
 EXPOSE 8000
 # The live feed reads nothing from browsers, so a message from one may be 1 KiB, not uvicorn's 16 MiB.
+# Forwarded headers are taken only from the private ranges Docker's networks use, Caddy's among them,
+# and the client is the last address in X-Forwarded-For outside them, not the first, which a client
+# can write itself.
 CMD ["uvicorn", "heatwaves.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "1024", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--proxy-headers", "--forwarded-allow-ips", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]

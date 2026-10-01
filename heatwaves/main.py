@@ -37,6 +37,9 @@ app = FastAPI(
     summary="Marine heatwaves at University of Maine buoys at 1, 20 and 50 m, beside NOAA's satellite data.",
     version="0.2.0",
     redoc_url=None,
+    # Starlette would redirect /api/buoys/ to /api/buoys, at the request's Host and the
+    # scheme Caddy saw: whatever Host a client sent, and http behind a TLS proxy.
+    redirect_slashes=False,
     lifespan=lifespan,
 )
 app.include_router(api.router)
