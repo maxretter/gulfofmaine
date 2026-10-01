@@ -1,9 +1,16 @@
+import * as Plot from "@observablehq/plot";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Buoy, Condition, Day } from "../api/types";
 import { DepthCharts } from "./DepthCharts";
+
+// Counts the charts drawn.
+vi.mock("@observablehq/plot", async (importOriginal) => {
+  const actual = await importOriginal<typeof Plot>();
+  return { ...actual, plot: vi.fn(actual.plot) };
+});
 
 const depth = (depth: number) => ({ depth }) as Condition;
 const buoy: Buoy = { id: "B01", name: "Western Maine Shelf", latitude: 43.2, longitude: -70.4, series: [depth(1), depth(20), depth(50)], satellite: null };
@@ -76,6 +83,22 @@ describe("DepthCharts", () => {
     expect(screen.queryByText("Couldn't load the temperature series.")).toBeNull();
     // Asked once: asking again won't give it a normal.
     expect(fetch.mock.calls.filter(([url]) => url.startsWith("/api/buoys/B01/20/"))).toHaveLength(1);
+  });
+
+  it("moves the readout with the pointer without redrawing the charts", async () => {
+    serve({});
+    renderCharts();
+    expect(await screen.findAllByText("14.0 °C", { exact: false })).toHaveLength(3);
+    const drawn = vi.mocked(Plot.plot).mock.calls.length;
+
+    // The plot area runs from x = 46 to 588 (600 wide, less the margins): Jun 1 at its left edge, Jun 2 halfway.
+    const chart = panel(20).querySelector(".depth-chart")!;
+    fireEvent.pointerMove(chart, { clientX: 47 });
+    expect(await screen.findByText("Jun 1, 2021")).toBeTruthy();
+    fireEvent.pointerMove(chart, { clientX: 317 });
+    expect(await screen.findByText("Jun 2, 2021")).toBeTruthy();
+    expect(screen.getAllByText("13.0 °C", { exact: false })).toHaveLength(3);
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
   });
 
   it("still says it couldn't load the series when a depth fails", async () => {

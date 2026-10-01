@@ -1,5 +1,5 @@
 import * as Plot from "@observablehq/plot";
-import { max, utcDay } from "d3";
+import { group, max, utcDay } from "d3";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 
 import { type DayPoint, isNotFound, useDaily, useDailyByDepth } from "../api/queries";
@@ -22,6 +22,7 @@ interface Props {
 }
 
 const NO_DAYS: DayPoint[] = [];
+const NO_EVENTS: HeatwaveEvent[] = [];
 const PLOT_TOP = 10; // px above each panel's plot area, where the crosshair starts
 
 interface Panel {
@@ -31,6 +32,17 @@ interface Panel {
   byDate: Map<string, DayPoint>;
   events: HeatwaveEvent[];
   satellite: DayPoint[]; // drawn on the shallowest panel only
+}
+
+// Each series' days by date, for the readout, made once per series rather than on every hover.
+const indexes = new WeakMap<DayPoint[], Map<string, DayPoint>>();
+function byDate(days: DayPoint[]): Map<string, DayPoint> {
+  let index = indexes.get(days);
+  if (!index) {
+    index = new Map(days.map((d) => [formatDay(d.date), d]));
+    indexes.set(days, index);
+  }
+  return index;
 }
 
 /** What the lines and shading in DepthCharts mean; the satellite's line only when the buoy has one. */
@@ -81,15 +93,17 @@ export function DepthCharts({ buoy, from, to, events }: Props) {
   const [hover, setHover] = useState<Date | null>(null);
 
   const satelliteDays = satellite.data ?? NO_DAYS;
+  const eventsByDepth = useMemo(() => group(events, (e) => e.depth), [events]);
+  // Every hover renders the panels again: what each chart is drawn from keeps its identity, so none is redrawn.
   const panels: Panel[] = depths.map((depth, i) => {
-    const days = results[i].data ?? [];
+    const days = results[i].data ?? NO_DAYS;
     return {
       depth,
       days,
       noNormal: isNotFound(results[i].error),
-      byDate: new Map(days.map((d) => [formatDay(d.date), d])),
-      events: events.filter((e) => e.depth === depth),
-      satellite: i === 0 ? satelliteDays : [],
+      byDate: byDate(days),
+      events: eventsByDepth.get(depth) ?? NO_EVENTS,
+      satellite: i === 0 ? satelliteDays : NO_DAYS,
     };
   });
   const surface = useMemo(() => new Map(satelliteDays.map((d) => [formatDay(d.date), d])), [satelliteDays]);
@@ -141,8 +155,8 @@ interface ReadoutProps {
 
 /** Values at the hovered day, or the newest day in the period. */
 function Readout({ panels, surface, hover }: ReadoutProps) {
-  const newest = max(panels.flatMap((p) => p.days.filter((d) => d.value !== null).map((d) => d.date)));
-  const date = hover ?? newest;
+  // The newest day reads every day of every depth, so not on each hover.
+  const date = hover ?? max(panels.flatMap((p) => p.days.filter((d) => d.value !== null).map((d) => d.date)));
   if (!date) return <div className="readout">No data in this period.</div>;
   const day = formatDay(date);
   return (

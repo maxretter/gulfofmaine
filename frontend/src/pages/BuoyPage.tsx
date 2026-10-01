@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router";
 
 import { useBuoys, useEvents } from "../api/queries";
@@ -30,6 +30,8 @@ export function BuoyPage() {
   const buoys = useBuoys();
   const events = useEvents();
   const setRange = useCallback((from: string, to: string) => update({ from, to }, { replace: true }), [update]);
+  // Made again only when the heatwaves change: the charts redraw for a new list, and a redraw ends a drag on the record.
+  const buoyEvents = useMemo(() => (events.data ?? []).filter((e) => e.buoy_id === id), [events.data, id]);
 
   if (buoys.isPending) return <p className="note">Loading…</p>;
   if (buoys.isError)
@@ -45,7 +47,6 @@ export function BuoyPage() {
   const lastDate = latest(buoy.series.map((s) => s.date));
   const firstDate = earliest(buoy.series.map((s) => s.first_date));
   const range = lastDate && firstDate ? clampRange(view.from, view.to, firstDate, lastDate) : null;
-  const buoyEvents = (events.data ?? []).filter((e) => e.buoy_id === buoy.id);
   // The record strip follows the requested depth when this buoy has it, else its shallowest.
   const depth = buoy.series.find((s) => s.depth === view.depth)?.depth ?? buoy.series[0]?.depth ?? view.depth;
 
@@ -186,6 +187,7 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
   const lastYear = Number(lastDate.slice(0, 4));
   const years = Array.from({ length: lastYear - Number(firstDate.slice(0, 4)) + 1 }, (_, i) => lastYear - i);
   const year = wholeYear(from, to, firstDate, lastDate);
+  const stripEvents = useMemo(() => events.filter((e) => e.depth === depth), [events, depth]);
 
   return (
     <>
@@ -266,7 +268,7 @@ function Record({ buoy, events, depth, firstDate, lastDate, from, to, onDepth, o
         lastDate={lastDate}
         from={from}
         to={to}
-        events={events.filter((e) => e.depth === depth)}
+        events={stripEvents}
         onChange={onBrush}
       />
       <SeriesLegend buoy={buoy} />
