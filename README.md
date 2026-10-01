@@ -220,6 +220,7 @@ every page as the site's mark.
 | `GET /api/buoys` | Every buoy with the latest conditions at each depth, and the satellite's with its grid cell |
 | `GET /api/buoys/{id}` | One buoy |
 | `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`, to 0.001; gaps are `null`; depth 0 is the satellite |
+| `GET /api/buoys/{id}/{depth}/daily/values?start=&end=&variable=` | The same days' means alone, without the normal, in about a third of the bytes |
 | `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin |
 | `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
 | `GET /api/onsets?year=&depth=` | Each buoy's first heatwave of a year, and its daily anomaly and heatwave days |

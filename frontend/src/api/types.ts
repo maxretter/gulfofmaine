@@ -52,6 +52,9 @@ export interface Day {
   anomaly: number | null; // value minus climatology
 }
 
+/** A daily mean alone, without its normal (/daily/values): a whole record in a third of the bytes. */
+export type DayValue = Pick<Day, "date" | "value">;
+
 /** Where a heatwave's heat likely came from (heatwaves/origin.py). Only heatwaves at 20 and 50 m have one. */
 export type Origin = "offshore" | "surface" | "unclear";
 export type Vote = "offshore" | "surface" | null;

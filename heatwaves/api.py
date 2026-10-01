@@ -95,6 +95,13 @@ class Day(BaseModel):
     anomaly: float | None  # value minus climatology
 
 
+class DayValue(BaseModel):
+    """A daily mean alone, without its normal."""
+
+    date: dt.date
+    value: float | None  # null when the day has too little data
+
+
 class EventOut(BaseModel):
     buoy_id: str
     depth: int
@@ -384,21 +391,7 @@ def daily(
     visible. `start` and `end` must fall between 2001-01-01, before which no
     record begins, and a year from today.
     """
-    series = get_series(session, buoy_id, depth, variable)
-    end = end or series.latest_date or today()
-    start = start or end - dt.timedelta(days=364)
-    if start > end:
-        raise HTTPException(422, "start must be on or before end")
-    # Every day asked for costs a row, whether or not it has data, so the
-    # range is bounded to keep any request to about a full record.
-    last = today() + dt.timedelta(days=365)
-    if end > last:
-        raise HTTPException(422, f"end must be on or before {last}, a year from today")
-
-    frame = queries.daily(session, series.id, start, end)
-    if frame is None:
-        raise HTTPException(404, f"No climatology yet for {series.label}")
-    frame = frame.round(DECIMALS)
+    frame = _daily_frame(session, buoy_id, depth, start, end, variable)
     return [
         Day(
             date=date,
@@ -416,6 +409,53 @@ def daily(
             strict=True,
         )
     ]
+
+
+@router.get("/buoys/{buoy_id}/{depth}/daily/values")
+def daily_values(
+    buoy_id: str,
+    depth: Depth,
+    session: SessionDep,
+    start: Annotated[dt.date | None, Field(ge=FIRST_DAY)] = None,
+    end: Annotated[dt.date | None, Field(ge=FIRST_DAY)] = None,
+    variable: Variable = "temperature",
+) -> list[DayValue]:
+    """The daily means of /daily alone, without the climatology, threshold and anomaly.
+
+    It takes the same parameters and has the same days, in about a third of
+    the bytes, for charting a whole record at a glance.
+    """
+    frame = _daily_frame(session, buoy_id, depth, start, end, variable)
+    return [
+        DayValue(date=date, value=_number(value))
+        for date, value in zip(pd.DatetimeIndex(frame.index).date, frame["value"], strict=True)
+    ]
+
+
+def _daily_frame(
+    session: Session,
+    buoy_id: str,
+    depth: int,
+    start: dt.date | None,
+    end: dt.date | None,
+    variable: Variable,
+) -> pd.DataFrame:
+    """The days /daily and /daily/values serve, from queries.daily, rounded to DECIMALS."""
+    series = get_series(session, buoy_id, depth, variable)
+    end = end or series.latest_date or today()
+    start = start or end - dt.timedelta(days=364)
+    if start > end:
+        raise HTTPException(422, "start must be on or before end")
+    # Every day asked for costs a row, whether or not it has data, so the
+    # range is bounded to keep any request to about a full record.
+    last = today() + dt.timedelta(days=365)
+    if end > last:
+        raise HTTPException(422, f"end must be on or before {last}, a year from today")
+
+    frame = queries.daily(session, series.id, start, end)
+    if frame is None:
+        raise HTTPException(404, f"No climatology yet for {series.label}")
+    return frame.round(DECIMALS)
 
 
 @router.get("/events")

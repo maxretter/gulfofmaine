@@ -78,17 +78,20 @@ def test_one_buoy_by_id(client):
     assert client.get("/api/buoys/Z99").status_code == 404
 
 
-def test_daily_series_defaults_to_the_year_to_the_newest_day(client):
-    days = client.get("/api/buoys/B01/1/daily").json()
+@pytest.mark.parametrize("endpoint", ["daily", "daily/values"])
+def test_daily_series_defaults_to_the_year_to_the_newest_day(client, endpoint):
+    days = client.get(f"/api/buoys/B01/1/{endpoint}").json()
 
     assert len(days) == 365
     assert days[-1]["date"] == (TODAY - dt.timedelta(days=10)).isoformat()
 
 
-def test_daily_series_rejects_a_reversed_range_and_a_series_without_a_normal(client):
+@pytest.mark.parametrize("endpoint", ["daily", "daily/values"])
+def test_daily_series_rejects_a_reversed_or_early_range_and_a_series_without_a_normal(client, endpoint):
     reversed_range = f"start={TODAY}&end={TODAY - dt.timedelta(days=1)}"
-    assert client.get(f"/api/buoys/A01/1/daily?{reversed_range}").status_code == 422
-    assert client.get("/api/buoys/B01/20/daily").status_code == 404
+    assert client.get(f"/api/buoys/A01/1/{endpoint}?{reversed_range}").status_code == 422
+    assert client.get(f"/api/buoys/A01/1/{endpoint}?start=2000-12-31").status_code == 422
+    assert client.get(f"/api/buoys/B01/20/{endpoint}").status_code == 404
 
 
 def test_daily_series_goes_to_the_nearest_thousandth(client):
@@ -98,6 +101,18 @@ def test_daily_series_goes_to_the_nearest_thousandth(client):
     assert [day["value"] for day in response.json()] == pytest.approx(stored.tolist(), abs=5e-4)
     # Every number, the normal, threshold and anomaly too, has three decimals at most.
     assert max(len(decimals) for decimals in re.findall(r"\.(\d+)", response.text)) == 3
+
+
+def test_daily_values_are_the_daily_means_alone(client):
+    # B01 at 1 m went offline ten days ago, so the last ten are gaps.
+    query = f"start={TODAY - dt.timedelta(days=30)}&end={TODAY}"
+    days = client.get(f"/api/buoys/B01/1/daily?{query}").json()
+    values = client.get(f"/api/buoys/B01/1/daily/values?{query}").json()
+
+    assert values == [{"date": day["date"], "value": day["value"]} for day in days]
+    assert [day["value"] for day in values[-10:]] == [None] * 10
+    satellite = client.get("/api/buoys/B01/0/daily/values?start=2021-07-01&end=2021-07-10").json()
+    assert len(satellite) == 10 and None not in [day["value"] for day in satellite]
 
 
 def test_daily_series_runs_from_2001_to_a_year_from_today(client):

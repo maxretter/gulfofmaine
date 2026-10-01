@@ -6,6 +6,7 @@ import type {
   Buoy,
   DataCatalog,
   Day,
+  DayValue,
   EventDetail,
   HeatwaveEvent,
   MonthAnomaly,
@@ -16,6 +17,10 @@ import type {
 } from "./types";
 
 export interface DayPoint extends Omit<Day, "date"> {
+  date: Date;
+}
+
+export interface DayValuePoint extends Omit<DayValue, "date"> {
   date: Date;
 }
 
@@ -156,6 +161,21 @@ export function useDaily(
 
 export function useDailyByDepth(buoy: string, depths: number[], start: string, end: string) {
   return useQueries({ queries: depths.map((depth) => dailyQuery(buoy, depth, start, end)) });
+}
+
+/** A temperature series' daily means alone, without the normal: a whole record in a third of useDaily's bytes. */
+export function useDailyValues(buoy: string, depth: number, start: string, end: string) {
+  return useQuery({
+    // Under keys.daily, so the live feed refreshes it with the buoy's other days, but never useDaily's key for the
+    // same days: the rows aren't the same shape.
+    queryKey: [...keys.daily, buoy, depth, start, end, "values"],
+    queryFn: async (): Promise<DayValuePoint[]> => {
+      const days = await getJSON<DayValue[]>(`/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`);
+      return days.map((day) => ({ ...day, date: parseDay(day.date) }));
+    },
+    placeholderData: keepPreviousData,
+    retry,
+  });
 }
 
 /** One heatwave with the evidence for its origin. Heatwaves are addressed by buoy, depth and start date. */

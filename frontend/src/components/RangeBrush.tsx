@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { type BrushBehavior, brushX, type D3BrushEvent, select, type Selection, utcDay } from "d3";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { type DayPoint, useDaily } from "../api/queries";
+import { type DayValuePoint, useDailyValues } from "../api/queries";
 import type { HeatwaveEvent } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { categories, colors } from "../lib/colors";
@@ -36,7 +36,7 @@ interface Brush {
  * changes made elsewhere (the heatmap, presets, events).
  */
 export function RangeBrush({ buoy, depth, ...brush }: Props) {
-  const record = useDaily(buoy, depth, brush.firstDate, brush.lastDate);
+  const record = useDailyValues(buoy, depth, brush.firstDate, brush.lastDate);
   // Read here, not only inside the render function: TanStack Query re-renders
   // for the fields a component reads, and that function runs only once the
   // width is known.
@@ -54,7 +54,7 @@ export function RangeBrush({ buoy, depth, ...brush }: Props) {
 }
 
 interface BrushProps extends Omit<Props, "buoy" | "depth"> {
-  record: DayPoint[];
+  record: DayValuePoint[];
   width: number;
 }
 
