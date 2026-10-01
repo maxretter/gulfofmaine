@@ -21,11 +21,19 @@ export default defineConfig({
       output: {
         // Libraries change far less often than the app, so they get their own
         // long-cached chunks: a deploy that only touches app code stays small.
+        // The pages load when first visited (router.tsx), so a page that has no
+        // chart or map doesn't load Plot or Leaflet. A group takes the modules
+        // its own modules import too, in the order the groups are listed, so
+        // React's goes first, or React would go with react-leaflet. The bit of
+        // d3 every page needs, for the header's colors, gets a chunk of its own.
+        // And Leaflet's stylesheet stays out of its group, or loading it with
+        // the app's styles (main.tsx) would load the map's code everywhere.
         codeSplitting: {
           groups: [
-            { name: "plot", test: /node_modules[\\/](@observablehq|d3|d3-[^\\/]+|internmap|delaunator|robust-predicates|interval-tree-1d|isoformat)[\\/]/ },
-            { name: "leaflet", test: /node_modules[\\/](leaflet|react-leaflet|@react-leaflet)[\\/]/ },
             { name: "react", test: /node_modules[\\/](react|react-dom|react-router|scheduler|@tanstack|cookie|set-cookie-parser)[\\/]/ },
+            { name: "d3", test: /node_modules[\\/](d3|d3-[^\\/]+|internmap)[\\/]/, tags: ["$initial"] },
+            { name: "plot", test: /node_modules[\\/](@observablehq|d3|d3-[^\\/]+|internmap|delaunator|robust-predicates|interval-tree-1d|isoformat)[\\/]/ },
+            { name: "leaflet", test: /node_modules[\\/](leaflet|react-leaflet|@react-leaflet)[\\/].*\.js$/ },
           ],
         },
       },

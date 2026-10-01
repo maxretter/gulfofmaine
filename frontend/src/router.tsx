@@ -1,15 +1,9 @@
 import { createBrowserRouter, type RouteObject } from "react-router";
 
-import { AboutPage, MovedToAbout } from "./pages/AboutPage";
-import { BuoyPage } from "./pages/BuoyPage";
-import { BuoysPage } from "./pages/BuoysPage";
-import { EventPage } from "./pages/EventPage";
-import { EventsPage } from "./pages/EventsPage";
 import { ErrorPage, Layout, NotFound } from "./pages/Layout";
-import { NowPage } from "./pages/NowPage";
-import { OriginsPage } from "./pages/OriginsPage";
-import { SatellitePage } from "./pages/SatellitePage";
 
+// Each page is loaded when it's first visited, so a route downloads only the code it draws with: Leaflet for the
+// front page's map, Plot for the charts. A link to a page not loaded yet keeps the current one up until it has.
 export const routes: RouteObject[] = [
   {
     element: <Layout />,
@@ -22,17 +16,37 @@ export const routes: RouteObject[] = [
     children: [
       {
         errorElement: <ErrorPage />,
+        // Under the header while the first page loads.
+        hydrateFallbackElement: <p className="note">Loading…</p>,
         children: [
-          { index: true, element: <NowPage /> },
-          { path: "buoys", element: <BuoysPage /> },
-          { path: "buoys/:buoy", element: <BuoyPage /> },
-          { path: "events", element: <EventsPage /> },
-          { path: "events/:buoy/:depth/:start", element: <EventPage /> },
-          { path: "origins", element: <OriginsPage /> },
-          { path: "satellite", element: <SatellitePage /> },
-          { path: "about", element: <AboutPage /> },
-          { path: "methods", element: <MovedToAbout /> },
-          { path: "data", element: <MovedToAbout section="data" /> },
+          { index: true, lazy: async () => ({ Component: (await import("./pages/NowPage")).NowPage }) },
+          { path: "buoys", lazy: async () => ({ Component: (await import("./pages/BuoysPage")).BuoysPage }) },
+          { path: "buoys/:buoy", lazy: async () => ({ Component: (await import("./pages/BuoyPage")).BuoyPage }) },
+          { path: "events", lazy: async () => ({ Component: (await import("./pages/EventsPage")).EventsPage }) },
+          {
+            path: "events/:buoy/:depth/:start",
+            lazy: async () => ({ Component: (await import("./pages/EventPage")).EventPage }),
+          },
+          { path: "origins", lazy: async () => ({ Component: (await import("./pages/OriginsPage")).OriginsPage }) },
+          {
+            path: "satellite",
+            lazy: async () => ({ Component: (await import("./pages/SatellitePage")).SatellitePage }),
+          },
+          { path: "about", lazy: async () => ({ Component: (await import("./pages/AboutPage")).AboutPage }) },
+          {
+            path: "methods",
+            lazy: async () => {
+              const { MovedToAbout } = await import("./pages/AboutPage");
+              return { element: <MovedToAbout /> };
+            },
+          },
+          {
+            path: "data",
+            lazy: async () => {
+              const { MovedToAbout } = await import("./pages/AboutPage");
+              return { element: <MovedToAbout section="data" /> };
+            },
+          },
           { path: "*", element: <NotFound /> },
         ],
       },

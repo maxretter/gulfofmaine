@@ -74,6 +74,10 @@ afterEach(() => {
 describe("router", () => {
   it("shows the map before any buoy has a position", async () => {
     renderAt("/");
+    // The page loads when first visited: until then, the header, with a note under it.
+    expect(screen.getByRole("navigation", { name: "Site" })).toBeTruthy();
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.queryByText("Live from the buoys")).toBeNull();
 
     expect(await screen.findByText("Western Maine Shelf")).toBeTruthy();
     expect(document.querySelector(".map.leaflet-container")).toBeTruthy();
