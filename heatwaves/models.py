@@ -78,7 +78,7 @@ class Series(Base):
     latest_threshold: Mapped[float | None]
     days_above: Mapped[int] = mapped_column(default=0)
     # The newest reading that passed quality control, for sources that report
-    # more often than daily: a buoy's hourly value, in the variable's units.
+    # more often than daily: a buoy's raw reading, in the variable's units.
     latest_reading_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
     latest_reading: Mapped[float | None]
 

@@ -23,7 +23,7 @@ export interface Condition {
   category_name: string | null;
   event_start: string | null;
   synced_at: string | null;
-  reading_at: string | null; // newest hourly reading; null for the satellite
+  reading_at: string | null; // newest reading that passed quality control; null for the satellite
   reading: number | null;
 }
 
