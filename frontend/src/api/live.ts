@@ -60,7 +60,10 @@ export function enteredHeatwave(message: LiveMessage): message is StatusMessage 
   );
 }
 
-/** One heatwave starting at one buoy depth. */
+/**
+ * One buoy depth entering a heatwave on one day: the status's newest day, not the heatwave's start, so one that
+ * leaves and re-enters on a later day, as across a short dip, gets a new id.
+ */
 export function alertId(alert: StatusMessage): string {
   return `${alert.buoy}-${alert.depth}-${alert.date}`;
 }

@@ -121,8 +121,8 @@ class Event(Base):
     max_intensity: Mapped[float]  # degrees C above climatology
     mean_intensity: Mapped[float]
     category: Mapped[int]  # 1-4
-    # Where the heat likely came from, for heatwaves at 20 and 50 m (heatwaves.origin):
-    # "offshore", "surface" or "unclear", with the signals behind the label.
+    # A rule-of-thumb label for where the heat may have come from, for heatwaves at 20 and 50 m
+    # (heatwaves.origin): "offshore", "surface" or "unclear", with the signals behind the label.
     origin: Mapped[str | None]
     evidence: Mapped[dict | None] = mapped_column(JSON)
 

@@ -69,7 +69,7 @@ NORMAL = (
     "(Hobday et al. 2016)."
 )
 THRESHOLD = (
-    f"The {hobday.PERCENTILE:.0%} percentile for the day of year over {BASELINE[0]}-{BASELINE[1]}, "
+    f"The {hobday.PERCENTILE * 100:.0f}th percentile for the day of year over {BASELINE[0]}-{BASELINE[1]}, "
     "pooled and smoothed like the normal. A marine heatwave is at least "
     f"{hobday.MIN_DURATION} days above it (Hobday et al. 2016)."
 )
