@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from heatwaves import db
 from heatwaves.main import app, revalidate_api_responses
-from heatwaves.models import Buoy, Event, UTCDateTime
+from heatwaves.models import Buoy, Event, Series, UTCDateTime
 from heatwaves.sync import update_heatwaves
 from tests.conftest import NOW, TODAY, add_series, api_client, seasonal_temperatures
 
@@ -46,6 +46,29 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     assert condition["anomaly"] > 1.5
     assert condition["first_date"] == "2003-01-01"
     assert condition["synced_at"] is not None
+
+
+def test_buoys_give_each_series_its_own_first_day(client, session, stopped_clock):
+    for depth, first, source in (
+        (1, "2003-01-01", "buoy"),
+        (20, "2005-06-01", "buoy"),
+        (0, "2001-01-01", "satellite"),
+    ):
+        add_series(session, seasonal_temperatures(first, TODAY), "A01", depth, source=source)
+    # A series the sync has created but found no data for yet.
+    session.add(
+        Series(buoy_id="A01", depth=50, variable="temperature", source="buoy", dataset_id="A01_ocean_050m")
+    )
+    session.commit()
+
+    [buoy] = client.get("/api/buoys").json()
+
+    assert [(each["depth"], each["first_date"]) for each in buoy["series"]] == [
+        (1, "2003-01-01"),
+        (20, "2005-06-01"),
+        (50, None),
+    ]
+    assert buoy["satellite"]["first_date"] == "2001-01-01"
 
 
 @pytest.mark.parametrize(

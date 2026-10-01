@@ -288,18 +288,16 @@ def _number(value: float) -> float | None:
 def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
     buoys = session.scalars(select(Buoy).order_by(Buoy.id)).all()
     depths: dict[str, list[Series]] = defaultdict(list)
-    for series in queries.buoy_temperatures(session):
+    temperatures = queries.buoy_temperatures(session)
+    for series in temperatures:
         depths[series.buoy_id].append(series)
     satellites = queries.satellite_temperatures(session)
     ongoing = {
         event.series_id: event
         for event in session.scalars(select(Event).join(Series).where(Event.end_date == Series.latest_date))
     }
-    first_dates = dict(
-        session.execute(
-            select(DailyMean.series_id, func.min(DailyMean.date)).group_by(DailyMean.series_id)
-        ).all()
-    )
+    spans = queries.extents(session, [each.id for each in (*temperatures, *satellites.values())])
+    first_dates = {series_id: first for series_id, (first, _) in spans.items()}
 
     def condition(series: Series) -> Condition:
         return describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
