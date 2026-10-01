@@ -96,3 +96,16 @@ export function NotFound() {
     </section>
   );
 }
+
+/** In place of a page that failed to draw, rather than React Router's screen for developers. */
+export function ErrorPage() {
+  return (
+    <section className="intro">
+      <h1>Something went wrong</h1>
+      <p className="lead">
+        This page couldn't be shown. <button onClick={() => location.reload()}>Try again</button> or{" "}
+        <Link to="/">see every buoy now</Link>.
+      </p>
+    </section>
+  );
+}

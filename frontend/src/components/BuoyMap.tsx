@@ -1,4 +1,4 @@
-import { latLngBounds } from "leaflet";
+import { latLngBounds, type LatLngTuple } from "leaflet";
 import { Fragment, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
 
@@ -6,6 +6,10 @@ import { useLive } from "../api/live";
 import type { Buoy } from "../api/types";
 import { colors } from "../lib/colors";
 import { stateLook } from "../lib/state";
+
+/** Where the map looks when no buoy has a position yet, as on a database that hasn't synced: the whole Gulf. */
+const GULF: LatLngTuple = [43.2, -68.3];
+const GULF_ZOOM = 7;
 
 interface Props {
   buoys: Buoy[];
@@ -16,13 +20,14 @@ interface Props {
 export function BuoyMap({ buoys, depth, onSelect }: Props) {
   const { pulses } = useLive();
   const located = buoys.filter((buoy) => buoy.latitude !== null && buoy.longitude !== null);
-  // Read once: the map frames the buoys on mount, then the view belongs to the user.
-  const [bounds] = useState(() => latLngBounds(located.map((buoy) => [buoy.latitude!, buoy.longitude!])));
+  // Read once: the map frames the buoys on mount, then the view belongs to the user. Leaflet can't frame none.
+  const [bounds] = useState(() =>
+    located.length ? latLngBounds(located.map((buoy) => [buoy.latitude!, buoy.longitude!])) : null,
+  );
 
   return (
     <MapContainer
-      bounds={bounds}
-      boundsOptions={{ padding: [40, 40] }}
+      {...(bounds ? { bounds, boundsOptions: { padding: [40, 40] } } : { center: GULF, zoom: GULF_ZOOM })}
       scrollWheelZoom={false}
       className="map"
       aria-label={`Map of buoys, colored by heatwave status at ${depth} m`}
