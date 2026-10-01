@@ -5,6 +5,12 @@
 #   docker compose --profile erddap up -d --build
 name: gom-heatwaves
 
+# Docker's default json-file driver never rotates its logs; the local driver
+# keeps the newest 100 MB of each container's, compressed. When NERACOOS is
+# down, the sync job logs a traceback for each dataset every round.
+x-logging: &logging
+  driver: local
+
 x-backend: &backend
   build: .
   image: gom-heatwaves
@@ -13,6 +19,7 @@ x-backend: &backend
   # SIGKILL to stop. Docker's init passes the signal on. The job can stop
   # anywhere: it stores each series in one transaction and replaces each file whole.
   init: true
+  logging: *logging
   environment:
     DATABASE_URL: postgresql+psycopg://heatwaves:${POSTGRES_PASSWORD:?set it in .env}@db/heatwaves
   # The NetCDF and CSV products: written by the sync job, served by the API and ERDDAP.
@@ -23,6 +30,7 @@ services:
   db:
     image: postgres:18-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: heatwaves
       POSTGRES_DB: heatwaves
@@ -72,6 +80,7 @@ services:
     image: gom-heatwaves-erddap
     profiles: [erddap]
     restart: unless-stopped
+    logging: *logging
     environment:
       # The public address, without /erddap.
       ERDDAP_baseUrl: ${ERDDAP_BASE_URL:-http://localhost:8000}
@@ -86,6 +95,7 @@ services:
     build: ./frontend
     image: gom-heatwaves-frontend
     restart: unless-stopped
+    logging: *logging
     ports:
       - "${WEB_PORT:-8000}:80"
     depends_on:
