@@ -35,8 +35,17 @@ export function verdict(origin: Origin, votes: Record<Signal, Vote>, margin: num
   } the other way.`;
 }
 
-/** What a signal measured for one heatwave, and the rule that turned it into a vote, or why it didn't vote. */
-export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, depth: number): string {
+/**
+ * What a signal measured for one heatwave, and the rule that turned it into a vote, or why it didn't vote. With
+ * `heatwave`, the onset order says when an onset it lists is the heatwave's own.
+ */
+export function reading(
+  signal: Signal,
+  evidence: Evidence,
+  rules: OriginRules,
+  depth: number,
+  heatwave?: Pick<HeatwaveEvent, "buoy_id" | "start_date">,
+): string {
   const few = `fewer than ${rules.min_days} days`; // too few in a window to vote on
   switch (signal) {
     case "salinity": {
@@ -84,6 +93,13 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
       const { offshore_onset: offshore, western_onset: western } = evidence;
       const east = rules.offshore_buoys.join(" or ");
       const west = rules.western_buoys.join(" or ");
+      // The window runs up to and including this heatwave's first day, so at one of these buoys it holds its own onset.
+      const isOwn = (date: string | null, buoys: string[]) =>
+        heatwave !== undefined && date === heatwave.start_date && buoys.includes(heatwave.buoy_id);
+      const own =
+        heatwave && (isOwn(offshore, rules.offshore_buoys) || isOwn(western, rules.western_buoys))
+          ? ` The onset on ${formatDate(heatwave.start_date)} is this heatwave's own, at ${heatwave.buoy_id}: the window includes its first day.`
+          : "";
       if (offshore && western) {
         const lag = daysBetween(offshore, western);
         const order =
@@ -92,20 +108,20 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
             : lag > 0
               ? `${east} first, by ${plural(lag, "day")}`
               : `${west} first, by ${plural(-lag, "day")}`;
-        return `Heatwaves began at ${east} on ${formatDate(offshore)} and at ${west} on ${formatDate(western)}: ${order}.`;
+        return `Heatwaves began at ${east} on ${formatDate(offshore)} and at ${west} on ${formatDate(western)}: ${order}.${own}`;
       }
       // One side's heatwave alone votes only if the other side had the data to have had one too.
       const unseen = (buoys: string[]) =>
         `${buoys.join(" and ")} each had data on fewer than half the ${rules.lookback} days before this one, too few to vote.`;
       if (offshore) {
         const began = `A heatwave began at ${east} on ${formatDate(offshore)}`;
-        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.western_buoys)}`;
-        return `${began}, and none at ${west} in the ${rules.lookback} days before this one.`;
+        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.western_buoys)}${own}`;
+        return `${began}, and none at ${west} in the ${rules.lookback} days before this one.${own}`;
       }
       if (western) {
         const began = `A heatwave began at ${west} on ${formatDate(western)}`;
-        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.offshore_buoys)}`;
-        return `${began}, and none at ${east} in the ${rules.lookback} days before this one.`;
+        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.offshore_buoys)}${own}`;
+        return `${began}, and none at ${east} in the ${rules.lookback} days before this one.${own}`;
       }
       return `No heatwave began at ${east} or ${west} in the ${rules.lookback} days before this one.`;
     }

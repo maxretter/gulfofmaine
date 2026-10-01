@@ -103,6 +103,20 @@ describe("reading", () => {
     expect(reading("onset_order", east, rules, 50)).toMatch(/but A01 and B01 each had data on fewer than half/);
   });
 
+  it("says when an onset it lists is the heatwave's own", () => {
+    const alone = { ...offshore, offshore_onset: null, votes: { ...offshore.votes, onset_order: "surface" as const } };
+    expect(reading("onset_order", alone, rules, 50, { buoy_id: "B01", start_date: "2021-03-29" })).toBe(
+      "A heatwave began at A01 or B01 on Mar 29, 2021, and none at N01 or M01 in the 90 days before this one. " +
+        "The onset on Mar 29, 2021 is this heatwave's own, at B01: the window includes its first day.",
+    );
+    expect(reading("onset_order", offshore, rules, 50, { buoy_id: "M01", start_date: "2021-01-17" })).toMatch(
+      /by 71 days\. The onset on Jan 17, 2021 is this heatwave's own, at M01/,
+    );
+    // Another buoy's onset on the same day, or this heatwave elsewhere, isn't its own.
+    expect(reading("onset_order", alone, rules, 50, { buoy_id: "E01", start_date: "2021-03-29" })).not.toMatch(/own/);
+    expect(reading("onset_order", alone, rules, 50, { buoy_id: "A01", start_date: "2021-04-02" })).not.toMatch(/own/);
+  });
+
   it("says too few days, not none, when a signal is short of data", () => {
     const none = { ...offshore, salinity_anomaly: null, deep_heatwave_days: null };
     expect(reading("salinity", none, rules, 50)).toBe(

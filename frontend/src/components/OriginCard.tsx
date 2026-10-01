@@ -43,7 +43,7 @@ export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[]
               <h3>{name}</h3>
               <VoteLabel vote={evidence.votes[key]} />
             </div>
-            <p className="signal-reading">{reading(key, evidence, rules, detail.depth)}</p>
+            <p className="signal-reading">{reading(key, evidence, rules, detail.depth, detail)}</p>
             <SignalChart signal={key} days={days} onset={onset} detail={detail} rules={rules} buoys={buoys} />
           </div>
         ))}
