@@ -1,14 +1,17 @@
 # Gulf of Maine heatwaves, below the surface
 
-Live marine heatwave status at 1, 20 and 50 meters on seven University of Maine
-buoys in the Gulf of Maine, with the full record back to 2001, set beside the
-satellite record at each buoy, and a rule-of-thumb label on every heatwave at
-20 and 50 m for where its heat may have come from. A Python job reads NERACOOS's ERDDAP server
-(and NOAA's, for the satellite) every 10 minutes and applies the standard
-marine heatwave definition (Hobday et al. 2016) to each depth; a FastAPI JSON
-API serves the results to a React app for exploring them, and pushes new
-readings to it over a WebSocket as they're stored. The whole record is also
-published as CF NetCDF and CSV files, ready for ERDDAP.
+Marine heatwaves at fixed depths on seven University of Maine buoys in the
+Gulf of Maine, over records that go back as far as 2001: at 1, 20 and 50
+meters on each, and at 100 to 250 m in Jordan Basin (M01). The five still
+reporting are followed live; M01 and N01 are retired. Each buoy but N01 is
+set beside the satellite record in the nearest grid cell, and every heatwave
+at 20 and 50 m gets a rule-of-thumb label for where its heat may have come
+from. A Python job reads NERACOOS's ERDDAP server (and NOAA's, for the
+satellite) every 10 minutes and applies the standard marine heatwave
+definition (Hobday et al. 2016) to each depth; a FastAPI JSON API serves the
+results to a React app for exploring them, and pushes new readings to it
+over a WebSocket as they're stored. The whole record is also published as CF
+NetCDF and CSV files, ready for ERDDAP.
 
 **Live site:** <https://gulfofmaine.maxretter.com> · **API docs:** <https://gulfofmaine.maxretter.com/docs>
 
@@ -21,10 +24,12 @@ since as early as 2001. This applies the standard marine heatwave definition
 to every depth, so heatwaves at 20 and 50 m can be seen beside those at the
 surface.
 
-Each buoy is also compared with NOAA's OISST satellite record of sea surface
-temperature, in the nearest grid cell. On 68% of the days the buoys logged a
-heatwave at 50 m, the satellite showed none at the surface. At 1 m that
-share is 35%, so at 50 m it is about twice as high.
+Each buoy but N01 is also compared with NOAA's OISST satellite record of sea
+surface temperature, in the nearest grid cell with data. On 68% of the days
+those six buoys logged a heatwave at 50 m, the satellite showed none at the
+surface; at 1 m, the share is 35%. Each share pools that depth's heatwave
+days from every buoy, so the two rest on different days and a different mix
+of buoys, and aren't a like-for-like comparison.
 
 Each heatwave at 20 and 50 m also gets a label from five signals: Offshore when
 they point to warm water arriving at depth, Surface when they point to heat

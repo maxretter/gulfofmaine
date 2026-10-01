@@ -86,14 +86,15 @@ export function AboutPage() {
         The satellite record is NOAA's{" "}
         <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst">OISST v2.1</a>, a daily sea surface
         temperature analysis on a quarter-degree grid, from{" "}
-        <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>. Each buoy is compared
-        with the nearest grid cell that has data
+        <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>. Each buoy but N01 is
+        compared with the nearest grid cell that has data
         {farthest > 0 && `, at most ${Math.ceil(farthest)} km away`}. Satellite heatwaves are found the same way as the
         buoys', against the cell's own 2003–2022 normal, and only days with data from both are compared.
       </p>
       <p>
         At 1 m, about a third of heatwave days have no satellite heatwave. That share is the one to hold the 20 and 50 m
-        figures against.
+        figures against, though each depth's share pools its own heatwave days from every buoy, so they don't rest on
+        the same days.
       </p>
 
       <h2 id="data">API and files</h2>
