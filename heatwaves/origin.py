@@ -1,30 +1,38 @@
-"""Where the heat in a heatwave at depth likely came from.
+"""A label for where the heat in a heatwave at depth may have come from.
 
-Heat reaches 20 and 50 m in the Gulf of Maine in two ways. Warm, salty
-water from the continental slope enters through the Northeast Channel
-(N01) and spreads west along the bottom from Jordan Basin (M01). Or heat
-taken up at the surface is mixed down, by wind or by the autumn overturn.
-Five signals, read from 30 days before an event's onset to 14 days after,
-tell the two apart:
+Each heatwave at 20 and 50 m is labeled offshore when five signals read
+around its onset point to warm water arriving at depth, surface when they
+point to heat from the surface reaching down, and unclear when they don't
+agree. Each signal votes as follows, over days counted from the onset:
 
-    Signal                              Offshore            Mixed down from the surface
-    Salinity anomaly at the depth       Salty               Normal or fresher
-    1 m heatwave in the 30 days before  None                Yes
-    1 m minus the depth's temperature   Holds               Collapses
-    M01 at 100-250 m, 30 days before    In a heatwave       Not in a heatwave
-    Onsets in the 90 days to onset      N01 or M01 first    A01 or B01 first, or together
+    Signal (days from onset)                  Offshore                     Surface
+    Salinity anomaly at the depth (-30..14)   SALTY or more                FRESH down to DRIFT
+    1 m heatwave days (-30..-1)               None, 1 m MIXED warmer       Any
+    1 m minus the depth (-30..-1, 0..14)      Holds at COLLAPSE or more    Falls below COLLAPSE
+    M01 at 100-250 m heatwave days (-30..-1)  Any                          None
+    Onsets at this depth (-90..0)             N01 or M01 first             A01 or B01 first, or together
 
 Each signal votes one way, or not at all when its data are missing or it
-can't tell. The onsets' window runs up to and including the onset day, so
-it holds the event's own onset: an event at N01 or M01 with no onset at A01
-or B01 in it votes offshore, and one at A01 or B01 with none at N01 or M01
-votes surface, as long as the other pair had data. A label needs at least
-MARGIN more votes than the other side; anything closer is unclear. They are
-plain rules rather than a fitted model, so every label can be explained
-from its evidence. They were checked against two onsets whose origins are
-known: the 2021 heatwave at 50 m, which began at M01 in January and reached
-A01 in April, is offshore, and the 2012 heatwave, which began at B01 after a
-warm winter, is surface.
+can't tell. The 1 m minus the depth votes only if 1 m was at least MIXED
+warmer before onset, and compares its mean from onset with its mean before.
+The onsets' window runs up to and including the onset day, so it holds the
+event's own onset: an event at N01 or M01 with no onset at A01 or B01 in it
+votes offshore, and one at A01 or B01 with none at N01 or M01 votes surface,
+as long as the other pair had data. A label needs at least MARGIN more votes
+than the other side; anything closer is unclear.
+
+The labels say which way the rules lean, not what the signals measured. In
+particular:
+
+- 1 m minus the depth reads only the difference, so the depth warming with
+  1 m unchanged votes surface just as 1 m cooling does:
+  stratification_vote(2.0, 0.8) is surface whichever end moved.
+- M01's deep water counts only if it was in a heatwave in the 30 days
+  before onset; a heatwave there that ended before that doesn't count.
+
+These are this project's own rules of thumb, not a published or tested
+method: plain rules rather than a fitted model, so every label can be
+explained from its evidence.
 
 Anomalies are against the same fixed 2003-2022 climatology as the
 heatwaves. Everything here is a plain function over pandas objects, with
@@ -49,17 +57,19 @@ AFTER = 14  # days after onset in the evidence window
 LOOKBACK = 90  # days before onset searched for other buoys' onsets
 MIN_DAYS = 7  # days of data a signal needs in its window to vote
 
-SALTY = 0.15  # salinity anomaly at or above which the water is offshore water
-FRESH = 0.0  # at or below which it isn't
-# Conductivity cells read low as they foul, so a window this fresh is more
-# likely a drifting sensor than water: it doesn't vote.
+SALTY = 0.15  # salinity anomaly at or above which salinity votes offshore
+FRESH = 0.0  # at or below which it votes surface
+# Below this, it doesn't vote: the rules take a window this fresh for a
+# drifting sensor rather than water.
 DRIFT = -1.0
-MIXED = 1.0  # degrees C: 1 m this little warmer than the depth means the column is already mixed
-COLLAPSE = 0.5  # the column collapses when that difference falls below this fraction of itself
+# Degrees C: unless 1 m was at least this much warmer than the depth before onset, 1 m minus
+# the depth doesn't vote, and the 1 m heatwave signal can't vote offshore.
+MIXED = 1.0
+COLLAPSE = 0.5  # 1 m minus the depth votes surface when it falls below this fraction of itself
 TOGETHER = 7  # days: onsets this close count as together
 MARGIN = 2
 
-OFFSHORE_BUOYS = ("N01", "M01")  # where slope water arrives first
+OFFSHORE_BUOYS = ("N01", "M01")  # the onset order's offshore side
 WESTERN_BUOYS = ("A01", "B01")
 DEEP_BUOY = "M01"
 DEEP_DEPTHS = (100, 150, 200, 250)
@@ -216,9 +226,11 @@ def salinity_vote(anomaly: float | None) -> Vote:
 
 
 def stratification_vote(before: float | None, after: float | None) -> Vote:
-    """Heat mixed down from the surface mixes the column: the surface's lead over the depth collapses.
+    """Surface if 1 m minus the depth, from onset, falls below COLLAPSE of its mean before; else offshore.
 
-    In a column already mixed, as every winter, this can't tell.
+    No vote unless it was at least MIXED before. Only the difference counts,
+    so the depth warming with 1 m unchanged votes surface just as 1 m cooling
+    does: (2.0, 0.8) is surface whichever end moved.
     """
     if before is None or after is None or before < MIXED:
         return None

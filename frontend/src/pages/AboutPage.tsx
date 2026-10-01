@@ -70,7 +70,9 @@ export function AboutPage() {
       </p>
       {rules.data && <OriginTable rules={rules.data} />}
       <p>
-        A signal that meets neither column, or lacks the data, doesn't vote.
+        A signal that meets neither column, or lacks the data, doesn't vote. 1 m minus the depth reads only the
+        difference, which falls whether 1 m cools or the depth warms; either way, a fall below{" "}
+        {Math.round((rules.data?.collapse ?? 0.5) * 100)}% votes surface.
         {rules.data &&
           ` The onset order counts the heatwave's own onset: one at ${east} with no onset at ${west} in its window votes offshore, and one at ${west} with none at ${east} votes surface.`}{" "}
         A label needs {rules.data?.margin ?? 2} more votes than the other side; otherwise it's Unclear, as about half

@@ -7,7 +7,7 @@ import { OriginsByYear } from "../components/OriginsByYear";
 import { YearByBuoy } from "../components/YearByBuoy";
 import { latest } from "../lib/dates";
 
-const DEFAULT_YEAR = 2021; // the best-studied recent onset: M01 in January, the western Gulf by April
+const DEFAULT_YEAR = 2021; // the year the README's figures start with
 const DEFAULT_DEPTH = 50;
 const FIRST_YEAR = 2001; // the first buoy records
 
