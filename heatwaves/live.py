@@ -13,8 +13,9 @@ NOTIFY, and the feed only pings.
 import asyncio
 import datetime as dt
 import logging
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import Literal
+from urllib.parse import urlsplit
 
 import anyio
 import psycopg
@@ -174,8 +175,33 @@ async def relay(url: str, hub: Hub, retry: float = 5.0) -> None:
         await asyncio.sleep(retry)
 
 
+def allowed_origin(websocket: WebSocket, others: Collection[str]) -> bool:
+    """Whether the connection is from a page on the site itself or on one of `others`, or not from a browser.
+
+    A browser opens a WebSocket from any site's page, to any server, and
+    sends that page's origin with it. This keeps other sites from holding
+    the feed's connections open with their visitors' browsers. Clients that
+    aren't browsers send no Origin, or any they like, so it doesn't limit them.
+    Behind a proxy, the Host header has to be the one the browser sent, as
+    Caddy and Vite's dev server pass it on.
+    """
+    origin = websocket.headers.get("origin")
+    if origin is None or origin.lower() in others:
+        return True
+    return urlsplit(origin).netloc.lower() == websocket.headers.get("host", "").lower()
+
+
 async def serve(websocket: WebSocket, hub: Hub) -> None:
     """Send one browser every message from the hub, and a ping whenever it's been quiet for PING_EVERY."""
+    if not allowed_origin(websocket, settings.live_origins):
+        log.warning(
+            "Refused a live feed connection from a page at %s (Host %s); LIVE_ORIGINS can allow it",
+            websocket.headers.get("origin"),
+            websocket.headers.get("host"),
+        )
+        # Refused before the handshake, which the browser sees as a 403.
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     queue = hub.join()
     if queue is None:
         # Refused before the handshake; the browser retries later.

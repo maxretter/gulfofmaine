@@ -16,6 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from heatwaves import live, main
+from heatwaves.config import Settings
 from heatwaves.live import Hub, ReadingMessage, StatusMessage
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
@@ -183,6 +184,48 @@ def test_the_feed_turns_browsers_away_when_full(monkeypatch):
         with pytest.raises(WebSocketDisconnect) as refused, client.websocket_connect("/api/live"):
             pass
         assert refused.value.code == 1013
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"origin": "http://testserver"},  # a page on the site itself; TestClient sends Host: testserver
+        {"origin": "HTTP://TestServer"},
+        {},  # not a browser
+        {"origin": "https://partner.example"},  # in LIVE_ORIGINS
+    ],
+)
+def test_the_feed_serves_its_own_pages_and_clients_that_arent_browsers(monkeypatch, headers):
+    monkeypatch.setattr(
+        live,
+        "settings",
+        dataclasses.replace(live.settings, live_origins=frozenset({"https://partner.example"})),
+    )
+    monkeypatch.setattr(live, "PING_EVERY", 0.1)
+
+    with TestClient(main.app) as client, client.websocket_connect("/api/live", headers=headers) as browser:
+        assert browser.receive_json()["type"] == "ping"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["https://elsewhere.example", "http://testserver.elsewhere.example", "http://testserver:8000", "null"],
+)
+def test_the_feed_turns_away_pages_on_other_sites(origin):
+    with TestClient(main.app) as client:
+        with (
+            pytest.raises(WebSocketDisconnect) as refused,
+            client.websocket_connect("/api/live", headers={"origin": origin}),
+        ):
+            pass
+        assert refused.value.code == 1008
+        assert not live.hub.clients  # it took no place on the feed
+
+
+def test_live_origins_is_a_comma_separated_list(monkeypatch):
+    monkeypatch.setenv("LIVE_ORIGINS", " https://Partner.example/, http://localhost:5173,")
+
+    assert Settings.from_env().live_origins == {"https://partner.example", "http://localhost:5173"}
 
 
 def test_a_browser_that_falls_behind_is_disconnected_to_refetch():

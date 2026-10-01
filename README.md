@@ -285,9 +285,12 @@ synthetic series with known answers.
 
 Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 `COASTWATCH_URL`, `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT`,
-`SYNC_STALE_AFTER_HOURS`, `LIVE_MAX_CLIENTS` and `PRODUCTS_DIR`, where the
-files go (see [`heatwaves/config.py`](heatwaves/config.py)). The live feed
-needs Postgres, for `NOTIFY`; on SQLite its WebSocket only pings. After
+`SYNC_STALE_AFTER_HOURS`, `LIVE_MAX_CLIENTS`, `LIVE_ORIGINS` and
+`PRODUCTS_DIR`, where the files go (see [`heatwaves/config.py`](heatwaves/config.py)).
+The live feed needs Postgres, for `NOTIFY`; on SQLite its WebSocket only
+pings. Of browsers, it serves only pages whose `Origin` matches the request's
+`Host`, so a proxy in front has to pass `Host` on unchanged, as Caddy and
+Vite do, or the origins listed in `LIVE_ORIGINS` (comma-separated). After
 changing the method, run `python -m heatwaves.sync --recompute` to rebuild
 every series from stored data and its files; `python -m heatwaves.products`
 rewrites just the files.
