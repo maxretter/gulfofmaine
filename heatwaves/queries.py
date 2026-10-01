@@ -12,6 +12,28 @@ from heatwaves import origin
 from heatwaves.hobday import day_of_year
 from heatwaves.models import ClimatologyDay, DailyMean, Event, Series
 
+# Temperature at a buoy depth: the series every heatwave the API lists comes
+# from. The satellite's are at depth 0 over each buoy (heatwaves.stations),
+# and appear only where named.
+AT_BUOY = (Series.source == "buoy") & (Series.variable == "temperature")
+SATELLITE = (Series.source == "satellite") & (Series.variable == "temperature")
+
+
+def buoy_temperatures(session: Session, depth: int | None = None) -> list[Series]:
+    """The buoys' temperature series at `depth`, or at every depth, by buoy and then depth.
+
+    None at depth 0: that is the satellite's, from `satellite_temperatures`.
+    """
+    query = select(Series).where(AT_BUOY)
+    if depth is not None:
+        query = query.where(Series.depth == depth)
+    return list(session.scalars(query.order_by(Series.buoy_id, Series.depth)))
+
+
+def satellite_temperatures(session: Session) -> dict[str, Series]:
+    """The satellite's temperature series over each buoy, by buoy."""
+    return {each.buoy_id: each for each in session.scalars(select(Series).where(SATELLITE))}
+
 
 def daily(
     session: Session, series_id: int, start: dt.date | None = None, end: dt.date | None = None

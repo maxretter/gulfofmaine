@@ -106,8 +106,7 @@ def test_onsets_follow_each_buoy_through_a_year(client):
     assert a01["anomaly"][-1] is None  # the record ends in June
 
 
-def test_onsets_need_a_measured_depth_and_a_plausible_year(client):
-    assert client.get("/api/onsets?year=2021&depth=7").status_code == 404
+def test_onsets_need_a_plausible_year(client):
     assert client.get("/api/onsets?year=1999&depth=50").status_code == 422
 
 

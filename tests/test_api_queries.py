@@ -182,7 +182,16 @@ def test_stripes_average_each_month_over_the_buoys(client):
     # Both buoys measure 1 m through 2021; B01's heatwave that July warms the month.
     assert by_month["2021-07-01"]["buoys"] == 2
     assert by_month["2021-07-01"]["anomaly"] > by_month["2021-06-01"]["anomaly"]
-    assert client.get("/api/stripes?depth=7").status_code == 404
+
+
+@pytest.mark.parametrize("depth", [0, 7])
+def test_a_depth_no_buoy_measures_has_nothing_to_summarize(client, depth):
+    # Depth 0 is the satellite's: B01's mustn't pass for a buoy depth.
+    for path in ("annual", "stripes", "agreement"):
+        response = client.get(f"/api/{path}?depth={depth}")
+        assert (response.status_code, response.json()) == (200, [])
+    year = client.get(f"/api/onsets?year=2021&depth={depth}")
+    assert (year.status_code, year.json()["buoys"]) == (200, [])
 
 
 def test_buoys_report_the_satellite_apart_from_the_depths(client):

@@ -1,7 +1,7 @@
 """The JSON API. FastAPI serves interactive docs for it at /docs."""
 
 import datetime as dt
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Annotated, Literal, cast
 
@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi import Path as PathParameter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import extract, func, or_, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from heatwaves import compare, live, origin, products, queries
@@ -19,6 +19,7 @@ from heatwaves.config import settings
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
+from heatwaves.queries import AT_BUOY
 from heatwaves.sources import connect
 from heatwaves.state import State, state_of
 
@@ -27,11 +28,6 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 # Each series' source builds its data link; the API makes no requests through them.
 SOURCES = connect(httpx.Client())
-
-# The series behind every endpoint: temperature at a buoy depth. The
-# satellite's are at depth 0, and appear only where named.
-TEMPERATURE = Series.variable == "temperature"
-AT_BUOY = TEMPERATURE & (Series.source == "buoy")
 
 # No record begins before this day; heatwaves.sources reads the satellite from it.
 FIRST_DAY = dt.date(2001, 1, 1)
@@ -256,7 +252,11 @@ def _number(value: float) -> float | None:
 
 
 def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
-    buoys = session.scalars(select(Buoy).options(selectinload(Buoy.series)).order_by(Buoy.id)).all()
+    buoys = session.scalars(select(Buoy).order_by(Buoy.id)).all()
+    depths: dict[str, list[Series]] = defaultdict(list)
+    for series in queries.buoy_temperatures(session):
+        depths[series.buoy_id].append(series)
+    satellites = queries.satellite_temperatures(session)
     ongoing = {
         event.series_id: event
         for event in session.scalars(select(Event).join(Series).where(Event.end_date == Series.latest_date))
@@ -270,16 +270,15 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
     def condition(series: Series) -> Condition:
         return describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
 
-    def satellite(buoy: Buoy) -> SatelliteCondition | None:
-        for series in buoy.series:
-            if series.variable == "temperature" and series.source == "satellite":
-                return SatelliteCondition(
-                    **condition(series).model_dump(),
-                    latitude=series.latitude,
-                    longitude=series.longitude,
-                    distance_km=series.distance_km,
-                )
-        return None
+    def satellite(series: Series | None) -> SatelliteCondition | None:
+        if series is None:
+            return None
+        return SatelliteCondition(
+            **condition(series).model_dump(),
+            latitude=series.latitude,
+            longitude=series.longitude,
+            distance_km=series.distance_km,
+        )
 
     return [
         BuoyOut(
@@ -287,8 +286,8 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
             name=buoy.name,
             latitude=buoy.latitude,
             longitude=buoy.longitude,
-            series=[condition(s) for s in buoy.series if s.variable == "temperature" and s.source == "buoy"],
-            satellite=satellite(buoy),
+            series=[condition(series) for series in depths[buoy.id]],
+            satellite=satellite(satellites.get(buoy.id)),
         )
         for buoy in buoys
     ]
@@ -523,13 +522,10 @@ def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
 
     For each buoy with a series at `depth`: when its first heatwave starting
     in the year began, that heatwave's origin, and for each day the
-    temperature anomaly and whether it was a heatwave day.
+    temperature anomaly and whether it was a heatwave day. At a depth no
+    buoy measures, `buoys` is empty.
     """
-    series = session.scalars(
-        select(Series).where(AT_BUOY, Series.depth == depth).order_by(Series.buoy_id)
-    ).all()
-    if not series:
-        raise HTTPException(404, f"No buoy measures {depth} m")
+    series = queries.buoy_temperatures(session, depth)
     ids = [each.id for each in series]
     first_day, last_day = dt.date(year, 1, 1), dt.date(year, 12, 31)
     days = pd.date_range(first_day, last_day, name="date")
@@ -560,16 +556,17 @@ def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
 @router.get("/annual")
 def annual(depth: Depth, session: SessionDep) -> list[YearSummary]:
     """Heatwave days and observed days per buoy and year, at one depth."""
+    series = queries.buoy_temperatures(session, depth)
+    ids = [s.id for s in series]
     year = extract("year", DailyMean.date)
     observed = session.execute(
         select(Series.buoy_id, year, func.count())
         .join(Series)
-        .where(TEMPERATURE, Series.depth == depth)
+        .where(Series.id.in_(ids))
         .group_by(Series.buoy_id, year)
     ).all()
 
-    series = session.scalars(select(Series).where(TEMPERATURE, Series.depth == depth)).all()
-    days = queries.heatwave_days(session, [s.id for s in series])
+    days = queries.heatwave_days(session, ids)
     heatwave_days = Counter((s.buoy_id, day.year) for s in series for day in days[s.id].index)
 
     return [
@@ -592,10 +589,7 @@ def stripes(depth: Depth, session: SessionDep) -> list[MonthAnomaly]:
     its own 2003-2022 normal. Months no buoy counts toward are left out. The
     site draws these as the stripes across its header.
     """
-    series = session.scalars(select(Series).where(AT_BUOY, Series.depth == depth)).all()
-    if not series:
-        raise HTTPException(404, f"No buoy measures {depth} m")
-    frames = (queries.daily(session, each.id) for each in series)
+    frames = (queries.daily(session, each.id) for each in queries.buoy_temperatures(session, depth))
     months = queries.monthly_anomaly(frame["anomaly"] for frame in frames if frame is not None)
     return [
         MonthAnomaly(month=month.date(), anomaly=round(anomaly, 3), buoys=int(count))
@@ -612,25 +606,25 @@ def agreement(depth: Depth, session: SessionDep) -> list[Agreement]:
     Compares each buoy's heatwave days at `depth` with the satellite's at the
     surface above it, over the days both have data.
     """
-    series = session.scalars(
-        select(Series).where(
-            TEMPERATURE,
-            or_(Series.source == "satellite", (Series.source == "buoy") & (Series.depth == depth)),
-        )
-    ).all()
-    ids = [s.id for s in series]
+    satellites = queries.satellite_temperatures(session)
+    pairs = [
+        (each, satellites[each.buoy_id])
+        for each in queries.buoy_temperatures(session, depth)
+        if each.buoy_id in satellites
+    ]
+    ids = [each.id for pair in pairs for each in pair]
     observed = queries.observed_days(session, ids)
     heatwaves = queries.heatwave_days(session, ids)
-    flags = {(s.buoy_id, s.source): compare.in_heatwave(observed[s.id], heatwaves[s.id]) for s in series}
+
+    def flags(series: Series) -> pd.Series:
+        return compare.in_heatwave(observed[series.id], heatwaves[series.id])
 
     rows = []
-    for buoy_id in sorted({s.buoy_id for s in series}):
-        if (buoy_id, "buoy") not in flags or (buoy_id, "satellite") not in flags:
-            continue
-        table = compare.agreement(flags[buoy_id, "buoy"], flags[buoy_id, "satellite"])
+    for at_depth, above in pairs:
+        table = compare.agreement(flags(at_depth), flags(above))
         rows += [
             Agreement(
-                buoy_id=buoy_id,
+                buoy_id=at_depth.buoy_id,
                 depth=depth,
                 year=int(year),
                 both=int(both),
