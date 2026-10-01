@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
-from heatwaves import api, live, state
+from heatwaves import __version__, api, live, state
 from heatwaves.api import SessionDep
 from heatwaves.config import settings
 from heatwaves.models import Series
@@ -41,7 +41,7 @@ app = FastAPI(
         "Marine heatwaves at fixed depths from 1 to 250 m on University of Maine buoys in the Gulf of Maine, "
         "beside NOAA's satellite data."
     ),
-    version="0.2.0",
+    version=__version__,
     docs_url=None,  # served below
     redoc_url=None,
     # Starlette would redirect /api/buoys/ to /api/buoys, at the request's Host and the
