@@ -1,9 +1,10 @@
 """The JSON API. FastAPI serves interactive docs for it at /docs."""
 
 import datetime as dt
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Annotated, Literal, cast
+from typing import Annotated, BinaryIO, Literal, cast
 
 import httpx
 import pandas as pd
@@ -13,6 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session, selectinload
+from starlette.types import Receive, Scope, Send
 
 from heatwaves import compare, live, origin, products, queries
 from heatwaves.config import settings
@@ -699,15 +701,43 @@ def _download(path: Path, format: products.Format, request: Request) -> Response
     Like the rest of the API, it's revalidated before a cache reuses it: the
     sync rewrites the files.
     """
-    if not path.is_file():
-        raise HTTPException(404, f"No product {path.name}; it appears after the sync job's next run")
+    try:
+        file = path.open("rb")
+    except FileNotFoundError:
+        raise HTTPException(
+            404, f"No product {path.name}; it appears after the sync job's next run"
+        ) from None
     headers = {"Cache-Control": "no-cache"}
-    response = FileResponse(
-        path, headers=headers, media_type=MEDIA_TYPES[format], filename=path.name, stat_result=path.stat()
-    )
+    response = OpenFileResponse(file, headers=headers, media_type=MEDIA_TYPES[format], filename=path.name)
     if response.headers["etag"] in if_none_match(request):
+        file.close()
         return Response(status_code=304, headers={"ETag": response.headers["etag"], **headers})
     return response
+
+
+class OpenFileResponse(FileResponse):
+    """A FileResponse of a file already open, so its body is the file its headers describe.
+
+    The sync replaces a product with a new file rather than rewriting it, and
+    Starlette opens its path again to read the body. Through /dev/fd that is
+    the file opened here, even once another has taken its name.
+    """
+
+    def __init__(self, file: BinaryIO, headers: dict[str, str], media_type: str, filename: str) -> None:
+        super().__init__(
+            f"/dev/fd/{file.fileno()}",
+            headers=headers,
+            media_type=media_type,
+            filename=filename,
+            stat_result=os.fstat(file.fileno()),
+        )
+        self.file = file
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.file.close()
 
 
 def if_none_match(request: Request) -> set[str]:

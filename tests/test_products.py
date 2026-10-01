@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 from compliance_checker.runner import CheckSuite
+from fastapi.responses import FileResponse
 
 from heatwaves import api, products
 from heatwaves.main import app
@@ -232,6 +233,33 @@ def test_downloads_go_as_the_files_are(client):
     assert "content-encoding" not in download.headers
     assert download.headers["content-length"] == str(len(download.content))
     assert same_days.headers["content-encoding"] == "gzip"  # the JSON still is
+
+
+@pytest.mark.parametrize("headers", [{}, {"Range": "bytes=100-"}])
+def test_a_download_is_of_the_file_its_headers_describe(client, directory, tmp_path, monkeypatch, headers):
+    path = products.daily_path(tmp_path, "A01", 50, "nc")
+    path.parent.mkdir(parents=True)
+    path.write_bytes(products.daily_path(directory, "A01", 50, "nc").read_bytes())
+    first = path.read_bytes()
+    respond = FileResponse.__call__
+
+    async def replaced_first(response, *args):
+        # The sync replaces the file once the response's headers are made, before its body is read.
+        newer = path.with_suffix(".partial")
+        newer.write_bytes(b"newer " + first)
+        os.replace(newer, path)
+        await respond(response, *args)
+
+    monkeypatch.setattr(FileResponse, "__call__", replaced_first)
+    app.dependency_overrides[api.products_dir] = lambda: tmp_path
+    try:
+        download = client.get("/api/data/A01/50.nc", headers=headers)
+    finally:
+        app.dependency_overrides[api.products_dir] = lambda: directory
+
+    sent = first[100:] if headers else first
+    assert download.content == sent
+    assert download.headers["content-length"] == str(len(sent))
 
 
 def test_downloads_are_404_until_the_sync_writes_them(client, directory, tmp_path):
