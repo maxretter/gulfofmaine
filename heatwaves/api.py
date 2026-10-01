@@ -120,7 +120,7 @@ class Evidence(BaseModel):
     stratification_after: float | None  # the same, onset to 14 days after
     deep_heatwave_days: int | None  # days M01 was in a heatwave at any of 100-250 m, 30 days before
     offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, 90 days before
-    western_onset: dt.date | None  # the same at A01 or B01
+    western_onset: dt.date | None  # the same at A01 or B01; neither counts the event's own buoy
     votes: dict[str, Vote]  # by signal: salinity, surface_heatwave, stratification, deep, onset_order
 
 
@@ -143,7 +143,7 @@ Group = Literal["offshore", "western"]
 class Onset(BaseModel):
     buoy_id: str
     date: dt.date
-    group: Group | None  # which side of the onset-order signal it counts for
+    group: Group | None  # which side of the onset-order signal it counts for; none at the heatwave's own buoy
 
 
 class EventDetail(EventOut):
@@ -524,9 +524,8 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
         around=[(event.series.buoy_id, depth)],
     )
     signals = origin.signals(record, event.series.buoy_id, depth, start)
-    groups: dict[str, Group] = {buoy: "offshore" for buoy in origin.OFFSHORE_BUOYS} | {
-        buoy: "western" for buoy in origin.WESTERN_BUOYS
-    }
+    offshore, western = origin.sides(event.series.buoy_id)
+    groups: dict[str, Group] = {buoy: "offshore" for buoy in offshore} | {buoy: "western" for buoy in western}
     detail.evidence = Evidence.model_validate(event.evidence)
     detail.signals = [
         SignalDay(

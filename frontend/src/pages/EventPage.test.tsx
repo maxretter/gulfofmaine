@@ -116,6 +116,20 @@ describe("EventPage", () => {
     expect(screen.queryByText(/No normal for salinity/)).toBeNull();
   });
 
+  it("leaves the heatwave's own buoy, B01, off the onset order's sides", async () => {
+    serve({});
+    renderPage();
+
+    expect(await screen.findByText("A01: western side")).toBeTruthy();
+    expect(screen.getByText("N01, M01: eastern side")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "A heatwave began at N01 or M01 on May 30, 2021, and none at A01 in the 90 days before this one. " +
+          "Onsets at B01, this heatwave's own buoy, don't count.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("says there's no such heatwave when the API has none", async () => {
     serve({ event: 404 });
     renderPage({ fetchEvent: true });

@@ -133,8 +133,8 @@ function HeatwaveMethod({ method }: { method: Method }) {
 
 /** The origin labels and how they're voted, with the numbers heatwaves/origin.py uses. */
 function OriginRulesText({ rules }: { rules: OriginRules }) {
-  const east = rules.offshore_buoys.join(" or ");
-  const west = rules.western_buoys.join(" or ");
+  const four = [...rules.offshore_buoys, ...rules.western_buoys];
+  const [west, ...rest] = rules.western_buoys; // a buoy on the western side, and the others there
   return (
     <>
       <p>
@@ -152,10 +152,12 @@ function OriginRulesText({ rules }: { rules: OriginRules }) {
       <p>
         A signal that meets neither column, or lacks the data, doesn't vote. 1 m minus the depth reads only the
         difference, which falls whether 1 m cools or the depth warms; either way, a fall below{" "}
-        {Math.round(rules.collapse * 100)}% votes surface. The onset order counts the heatwave's own onset: one at{" "}
-        {east} with no onset at {west} in its window votes offshore, and one at {west} with none at {east} votes
-        surface. A label needs {rules.margin} more votes than the other side; otherwise it's Unclear, as about half
-        are. Every vote is shown on the heatwave's own page.
+        {Math.round(rules.collapse * 100)}% votes surface. The onset order leaves out the heatwave's own buoy: for a
+        heatwave at {west}, the western side is just {formatList(rest)}. So its own onset never counts, one at any of
+        the {inWords(four.length)} with no onset at the other {inWords(four.length - 1)} doesn't vote, and an onset on
+        one side alone votes only if a buoy left on the other had data on at least {Math.floor(rules.lookback / 2)} days
+        of the window. A label needs {rules.margin} more votes than the other side; otherwise it's Unclear, as about
+        half are. Every vote is shown on the heatwave's own page.
       </p>
     </>
   );
@@ -212,7 +214,7 @@ function OriginTable({ rules }: { rules: OriginRules }) {
           </tr>
           <tr>
             <td>
-              First heatwave at the same depth at {east}, and at {west}
+              First heatwave at the same depth at {east}, and at {west}, leaving out the heatwave's own buoy
             </td>
             <td>
               {east} more than {rules.together} days first, or only there

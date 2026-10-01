@@ -71,7 +71,8 @@ def test_warm_salty_water_arriving_first_offshore_is_offshore():
     assert evidence.surface_heatwave_days == 0
     assert (evidence.stratification_before, evidence.stratification_after) == (4.0, 2.0)
     assert evidence.deep_heatwave_days == 11
-    assert (evidence.offshore_onset, evidence.western_onset) == (ONSET - dt.timedelta(days=60), ONSET)
+    # A01's own onset doesn't count for the west; B01 had data, and no onset.
+    assert (evidence.offshore_onset, evidence.western_onset) == (ONSET - dt.timedelta(days=60), None)
 
 
 def test_heat_mixed_down_from_a_warm_surface_is_surface():
@@ -116,7 +117,7 @@ def test_signals_without_data_dont_vote():
     assert evidence.origin == "unclear"
     assert evidence.surface_heatwave_days is None
     assert evidence.deep_heatwave_days is None
-    assert evidence.western_onset == ONSET  # its own; with no data offshore, that says nothing
+    assert evidence.western_onset is None  # its own doesn't count
 
 
 def test_in_a_mixed_column_the_surface_cant_lead():
@@ -176,6 +177,65 @@ def test_onset_order_vote(offshore, western, observed, vote):
         )
         == vote
     )
+
+
+FOUR = (*origin.OFFSHORE_BUOYS, *origin.WESTERN_BUOYS)
+
+
+@pytest.mark.parametrize(
+    ("buoy", "offshore", "western"),
+    [
+        ("A01", ("N01", "M01"), ("B01",)),
+        ("B01", ("N01", "M01"), ("A01",)),
+        ("M01", ("N01",), ("A01", "B01")),
+        ("N01", ("M01",), ("A01", "B01")),
+        ("E01", ("N01", "M01"), ("A01", "B01")),  # on neither side
+    ],
+)
+def test_the_onset_order_leaves_out_only_the_heatwaves_own_buoy(buoy, offshore, western):
+    assert origin.sides(buoy) == (offshore, western)
+
+
+@pytest.mark.parametrize("buoy", FOUR)
+def test_a_heatwave_seen_at_no_other_buoy_casts_no_onset_order_vote(buoy):
+    # Every one of the four had data; only this one had heatwaves, an earlier one too.
+    alone = origin.Record(
+        temperature={(other, 50): daily(9.0) for other in FOUR},
+        salinity={},
+        heatwave_days={(buoy, 50): pd.concat([heatwave(-60, -55), heatwave(0, 10)])},
+    )
+
+    evidence = origin.judge(alone, buoy, 50, ONSET)
+
+    assert (evidence.offshore_onset, evidence.western_onset) == (None, None)
+    assert evidence.votes["onset_order"] is None
+
+
+def test_a_heatwave_still_sees_an_earlier_onset_on_its_own_side():
+    evidence = origin.judge(record(onsets={"B01": -20}), "A01", 50, ONSET)
+
+    assert (evidence.offshore_onset, evidence.western_onset) == (None, day(-20))
+    assert evidence.votes["onset_order"] == "surface"  # M01 had data, and no onset
+
+
+def test_its_own_buoys_data_dont_count_for_its_side():
+    # At M01, after an onset at B01: with no data at N01, the offshore side couldn't have seen one.
+    at_m01 = record(onsets={"B01": -20, "M01": 0})
+    with_n01 = dataclasses.replace(at_m01, temperature={**at_m01.temperature, ("N01", 50): daily(9.0)})
+
+    assert origin.judge(at_m01, "M01", 50, ONSET).votes["onset_order"] is None
+    assert origin.judge(with_n01, "M01", 50, ONSET).votes["onset_order"] == "surface"
+
+
+def test_the_other_side_and_buoys_on_neither_are_read_whole():
+    both = record(onsets={"N01": -60, "M01": -30})
+
+    # At A01, the offshore side is both buoys, and its first onset N01's.
+    assert origin.judge(both, "A01", 50, ONSET).offshore_onset == day(-60)
+    # At E01, every one of the four counts, A01's onset on the same day too.
+    at_e01 = origin.judge(both, "E01", 50, ONSET)
+    assert (at_e01.offshore_onset, at_e01.western_onset) == (day(-60), ONSET)
+    assert at_e01.votes["onset_order"] == "offshore"
 
 
 @pytest.mark.parametrize(

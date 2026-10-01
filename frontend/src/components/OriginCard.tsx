@@ -6,7 +6,7 @@ import { chartDefaults } from "../lib/chart";
 import { categories, colors, origins } from "../lib/colors";
 import { addDays, formatDay, parseDay } from "../lib/dates";
 import { formatDate, formatSigned } from "../lib/format";
-import { eastToWest, reading, SIGNALS, verdict } from "../lib/origin";
+import { eastToWest, reading, sides, SIGNALS, verdict } from "../lib/origin";
 import { Chart } from "./Chart";
 import { Label, OriginLabel, VoteLabel } from "./Label";
 import { PlotFigure } from "./PlotFigure";
@@ -43,7 +43,7 @@ export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[]
               <h3>{name}</h3>
               <VoteLabel vote={evidence.votes[key]} />
             </div>
-            <p className="signal-reading">{reading(key, evidence, rules, detail.depth, detail)}</p>
+            <p className="signal-reading">{reading(key, evidence, rules, detail.depth, detail.buoy_id)}</p>
             <SignalChart signal={key} days={days} onset={onset} detail={detail} rules={rules} buoys={buoys} />
           </div>
         ))}
@@ -200,19 +200,20 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
   return <PlotFigure options={options} />;
 }
 
-/** Each buoy's heatwave onsets at this depth in the lookback, east at the top. */
+/** Each buoy's heatwave onsets at this depth in the lookback, east at the top; the heatwave's own buoy on neither side. */
 function OnsetOrder({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
   const order = eastToWest(buoys, detail.depth).map((b) => b.id);
-  const sides = { offshore: origins.offshore.color, western: origins.surface.color };
-  const color = (onset: Onset) => (onset.group ? sides[onset.group] : colors.muted);
+  const compared = sides(rules, detail.buoy_id);
+  const fills = { offshore: origins.offshore.color, western: origins.surface.color };
+  const color = (onset: Onset) => (onset.group ? fills[onset.group] : colors.muted);
   return (
     <Chart
       className="chart"
       minHeight={40 + order.length * 18}
       legend={
         <div className="legend">
-          <Label color={sides.offshore}>{rules.offshore_buoys.join(", ")}: eastern side</Label>
-          <Label color={sides.western}>{rules.western_buoys.join(", ")}: western side</Label>
+          <Label color={fills.offshore}>{compared.offshore.join(", ")}: eastern side</Label>
+          <Label color={fills.western}>{compared.western.join(", ")}: western side</Label>
         </div>
       }
       table={{

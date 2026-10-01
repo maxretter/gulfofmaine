@@ -23,11 +23,13 @@ def warmed(offset: float, seed: int, heatwave: slice | None = None) -> pd.Series
 
 @pytest.fixture(scope="module")
 def region():
-    """At A01 50 m, a heatwave from Apr 14 to 28, 2021, with every signal pointing offshore.
+    """At A01 50 m, a heatwave from Apr 14 to 28, 2021, with every signal that votes pointing offshore.
 
     Salty water at 50 m; 1 m six degrees warmer, and staying 3.5 degrees warmer
-    through the heatwave; M01 warm at 100 m from Mar 20 to Apr 5; and a
-    heatwave at M01 50 m two months earlier, from Feb 13 to 22.
+    through the heatwave; and M01 warm at 100 m from Mar 20 to Apr 5. The onset
+    order doesn't vote, though a heatwave began at M01 50 m two months earlier,
+    from Feb 13 to 22: A01's own onset doesn't count for the west, and B01, the
+    rest of it, has no data.
     """
     days = pd.date_range("2003-01-01", END)
     salinity = pd.Series(32 + np.random.default_rng(9).normal(0, 0.1, len(days)), index=days)
@@ -72,10 +74,11 @@ def test_one_event_with_its_evidence_day_by_day(client):
 
     assert (event["end_date"], event["origin"]) == ("2021-04-28", "offshore")
     evidence = event["evidence"]
-    assert set(evidence["votes"].values()) == {"offshore"}
+    votes = evidence["votes"]
+    assert (votes.pop("onset_order"), set(votes.values())) == (None, {"offshore"})
     assert evidence["salinity_anomaly"] == pytest.approx(0.3, abs=0.05)
     assert (evidence["stratification_before"], evidence["stratification_after"]) == pytest.approx((6, 3.5))
-    assert (evidence["offshore_onset"], evidence["western_onset"]) == ("2021-02-13", "2021-04-14")
+    assert (evidence["offshore_onset"], evidence["western_onset"]) == ("2021-02-13", None)
 
     signals = event["signals"]
     assert len(signals) == origin.BEFORE + 1 + origin.AFTER
@@ -88,7 +91,7 @@ def test_one_event_with_its_evidence_day_by_day(client):
     assert onset["surface_anomaly"] == pytest.approx(0, abs=0.3)  # 1 m is warm, but no warmer than its normal
     assert event["onsets"] == [
         {"buoy_id": "M01", "date": "2021-02-13", "group": "offshore"},
-        {"buoy_id": "A01", "date": "2021-04-14", "group": "western"},
+        {"buoy_id": "A01", "date": "2021-04-14", "group": None},  # its own buoy counts for neither side
     ]
 
 

@@ -84,7 +84,7 @@ export interface Evidence {
   stratification_after: number | null; // the same, onset to 14 days after
   deep_heatwave_days: number | null; // days M01 was in a heatwave at 100–250 m, 30 days before
   offshore_onset: string | null; // first onset at N01 or M01 at this depth, 90 days before
-  western_onset: string | null; // the same at A01 or B01
+  western_onset: string | null; // the same at A01 or B01; neither counts the event's own buoy
   votes: Record<Signal, Vote>;
 }
 
@@ -103,7 +103,7 @@ export interface SignalDay {
 export interface Onset {
   buoy_id: string;
   date: string;
-  group: "offshore" | "western" | null;
+  group: "offshore" | "western" | null; // the onset order's side it counts for; null at the heatwave's own buoy
 }
 
 export interface EventDetail extends HeatwaveEvent {

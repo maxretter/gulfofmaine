@@ -118,11 +118,12 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   whether the 1 m minus depth temperature difference holds or falls below
   half, whichever end moves; whether M01 at 100–250 m was in a heatwave in
   the 30 days before onset; and whether a heatwave began at N01 or M01
-  before one at A01 or B01, in the 90 days up to and including the onset.
-  That window holds the heatwave's own onset, so one at N01 or M01 with no
-  onset at A01 or B01 in it votes offshore, and one at A01 or B01 with none
-  at N01 or M01 votes surface, if the other pair has data. A label needs two
-  more votes than the other side, else Unclear. These are rules of thumb
+  before one at A01 or B01, in the 90 days up to and including the onset,
+  leaving out the heatwave's own buoy: one at A01 is compared with B01 alone
+  on the western side. So its own onset never counts, one at any of the four
+  with no onset at the other three doesn't vote, and an onset on one side
+  alone votes only if the other side has data. A label needs two more votes
+  than the other side, else Unclear. These are rules of thumb
   written for this project, not a published or tested method. They are pure
   functions, unit-tested on synthetic series, and their thresholds are served
   at `/api/origin/rules` so the About page can't drift from the code. Labels

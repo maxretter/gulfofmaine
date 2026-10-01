@@ -127,6 +127,9 @@ describe("AboutPage", () => {
     expect(await screen.findByText("+0.15 or more")).toBeTruthy();
     expect(screen.getByText("M01 at 100–250 m")).toBeTruthy();
     expect(screen.getByText("N01 or M01 more than 7 days first, or only there")).toBeTruthy();
+    expect(screen.getByText(/for a heatwave at A01, the western side is just B01\. So its own onset never counts/)).toBeTruthy();
+    expect(screen.getByText(/one at any of the four with no onset at the other three doesn't vote/)).toBeTruthy();
+    expect(screen.getByText(/a buoy left on the other had data on at least 45 days of the window/)).toBeTruthy();
     expect(screen.getByText(/A label needs 3 more votes than the other side/)).toBeTruthy();
     // The farthest satellite cell, rounded up.
     expect(await screen.findByText(/with the nearest grid cell that has data, at most 12 km away/)).toBeTruthy();

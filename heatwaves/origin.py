@@ -10,16 +10,17 @@ agree. Each signal votes as follows, over days counted from the onset:
     1 m heatwave days (-30..-1)               None, 1 m MIXED warmer       Any
     1 m minus the depth (-30..-1, 0..14)      Holds at COLLAPSE or more    Falls below COLLAPSE
     M01 at 100-250 m heatwave days (-30..-1)  Any                          None
-    Onsets at this depth (-90..0)             N01 or M01 first             A01 or B01 first, or together
+    Other buoys' onsets, same depth (-90..0)  N01 or M01 first             A01 or B01 first, or together
 
 Each signal votes one way, or not at all when its data are missing or it
 can't tell. The 1 m minus the depth votes only if 1 m was at least MIXED
 warmer before onset, and compares its mean from onset with its mean before.
-The onsets' window runs up to and including the onset day, so it holds the
-event's own onset: an event at N01 or M01 with no onset at A01 or B01 in it
-votes offshore, and one at A01 or B01 with none at N01 or M01 votes surface,
-as long as the other pair had data. A label needs at least MARGIN more votes
-than the other side; anything closer is unclear.
+The onsets' window runs up to and including the onset day. An event at one
+of the four buoys is compared without its own buoy (`sides`): at A01, the
+western side is B01 alone. So no onset at its own buoy counts, its own
+included, and an event with no onset at the other three casts no vote. A
+label needs at least MARGIN more votes than the other side; anything closer
+is unclear.
 
 The labels say which way the rules lean, not what the signals measured. In
 particular:
@@ -101,7 +102,7 @@ class Evidence:
     stratification_after: float | None  # the same, onset to 14 days after
     deep_heatwave_days: int | None  # days M01 was in a heatwave at any of 100-250 m, 30 days before
     offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, in the 90 days to onset
-    western_onset: dt.date | None  # the same at A01 or B01; either can be this event's own
+    western_onset: dt.date | None  # the same at A01 or B01; neither counts the event's own buoy (`sides`)
     votes: dict[str, Vote]  # by signal, in SIGNALS order
     origin: Origin
 
@@ -134,8 +135,9 @@ def judge(record: Record, buoy: str, depth: int, onset: dt.date) -> Evidence:
     deep_days = _heatwave_days(record, deep, start, -BEFORE, -1)
     deep_observed = any(_observed(record.temperature.get(key), start, -BEFORE, -1, MIN_DAYS) for key in deep)
 
-    offshore_onset = _first_onset(record, OFFSHORE_BUOYS, depth, start)
-    western_onset = _first_onset(record, WESTERN_BUOYS, depth, start)
+    offshore_buoys, western_buoys = sides(buoy)
+    offshore_onset = _first_onset(record, offshore_buoys, depth, start)
+    western_onset = _first_onset(record, western_buoys, depth, start)
 
     votes: dict[str, Vote] = {
         "salinity": salinity_vote(salinity),
@@ -147,8 +149,8 @@ def judge(record: Record, buoy: str, depth: int, onset: dt.date) -> Evidence:
         "onset_order": onset_order_vote(
             offshore_onset,
             western_onset,
-            offshore_observed=_group_observed(record, OFFSHORE_BUOYS, depth, start),
-            western_observed=_group_observed(record, WESTERN_BUOYS, depth, start),
+            offshore_observed=_group_observed(record, offshore_buoys, depth, start),
+            western_observed=_group_observed(record, western_buoys, depth, start),
         ),
     }
     return Evidence(
@@ -172,6 +174,19 @@ def inputs(buoy: str, depth: int) -> set[tuple[str, int]]:
         *((DEEP_BUOY, below) for below in DEEP_DEPTHS),
         *((other, depth) for other in (*OFFSHORE_BUOYS, *WESTERN_BUOYS)),
     }
+
+
+def sides(buoy: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The offshore and western buoys whose onsets the onset order compares, for a heatwave at `buoy`.
+
+    Its own buoy is left out of its side, so its own onset never counts: a
+    heatwave seen at no other of the four casts no vote, rather than one for
+    its own side by where it is.
+    """
+    return (
+        tuple(other for other in OFFSHORE_BUOYS if other != buoy),
+        tuple(other for other in WESTERN_BUOYS if other != buoy),
+    )
 
 
 def window(onset: dt.date) -> tuple[dt.date, dt.date]:
@@ -261,8 +276,7 @@ def onset_order_vote(
     """Offshore if N01 or M01's first onset came more than TOGETHER days before A01 or B01's, else surface.
 
     With an onset on one side only, the vote goes that side's way if the
-    other had data to have one. Either onset can be the event's own
-    (`_first_onset`).
+    other had data to have one. Neither is ever the event's own (`sides`).
     """
     if offshore is not None and western is not None:
         return "offshore" if (western - offshore).days > TOGETHER else "surface"
@@ -320,10 +334,7 @@ def _heatwave_days(
 
 
 def _first_onset(record: Record, buoys: Collection[str], depth: int, start: pd.Timestamp) -> dt.date | None:
-    """The earliest onset at any of these buoys at this depth in the LOOKBACK days to `start`, inclusive.
-
-    So at the event's own buoy, it can be the event's own onset.
-    """
+    """The earliest onset at any of these buoys at this depth in the LOOKBACK days to `start`, inclusive."""
     found = [day for buoy, day in recent_onsets(record, depth, start.date()) if buoy in buoys]
     return found[0] if found else None
 
