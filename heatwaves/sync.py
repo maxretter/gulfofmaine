@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from heatwaves import hobday, live, origin, products, queries, state
 from heatwaves.config import settings
-from heatwaves.erddap import Erddap
+from heatwaves.erddap import Erddap, same_host
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, Source, connect
 from heatwaves.state import SeriesState
@@ -390,7 +390,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     headers = {"User-Agent": settings.user_agent}
-    with httpx.Client(timeout=settings.erddap_timeout, headers=headers, follow_redirects=True) as client:
+    with httpx.Client(
+        # Per step, such as each read; Erddap limits each request's whole time and its size.
+        timeout=settings.erddap_timeout,
+        headers=headers,
+        # Within a host only: ERDDAP serves its own data.
+        follow_redirects=True,
+        event_hooks={"response": [same_host]},
+    ) as client:
         erddap = Erddap(settings.erddap_url, client)
         sources = connect(client)
         full_every = max(1, round(FULL_ROUND.total_seconds() / args.every)) if args.every else 1

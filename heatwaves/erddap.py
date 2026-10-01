@@ -14,10 +14,13 @@ app needs only these few calls.
 """
 
 import datetime as dt
+import io
+import json
 import re
 import tempfile
-from collections.abc import Collection, Sequence
-from typing import Literal
+import time
+from collections.abc import Collection, Iterator, Sequence
+from typing import IO, Literal
 from urllib.parse import quote
 
 import httpx
@@ -30,6 +33,15 @@ Axis = str | float | tuple[str | float, str | float]
 
 
 class Erddap:
+    # Limits on one response, well above any real one: the largest, a buoy
+    # dataset's whole record as NetCDF, is tens of MB, a year of the
+    # satellite's cells about 120 kB, and the tables a few hundred bytes. The
+    # client's timeout bounds each step of a request, such as each read;
+    # DEADLINE bounds the whole of it, give or take one step.
+    MAX_NETCDF = 256 * 2**20  # bytes
+    MAX_TABLE = 2**20  # bytes
+    DEADLINE = 600.0  # seconds
+
     def __init__(self, base_url: str, client: httpx.Client) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = client
@@ -79,31 +91,54 @@ class Erddap:
         return parse_time(row["time"])
 
     def _table(self, url: str) -> list[dict]:
-        response = self._get(url)
-        if response is None:
+        body = io.BytesIO()
+        if not self._get(url, body, self.MAX_TABLE):
             return []
-        table = response.json()["table"]
+        table = json.loads(body.getvalue())["table"]
         return [dict(zip(table["columnNames"], row, strict=True)) for row in table["rows"]]
 
     def _netcdf(self, url: str) -> xr.Dataset | None:
-        response = self._get(url)
-        if response is None:
-            return None
         # netCDF-C can't open some small classic-format files from memory
         # (it fails with EPERM), so the response goes through a temporary file.
         with tempfile.NamedTemporaryFile(suffix=".nc") as file:
-            file.write(response.content)
+            if not self._get(url, file, self.MAX_NETCDF):
+                return None
             file.flush()
             with xr.open_dataset(file.name, engine="netcdf4") as ds:
                 return ds.load()
 
-    def _get(self, url: str) -> httpx.Response | None:
-        response = self.client.get(url)
-        # ERDDAP reports an empty result as a 404 rather than an empty table.
-        if response.status_code == 404 and b"no matching results" in response.content:
-            return None
-        response.raise_for_status()
-        return response
+    def _get(self, url: str, into: IO[bytes], limit: int) -> bool:
+        """Write a response's body into `into`, a chunk at a time; False if nothing matched."""
+        deadline = time.monotonic() + self.DEADLINE
+        with self.client.stream("GET", url) as response:
+            if response.status_code == 404:
+                # ERDDAP reports an empty result as a 404 rather than an empty table.
+                error = b"".join(self._body(response, self.MAX_TABLE, deadline))
+                if b"no matching results" in error:
+                    return False
+            response.raise_for_status()
+            for chunk in self._body(response, limit, deadline):
+                into.write(chunk)
+        return True
+
+    def _body(self, response: httpx.Response, limit: int, deadline: float) -> Iterator[bytes]:
+        """A response's body in chunks, failing past `limit` bytes or after `deadline` (time.monotonic)."""
+        size = 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > limit:
+                raise ValueError(f"{response.url} sent more than {limit:,} bytes")
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"{response.url} took longer than {self.DEADLINE:.0f} s")
+            yield chunk
+
+
+def same_host(response: httpx.Response) -> None:
+    """An httpx response hook that refuses a redirect to another host: ERDDAP serves its own data."""
+    if response.has_redirect_location:
+        target = response.url.join(response.headers["Location"])
+        if target.host != response.url.host:
+            raise ValueError(f"{response.url} redirects to another host: {target}")
 
 
 def _axis(axis: Axis) -> str:
