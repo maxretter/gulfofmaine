@@ -243,6 +243,8 @@ describe("live messages", () => {
     expect(enteredHeatwave({ ...entered, depth: 0 })).toBe(false);
     expect(enteredHeatwave({ ...entered, previous_state: "offline" })).toBe(false);
     expect(enteredHeatwave({ ...entered, previous_state: "no_data" })).toBe(false);
+    // A depth that gains a normal already in a heatwave hadn't been out of one.
+    expect(enteredHeatwave({ ...entered, previous_state: "no_normal" })).toBe(false);
     expect(enteredHeatwave(reading)).toBe(false);
   });
 

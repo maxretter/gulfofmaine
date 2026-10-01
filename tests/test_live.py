@@ -20,7 +20,7 @@ from heatwaves.config import Settings
 from heatwaves.live import Hub, ReadingMessage, StatusMessage
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
-from heatwaves.state import state_of
+from heatwaves.state import SeriesState, state_of
 from heatwaves.sync import store, sync_series, update_heatwaves
 from tests.conftest import A01_SYNC, add_series, recorded_erddap, seasonal_temperatures
 
@@ -160,11 +160,22 @@ def test_a_buoy_sync_publishes_its_newest_good_reading(monkeypatch, session):
     ],
 )
 def test_state_rules(latest, days_above, ongoing, expected):
-    series = Series(latest_date=latest, days_above=days_above)
+    series = Series(latest_date=latest, days_above=days_above, latest_climatology=12.0)
     event = Event(category=ongoing) if ongoing else None
 
     result = state_of(series, event, TODAY)
     assert (result.state, result.category) == expected
+
+
+@pytest.mark.parametrize(
+    ("latest", "expected"),
+    # Offline still, once its newest day is old: that says more than the missing normal.
+    [(TODAY, "no_normal"), (TODAY - dt.timedelta(days=4), "offline")],
+)
+def test_a_series_without_a_normal_is_neither_in_a_heatwave_nor_out_of_one(latest, expected):
+    series = Series(latest_date=latest, days_above=0, latest_climatology=None)
+
+    assert state_of(series, None, TODAY) == SeriesState(expected, None)
 
 
 def test_the_feed_relays_messages_and_pings_when_quiet(monkeypatch):

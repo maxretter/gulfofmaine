@@ -52,7 +52,8 @@ export function BuoysPage() {
                 const last = latest(buoy.series.map((s) => s.date));
                 const heatwaves = events.data?.filter((e) => e.buoy_id === buoy.id).length;
                 const status = buoyStatus(buoy.series);
-                const quiet = status.condition?.state === "offline" || status.condition?.state === "no_data";
+                const state = status.condition?.state;
+                const quiet = state === "offline" || state === "no_data" || state === "no_normal";
                 return (
                   <tr key={buoy.id} className="selectable" onClick={() => navigate(href)}>
                     <th scope="row">

@@ -1,7 +1,9 @@
 // Shapes returned by the FastAPI backend (heatwaves/api.py). Dates are
 // ISO strings ("2026-09-27"); timestamps are ISO datetimes in UTC.
 
-export type State = "heatwave" | "above_threshold" | "normal" | "offline" | "no_data";
+// "no_normal": reporting, but with too little data in the baseline for a normal, so neither in a heatwave nor
+// out of one.
+export type State = "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
 
 export interface Condition {
   depth: number;

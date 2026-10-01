@@ -328,7 +328,7 @@ heatwaves/
   sources.py     what changed at each data source since the last sync
   sync.py        store, recompute, and the sync job (python -m heatwaves.sync)
   live.py        the live feed: NOTIFY from the sync, LISTEN and WebSocket in the API
-  state.py       a series' state: heatwave, above threshold, normal, offline
+  state.py       a series' state: heatwave, above threshold, normal, no normal, offline
   queries.py     reads of the stored record shared by the API and reports
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
   products.py    the record as CF NetCDF and CSV files, for downloads and ERDDAP

@@ -33,6 +33,18 @@ describe("the front page's summary", () => {
     expect(heatwaveSummary(states("heatwave", "offline"), 50)).toBe("The one buoy reporting from 50 m is in a heatwave.");
     expect(heatwaveSummary(states("no_data"), 50)).toBe("No buoy is reporting from 50 m.");
   });
+
+  it("leaves the buoys without a normal out of the count, and says so", () => {
+    expect(heatwaveSummary(states("heatwave", "normal", "no_normal"), 50)).toBe(
+      "1 of the 2 buoys reporting from 50 m is in a heatwave. A buoy without a normal isn't counted.",
+    );
+    expect(heatwaveSummary(states("normal", "above_threshold", "no_normal", "no_normal"), 20)).toBe(
+      "None of the 2 buoys reporting from 20 m is in a heatwave. 1 is above the threshold. 2 buoys without a normal aren't counted.",
+    );
+    expect(heatwaveSummary(states("no_normal", "offline"), 50)).toBe(
+      "No buoy reporting from 50 m has a normal to judge heatwaves by.",
+    );
+  });
 });
 
 const at = (depth: number, state: State, overrides: Partial<Condition> = {}) =>
@@ -48,6 +60,13 @@ describe("a buoy's status in the list of buoys", () => {
   it("falls back to the depths above the threshold, then to none", () => {
     expect(buoyStatus([at(1, "normal"), at(20, "above_threshold")]).text).toBe("Above the threshold at 20 m");
     expect(buoyStatus([at(1, "normal"), at(20, "offline")]).text).toBe("No heatwave");
+  });
+
+  it("says a buoy has no normal only when none of its depths reporting has one", () => {
+    const mixed = buoyStatus([at(1, "no_normal"), at(20, "normal")]);
+    expect([mixed.text, mixed.condition?.depth]).toEqual(["No heatwave", 20]);
+    expect(buoyStatus([at(1, "no_normal"), at(20, "above_threshold")]).text).toBe("Above the threshold at 20 m");
+    expect(buoyStatus([at(1, "no_normal"), at(20, "offline")]).text).toBe("No normal");
   });
 
   it("says when a buoy stopped reporting", () => {

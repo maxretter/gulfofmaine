@@ -448,7 +448,7 @@ def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_fac
         before, after = sync.update_heatwaves(session, series)
         session.commit()
 
-        assert (before.state, after.state) == ("no_data", "normal")
+        assert (before.state, after.state) == ("no_data", "no_normal")
         assert (series.latest_date, series.latest_value) == (today, pytest.approx(recent.iloc[-1]))
         assert (series.latest_climatology, series.latest_threshold, series.days_above) == (None, None, 0)
     requests: list[str] = []

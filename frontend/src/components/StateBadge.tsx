@@ -24,6 +24,8 @@ function label(condition: Condition): string {
       return `Above threshold · ${condition.days_above} day${condition.days_above === 1 ? "" : "s"}`;
     case "normal":
       return "No heatwave";
+    case "no_normal":
+      return "No normal";
     case "offline":
       return `No data since ${formatDate(condition.date!)}`;
     default:
@@ -34,7 +36,7 @@ function label(condition: Condition): string {
 /** Status is never color alone: a shaped swatch plus a text label. */
 export function StateBadge({ condition }: { condition: Condition }) {
   const look = stateLook(condition);
-  const muted = condition.state === "offline" || condition.state === "no_data";
+  const muted = condition.state === "offline" || condition.state === "no_data" || condition.state === "no_normal";
   return (
     <span className={`state${muted ? " muted" : ""}`}>
       <Swatch {...look} />
@@ -59,6 +61,10 @@ export function StateLegend() {
       <span className="state">
         <Swatch {...stateLook({ state: "normal", category: null })} />
         No heatwave
+      </span>
+      <span className="state">
+        <Swatch {...stateLook({ state: "no_normal", category: null })} />
+        No normal
       </span>
       <span className="state">
         <Swatch {...stateLook({ state: "offline", category: null })} />

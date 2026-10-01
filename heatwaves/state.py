@@ -1,4 +1,4 @@
-"""A series' state on a given day: in a heatwave, above the threshold, normal or offline.
+"""A series' state on a given day: in a heatwave, above the threshold, normal, without a normal, or offline.
 
 The API reports it for every series, and the sync compares it before and
 after each update so the live feed (heatwaves.live) can announce changes.
@@ -16,7 +16,7 @@ from heatwaves.models import Event, Series
 # A series whose newest daily mean is older than this is reported offline.
 OFFLINE_AFTER = dt.timedelta(days=3)
 
-State = Literal["heatwave", "above_threshold", "normal", "offline", "no_data"]
+State = Literal["heatwave", "above_threshold", "normal", "no_normal", "offline", "no_data"]
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,10 @@ def state_of(series: Series, ongoing: Event | None, on: dt.date) -> SeriesState:
         return SeriesState("no_data", None)
     if on - series.latest_date > OFFLINE_AFTER:
         return SeriesState("offline", None)
+    if series.latest_climatology is None:
+        # Too little data in the baseline for a normal, so no threshold either:
+        # neither in a heatwave nor out of one.
+        return SeriesState("no_normal", None)
     if ongoing is not None:
         heatwave = (
             ongoing.start_date,
