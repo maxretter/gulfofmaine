@@ -1,17 +1,22 @@
 import datetime as dt
+import os
 
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, select, text, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 
+from heatwaves import db
 from heatwaves.main import revalidate_api_responses
-from heatwaves.models import Event, UTCDateTime
+from heatwaves.models import Buoy, Event, UTCDateTime
 from heatwaves.sync import update_heatwaves
 from tests.conftest import add_series, seasonal_temperatures
 
 TODAY = dt.datetime.now(dt.UTC).date()
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 
 
 @pytest.fixture
@@ -121,3 +126,47 @@ def test_health_check_fails_when_sync_stops(client, session, heatwave_now):
     response = client.get("/healthz")
     assert response.status_code == 503
     assert response.json()["status"] == "stale"
+
+
+def test_requests_read_one_snapshot_on_postgres():
+    # Neither engine connects until it's used.
+    postgres = create_engine("postgresql+psycopg://heatwaves@localhost/heatwaves")
+    sqlite = create_engine("sqlite://")
+
+    assert db.reading(postgres).get_execution_options() == {
+        "isolation_level": "REPEATABLE READ",
+        "postgresql_readonly": True,
+    }
+    assert db.reading(sqlite) is sqlite
+
+
+@pytest.mark.skipif(db.engine.dialect.name != "postgresql", reason="needs Postgres (DATABASE_URL)")
+def test_each_request_gets_a_read_only_snapshot():
+    for session in db.get_session():  # one, as FastAPI gets it for a request
+        assert session.scalar(text("SHOW transaction_isolation")) == "repeatable read"
+        assert session.scalar(text("SHOW transaction_read_only")) == "on"
+
+
+@pytest.mark.skipif(
+    not TEST_DATABASE_URL.startswith("postgresql"), reason="needs Postgres (TEST_DATABASE_URL)"
+)
+def test_a_request_sees_none_of_what_the_sync_commits_meanwhile(session):
+    session.add(Buoy(id="A01", name="Before", latitude=None, longitude=None))
+    session.commit()
+    engine = create_engine(TEST_DATABASE_URL, pool_size=1, max_overflow=0)  # one connection, reused
+    try:
+        with Session(db.reading(engine)) as request:
+            assert request.scalar(select(Buoy.name)) == "Before"
+            session.get_one(Buoy, "A01").name = "After"
+            session.commit()
+            assert request.scalar(select(Buoy.name)) == "Before"
+            with pytest.raises(DBAPIError, match="read-only transaction"):
+                request.execute(update(Buoy).values(name="Written by a request"))
+
+        # The connection went back to the pool as it came, for the sync's sessions.
+        with Session(engine) as sync:
+            assert sync.scalar(select(Buoy.name)) == "After"
+            assert sync.scalar(text("SHOW transaction_isolation")) == "read committed"
+            assert sync.scalar(text("SHOW transaction_read_only")) == "off"
+    finally:
+        engine.dispose()
