@@ -466,25 +466,16 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
     detail.evidence = Evidence.model_validate(event.evidence)
     detail.signals = [
         SignalDay(
-            date=day.date(),
-            anomaly=_number(anomaly),
-            salinity_anomaly=_number(salinity_anomaly),
-            stratification=_number(stratification),
-            surface_anomaly=_number(surface_anomaly),
-            surface_heatwave=bool(surface_heatwave),
-            deep_anomaly=_number(deep_anomaly),
-            deep_heatwave=bool(deep_heatwave),
+            date=day,
+            anomaly=_number(row["anomaly"]),
+            salinity_anomaly=_number(row["salinity_anomaly"]),
+            stratification=_number(row["stratification"]),
+            surface_anomaly=_number(row["surface_anomaly"]),
+            surface_heatwave=bool(row["surface_heatwave"]),
+            deep_anomaly=_number(row["deep_anomaly"]),
+            deep_heatwave=bool(row["deep_heatwave"]),
         )
-        for (
-            day,
-            anomaly,
-            salinity_anomaly,
-            stratification,
-            surface_anomaly,
-            surface_heatwave,
-            deep_anomaly,
-            deep_heatwave,
-        ) in signals.itertuples()
+        for day, row in zip(pd.DatetimeIndex(signals.index).date, signals.to_dict("records"), strict=True)
     ]
     detail.onsets = [
         Onset(buoy_id=buoy, date=date, group=groups.get(buoy))

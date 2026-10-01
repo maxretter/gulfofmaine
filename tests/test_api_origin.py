@@ -87,6 +87,15 @@ def test_one_event_with_its_evidence_day_by_day(client):
     ]
 
 
+def test_signals_are_read_by_column_name(client, monkeypatch):
+    path = "/api/events/A01/50/2021-04-14"
+    expected = client.get(path).json()["signals"]
+    signals = origin.signals
+    monkeypatch.setattr(origin, "signals", lambda *args: signals(*args).iloc[:, ::-1])  # columns reversed
+
+    assert client.get(path).json()["signals"] == expected
+
+
 def test_an_event_without_an_origin_has_no_evidence(client):
     event = client.get("/api/events/M01/100/2021-03-20").json()
 
