@@ -300,7 +300,8 @@ td .swatch { position: relative; top: 1px; }
 .event-list button:hover { background: var(--neutral); border-color: var(--border); }
 @media (max-width: 640px) { .event-list button { grid-template-columns: 1fr 1fr; } }
 
-.event-origin { font-size: 0.9rem; white-space: nowrap; padding: 0.4rem 0.5rem; }
+.event-origin { font-size: 0.9rem; white-space: nowrap; min-width: 5.5rem; }
+.event-details { font-size: 0.9rem; white-space: nowrap; padding: 0.4rem 0.5rem 0.4rem 0; }
 
 .sources { color: var(--ink-2); font-size: 0.85rem; margin: 1.25rem 0 0; }
 

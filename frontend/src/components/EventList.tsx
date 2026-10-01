@@ -26,8 +26,10 @@ export function EventList({ events, onZoom }: Props) {
             <span className="num">{event.duration} days</span>
             <span className="num">peak {formatSigned(event.max_intensity)}</span>
           </button>
-          <Link to={eventPath(event)} className="event-origin">
-            {event.origin ? <OriginLabel origin={event.origin} /> : "Details"}
+          {/* The origin label in a slot of its own, so each row's link lines up and always looks like one. */}
+          <span className="event-origin">{event.origin && <OriginLabel origin={event.origin} />}</span>
+          <Link to={eventPath(event)} className="event-details">
+            Details
           </Link>
         </li>
       ))}
