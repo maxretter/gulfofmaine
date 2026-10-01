@@ -10,7 +10,9 @@ export function Swatch({ color, variant = "dot" }: { color: string; variant?: Va
       ? { background: colors.surface, boxShadow: `inset 0 0 0 2px ${color}` }
       : variant === "hollow"
         ? { background: "transparent", boxShadow: `inset 0 0 0 1.5px ${color}` }
-        : { background: color };
+        : variant === "dashed"
+          ? { background: "transparent", border: `2px dashed ${color}`, boxSizing: "border-box" as const }
+          : { background: color };
   return <span className={`swatch${variant === "square" ? " square" : ""}`} style={style} aria-hidden="true" />;
 }
 

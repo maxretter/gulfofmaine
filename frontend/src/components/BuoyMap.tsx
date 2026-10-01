@@ -48,7 +48,9 @@ export function BuoyMap({ buoys, depth, onSelect }: Props) {
             ? { color: colors.surface, weight: 2, fillColor: color, fillOpacity: 1 }
             : variant === "ring"
               ? { color, weight: 3, fillColor: colors.surface, fillOpacity: 1 }
-              : { color, weight: 2, fillOpacity: 0 };
+              : variant === "dashed"
+                ? { color, weight: 3, dashArray: "4 3", fillOpacity: 0 }
+                : { color, weight: 2, fillOpacity: 0 };
         return (
           <Fragment key={buoy.id}>
             {pulses[buoy.id] && (

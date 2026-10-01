@@ -7,8 +7,9 @@ import { buoyStatus, heatwaveSummary, stateLook } from "./state";
 const states = (...list: State[]) => list.map((state) => ({ state }));
 
 describe("how a state is drawn", () => {
-  it("draws a paused heatwave hollow, in its category's color: on hold, neither going on nor over", () => {
-    expect(stateLook({ state: "paused", category: 3 })).toEqual({ color: categories[3].color, variant: "hollow" });
+  it("draws a paused heatwave dashed, in its category's color: on hold, and unlike above the threshold", () => {
+    expect(stateLook({ state: "paused", category: 3 })).toEqual({ color: categories[3].color, variant: "dashed" });
+    expect(stateLook({ state: "paused", category: 1 }).variant).not.toBe(stateLook({ state: "above_threshold", category: null }).variant);
     expect(stateLook({ state: "heatwave", category: 3 })).toEqual({ color: categories[3].color, variant: "dot" });
   });
 });

@@ -25,8 +25,12 @@ describe("StateBadge", () => {
     const badge = screen.getByText("Strong heatwave · paused");
     expect(badge.className).toBe("state");
     const swatch = badge.querySelector(".swatch") as HTMLElement;
+    // A dashed outline in the category's color, which no other state uses.
     expect(swatch.style.background).toBe("transparent");
-    expect(swatch.style.boxShadow).toContain(categories[2].color);
+    expect(swatch.style.borderStyle).toBe("dashed");
+    // jsdom gives the color back as rgb().
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(categories[2].color.slice(i, i + 2), 16));
+    expect(swatch.style.borderColor).toBe(`rgb(${r}, ${g}, ${b})`);
   });
 
   it("keeps the other states' labels", () => {

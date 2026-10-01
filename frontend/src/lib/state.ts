@@ -3,7 +3,7 @@ import { categories, colors } from "./colors";
 import { latest } from "./dates";
 import { formatDate, formatList } from "./format";
 
-export type Variant = "dot" | "square" | "ring" | "hollow";
+export type Variant = "dot" | "square" | "ring" | "hollow" | "dashed";
 
 /** How a state is drawn: shared by the badge, the legend and the map markers. */
 export function stateLook(condition: Pick<Condition, "state" | "category">): { color: string; variant: Variant } {
@@ -11,8 +11,8 @@ export function stateLook(condition: Pick<Condition, "state" | "category">): { c
     case "heatwave":
       return { color: categories[condition.category ?? 1].color, variant: "dot" };
     case "paused":
-      // The heatwave's color, hollow: on hold, neither going on nor over.
-      return { color: categories[condition.category ?? 1].color, variant: "hollow" };
+      // The heatwave's color in a dashed outline: on hold, neither going on nor over, and unlike above the threshold.
+      return { color: categories[condition.category ?? 1].color, variant: "dashed" };
     case "above_threshold":
       return { color: categories[1].color, variant: "ring" };
     case "normal":
