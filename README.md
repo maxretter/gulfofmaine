@@ -103,7 +103,10 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   Hobday et al. (2016) and (2018): a seasonal normal and 90th-percentile threshold
   from an 11-day window pooled over 2003–2022 and smoothed over 31 days;
   events are five or more days above the threshold, joined across gaps of up to
-  two days; categories run Moderate to Extreme.
+  two days; categories run Moderate to Extreme. Up to two missing days in a
+  row are filled in by interpolation; a longer gap in the data ends a
+  heatwave, and the days either side are heatwaves only if each part lasts
+  five days.
 - **Origin labels** ([`heatwaves/origin.py`](heatwaves/origin.py)). Five
   signals, read around a heatwave's onset, each vote offshore, surface, or not
   at all: the salinity anomaly at its depth; a heatwave at 1 m beforehand;
@@ -142,8 +145,9 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
 - **Validated against the reference implementation.** On all 25 buoy/depth
   temperature records, the detected events (856 of them, with their dates and
   categories) are identical to those from Eric Oliver's
-  [marineHeatWaves](https://github.com/ecjoliver/marineHeatWaves), and the
-  thresholds agree to within 0.005 °C (last run 2026-09-29). The comparison
+  [marineHeatWaves](https://github.com/ecjoliver/marineHeatWaves), run with
+  the same two-day limit on filling gaps (by default it fills them all), and
+  the thresholds agree to within 0.005 °C (last run 2026-09-29). The comparison
   script is [`scripts/compare_with_reference.py`](scripts/compare_with_reference.py);
   it needs network access and isn't part of CI.
 

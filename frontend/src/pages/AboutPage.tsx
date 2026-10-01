@@ -32,10 +32,11 @@ export function AboutPage() {
       <p>
         A marine heatwave is at least five days in a row above the 90th percentile for the time of year, with spells two
         days apart or less joined into one, following{" "}
-        <a href="https://doi.org/10.1016/j.pocean.2015.12.014">Hobday et al. (2016)</a>. The normal and the 90th
-        percentile are computed as in that paper, for each buoy and depth, from the years 2003–2022 that it has data
-        for. A record needs data on at least half the days of those years, however they fall through the year, so for
-        a season it often missed, its normal rests on fewer years. Its category follows{" "}
+        <a href="https://doi.org/10.1016/j.pocean.2015.12.014">Hobday et al. (2016)</a>. Up to two missing days in a row
+        are filled in; a longer gap in the data ends a heatwave, and each side of it must last five days to count. The
+        normal and the 90th percentile are computed as in that paper, for each buoy and depth, from the years 2003–2022
+        that it has data for. A record needs data on at least half the days of those years, however they fall through
+        the year, so for a season it often missed, its normal rests on fewer years. Its category follows{" "}
         <a href="https://doi.org/10.5670/oceanog.2018.205">Hobday et al. (2018)</a>: how far above normal it rose, in
         multiples of the gap between the normal and the threshold:{" "}
         {Object.entries(categories)
@@ -46,9 +47,9 @@ export function AboutPage() {
       <p>
         Hobday et al. base their definition on a 30-year baseline; these records allow twenty. The normal is fixed, so
         if the water warms over the years, heatwaves against it become more frequent. On all 25 buoy temperature records
-        here, the heatwaves found match those of the reference implementation,{" "}
-        <a href="https://github.com/ecjoliver/marineHeatWaves">marineHeatWaves</a>, exactly (checked September 2026 with
-        the repository's script).
+        here, the heatwaves found match exactly those of the reference implementation,{" "}
+        <a href="https://github.com/ecjoliver/marineHeatWaves">marineHeatWaves</a>, set to fill gaps of up to two days
+        as here (checked September 2026 with the repository's script).
       </p>
 
       <h2 id="sources">Data</h2>

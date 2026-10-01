@@ -10,7 +10,10 @@ the climatology its peak reached: 1 Moderate, 2 Strong, 3 Severe, 4 Extreme.
 Everything here is a plain function over xarray and pandas objects, with no
 database or network access. The parameters are the defaults of the reference
 implementation, https://github.com/ecjoliver/marineHeatWaves, apart from gap
-filling (MAX_PAD), which the reference leaves unbounded by default.
+filling (MAX_PAD), which the reference leaves unbounded by default. Here a
+run of more than MAX_PAD missing days stays missing and ends an event: the
+days either side are events only if each lasts MIN_DURATION days, where the
+reference by default would interpolate across the gap.
 
 References:
     Hobday et al. (2016), A hierarchical approach to defining marine
@@ -31,7 +34,7 @@ SMOOTH_WIDTH = 31  # days in the running mean applied to the climatology and thr
 PERCENTILE = 0.9
 MIN_DURATION = 5  # consecutive days above the threshold that make an event
 MAX_GAP = 2  # events this many days apart or closer are joined
-MAX_PAD = 2  # missing-data gaps this long or shorter are interpolated
+MAX_PAD = 2  # missing-data gaps this long or shorter are interpolated; longer ones end an event
 
 CATEGORIES = {1: "Moderate", 2: "Strong", 3: "Severe", 4: "Extreme"}
 
