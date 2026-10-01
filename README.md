@@ -178,7 +178,8 @@ works:
   what depends on heatwaves, and a buoy depth entering one gets a notice. The
   header says whether the feed is connected. The connection reconnects with
   backoff, drops itself if the server's 30-second pings stop, and refetches
-  everything on screen once it's back, to cover what it missed.
+  everything on screen each time it connects, the first time too, to cover
+  what it missed.
 - **About** (`/about`). How heatwaves are found, the origin rules signal by
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their

@@ -68,24 +68,24 @@ export function alertId(alert: StatusMessage): string {
 /**
  * Brings the cache up to date with one message. A reading is written straight into the latest conditions, so it
  * shows at once; they are refetched too, for what a reading can change but doesn't carry (the day's mean, its
- * anomaly), with that buoy's daily series. A status message can mean a heatwave started, ended, grew a day or
- * changed, so everything built from heatwaves is refetched as well. Only queries on screen refetch now; the rest when
- * next shown.
+ * anomaly), with that buoy's daily series and the stripes at its depth, which average those means by month. A status
+ * message can mean a heatwave started, ended, grew a day or changed, so everything built from heatwaves is refetched
+ * as well. Only queries on screen refetch now; the rest when next shown.
  */
 export function applyMessage(queryClient: QueryClient, message: LiveMessage) {
   if (message.type === "ping") return;
   if (message.type === "reading") {
     queryClient.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, message));
   }
-  const stale: QueryKey[] = [keys.buoys, [...keys.daily, message.buoy]];
+  const stale: QueryKey[] = [keys.buoys, [...keys.daily, message.buoy], [...keys.stripes, message.depth]];
   if (message.type === "status") stale.push(keys.events, keys.event, keys.annual, keys.agreement, keys.onsets);
   for (const queryKey of stale) void queryClient.invalidateQueries({ queryKey });
 }
 
 /**
  * Keeps a WebSocket open to the live feed and writes its messages into the TanStack Query cache. Reconnects with
- * backoff when the connection drops or goes silent, and refetches everything on screen once it's back, to cover
- * whatever was missed in between.
+ * backoff when the connection drops or goes silent, and refetches everything on screen each time it connects, the
+ * first time too, to cover whatever was missed before the feed was listening.
  */
 export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
   const queryClient = useQueryClient();
@@ -101,15 +101,14 @@ export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
     let retry: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
-    let attempts = 0;
 
     const connect = () => {
-      attempts += 1;
       const current = new WebSocket(feedUrl());
       socket = current;
       current.onopen = () => {
-        // Anything could have changed while there was no connection.
-        if (attempts > 1) void queryClient.invalidateQueries();
+        // Anything could have changed since the page loaded what it shows, or while there was no connection. A first
+        // load still on its way is left to finish rather than asked for again.
+        void queryClient.invalidateQueries();
         failures = 0;
         setStatus("live");
         watch();

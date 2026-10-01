@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -123,6 +123,7 @@ describe("useLiveFeed", () => {
     expect(result.current.status).toBe("connecting");
 
     act(() => socket.open());
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     act(() => socket.deliver(reading));
 
     expect(result.current.status).toBe("live");
@@ -130,6 +131,37 @@ describe("useLiveFeed", () => {
     expect(b01.series.map((s) => s.reading)).toEqual([11.4, 11.9]);
     expect(b01.series[1].reading_at).toBe(reading.time);
     expect(result.current.pulses.B01).toBeTypeOf("number");
+    // What the day's mean feeds: the conditions, the buoy's days, and the month's stripe at that depth.
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      keys.buoys,
+      ["daily", "B01"],
+      ["stripes", 50],
+    ]);
+  });
+
+  it("refetches what loaded before the feed was listening, and lets a first load on its way finish", async () => {
+    const loaded = vi.fn(async () => buoys);
+    const loading = vi.fn(() => new Promise<never>(() => {}));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(keys.buoys, buoys);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(
+      () => {
+        useQuery({ queryKey: keys.buoys, queryFn: loaded, staleTime: Infinity });
+        useQuery({ queryKey: keys.events, queryFn: loading });
+        return useLiveFeed();
+      },
+      { wrapper },
+    );
+    expect(loaded).not.toHaveBeenCalled();
+    expect(loading).toHaveBeenCalledTimes(1);
+
+    await act(async () => latestSocket().open());
+
+    expect(loaded).toHaveBeenCalledTimes(1);
+    expect(loading).toHaveBeenCalledTimes(1);
   });
 
   it("refetches everything built from heatwaves when a status changes, and passes the message on", () => {
@@ -149,9 +181,8 @@ describe("useLiveFeed", () => {
 
   it("reconnects with a growing backoff, then refetches what it may have missed", () => {
     const { queryClient, result } = setup();
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     act(() => latestSocket().open());
-    expect(invalidate).not.toHaveBeenCalled();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
 
     act(() => latestSocket().drop());
     expect(result.current.status).toBe("reconnecting");
@@ -166,6 +197,7 @@ describe("useLiveFeed", () => {
     act(() => latestSocket().open());
 
     expect(result.current.status).toBe("live");
+    expect(invalidate).toHaveBeenCalledOnce();
     expect(invalidate).toHaveBeenCalledWith();
   });
 
