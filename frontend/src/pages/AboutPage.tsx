@@ -19,6 +19,8 @@ export function AboutPage() {
   const catalog = useDataCatalog();
   const names = new Map(buoys.data?.map((buoy) => [buoy.id, buoy.name]));
   const farthest = Math.max(0, ...(buoys.data ?? []).map((b) => b.satellite?.distance_km ?? 0));
+  const east = rules.data?.offshore_buoys.join(" or ");
+  const west = rules.data?.western_buoys.join(" or ");
 
   return (
     <article className="prose">
@@ -65,8 +67,11 @@ export function AboutPage() {
       </p>
       {rules.data && <OriginTable rules={rules.data} />}
       <p>
-        A signal that meets neither column, or lacks the data, doesn't vote. A label needs {rules.data?.margin ?? 2} more votes than the other
-        side; otherwise it's Unclear, as about half are. Every vote is shown on the heatwave's own page.
+        A signal that meets neither column, or lacks the data, doesn't vote.
+        {rules.data &&
+          ` The onset order counts the heatwave's own onset: one at ${east} with no onset at ${west} in its window votes offshore, and one at ${west} with none at ${east} votes surface.`}{" "}
+        A label needs {rules.data?.margin ?? 2} more votes than the other side; otherwise it's Unclear, as about half
+        are. Every vote is shown on the heatwave's own page.
       </p>
 
       <h2 id="satellite">Satellite comparison</h2>
@@ -169,7 +174,7 @@ function OriginTable({ rules }: { rules: OriginRules }) {
             <td>
               {west} first, within {rules.together} days, or only there
             </td>
-            <td>{rules.lookback} days before onset</td>
+            <td>{rules.lookback} days before onset, and the onset day</td>
           </tr>
         </tbody>
       </table>

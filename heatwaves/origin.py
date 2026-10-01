@@ -12,15 +12,19 @@ tell the two apart:
     1 m heatwave in the 30 days before  None                Yes
     1 m minus the depth's temperature   Holds               Collapses
     M01 at 100-250 m, 30 days before    In a heatwave       Not in a heatwave
-    Onsets in the 90 days before        N01 or M01 first    A01 or B01 first, or together
+    Onsets in the 90 days to onset      N01 or M01 first    A01 or B01 first, or together
 
 Each signal votes one way, or not at all when its data are missing or it
-can't tell. A label needs at least MARGIN more votes than the other side;
-anything closer is unclear. They are plain rules rather than a fitted
-model, so every label can be explained from its evidence. They were
-checked against two onsets whose origins are known: the 2021 heatwave at
-50 m, which began at M01 in January and reached A01 in April, is offshore,
-and the 2012 heatwave, which began at B01 after a warm winter, is surface.
+can't tell. The onsets' window runs up to and including the onset day, so
+it holds the event's own onset: an event at N01 or M01 with no onset at A01
+or B01 in it votes offshore, and one at A01 or B01 with none at N01 or M01
+votes surface, as long as the other pair had data. A label needs at least
+MARGIN more votes than the other side; anything closer is unclear. They are
+plain rules rather than a fitted model, so every label can be explained
+from its evidence. They were checked against two onsets whose origins are
+known: the 2021 heatwave at 50 m, which began at M01 in January and reached
+A01 in April, is offshore, and the 2012 heatwave, which began at B01 after a
+warm winter, is surface.
 
 Anomalies are against the same fixed 2003-2022 climatology as the
 heatwaves. Everything here is a plain function over pandas objects, with
@@ -86,7 +90,7 @@ class Evidence:
     stratification_before: float | None  # 1 m minus the event's depth, degrees C, 30 days before
     stratification_after: float | None  # the same, onset to 14 days after
     deep_heatwave_days: int | None  # days M01 was in a heatwave at any of 100-250 m, 30 days before
-    offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, 90 days before
+    offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, in the 90 days to onset
     western_onset: dt.date | None  # the same at A01 or B01; either can be this event's own
     votes: dict[str, Vote]  # by signal, in SIGNALS order
     origin: Origin
@@ -188,7 +192,7 @@ def signals(record: Record, buoy: str, depth: int, onset: dt.date) -> pd.DataFra
 
 
 def recent_onsets(record: Record, depth: int, onset: dt.date) -> list[tuple[str, dt.date]]:
-    """Every buoy's onsets at this depth in the LOOKBACK days to `onset`, oldest first."""
+    """Every buoy's onsets at this depth in the LOOKBACK days before `onset` and on it, oldest first."""
     start = pd.Timestamp(onset)
     earliest = start - pd.Timedelta(days=LOOKBACK)
     return sorted(
@@ -224,9 +228,11 @@ def stratification_vote(before: float | None, after: float | None) -> Vote:
 def onset_order_vote(
     offshore: dt.date | None, western: dt.date | None, *, offshore_observed: bool, western_observed: bool
 ) -> Vote:
-    """Slope water reaches N01 and M01 before the western Gulf; surface heat arrives everywhere at once.
+    """Offshore if N01 or M01's first onset came more than TOGETHER days before A01 or B01's, else surface.
 
-    A group without an onset counts only if it had data to have one.
+    With an onset on one side only, the vote goes that side's way if the
+    other had data to have one. Either onset can be the event's own
+    (`_first_onset`).
     """
     if offshore is not None and western is not None:
         return "offshore" if (western - offshore).days > TOGETHER else "surface"
@@ -284,7 +290,10 @@ def _heatwave_days(
 
 
 def _first_onset(record: Record, buoys: Collection[str], depth: int, start: pd.Timestamp) -> dt.date | None:
-    """The earliest onset at any of these buoys at this depth in the LOOKBACK days to `start`."""
+    """The earliest onset at any of these buoys at this depth in the LOOKBACK days to `start`, inclusive.
+
+    So at the event's own buoy, it can be the event's own onset.
+    """
     found = [day for buoy, day in recent_onsets(record, depth, start.date()) if buoy in buoys]
     return found[0] if found else None
 
