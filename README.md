@@ -204,10 +204,11 @@ works:
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their
   sections.
-- **Offshore or surface?** (`/origins`). Heatwaves at 20 or 50 m per year,
-  stacked by origin label with Unclear kept in view; click a year to see it
-  below: every buoy's year from east to west, with each heatwave a bar colored
-  by its label under a strip of the daily anomaly. A heatwave opens its page.
+- **Offshore or surface?** (`/origins`). Heatwaves at 20 or 50 m by the year
+  each began, stacked by origin label with Unclear kept in view; click a year
+  to see it below: every buoy's year from east to west, with each heatwave
+  that overlaps it a bar colored by its label under a strip of the daily
+  anomaly. A heatwave opens its page.
 
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one

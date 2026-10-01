@@ -65,7 +65,8 @@ export function OriginsPage() {
           Heatwaves at <InlineSelect {...depthChoice} /> each year, by origin
         </h2>
         <p className="caption">
-          By the year each began. Click a year to see it below.
+          By the year each began. Click a year to see it below, where heatwaves that began the year before and ran
+          into it show too.
         </p>
         {events.isError ? (
           <p className="note">Couldn't load the heatwaves.</p>
@@ -85,7 +86,7 @@ export function OriginsPage() {
           />
         </h2>
         <p className="caption">
-          Buoys from east to west. Click a heatwave for its evidence, or{" "}
+          Buoys from east to west, with every heatwave that overlaps the year. Click a heatwave for its evidence, or{" "}
           <Link to={`/events?depth=${depth}&year=${year}`}>list them all</Link>.
         </p>
         {buoys.data ? (
