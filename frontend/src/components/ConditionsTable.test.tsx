@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -82,8 +82,18 @@ describe("ConditionsTable", () => {
     renderTable();
     expect(screen.getByText("No heatwave")).toBeTruthy();
     expect(screen.getByText("Moderate heatwave · day 7")).toBeTruthy();
-    expect(screen.getByText("No data since Sep 14, 2025")).toBeTruthy();
+    // At this depth, which needn't be the whole buoy's last day.
+    expect(screen.getByText("No data at 1 m since Sep 14, 2025")).toBeTruthy();
     expect(screen.getByText("−1.3 °C")).toBeTruthy();
+  });
+
+  it("leaves out an offline buoy's last values, so they can't pass for today's", () => {
+    renderTable();
+    const offline = within(screen.getByRole("row", { name: /M01/ }));
+
+    expect(offline.getAllByText("–")).toHaveLength(2);
+    expect(offline.queryByText("+2.1 °C")).toBeNull();
+    expect(within(screen.getByRole("row", { name: /A01/ })).getByText("14.9 °C")).toBeTruthy();
   });
 
   it("links each buoy to its page, and opens it from anywhere on the row", () => {

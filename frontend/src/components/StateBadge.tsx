@@ -14,7 +14,7 @@ export function Swatch({ color, variant = "dot" }: { color: string; variant?: Va
   return <span className={`swatch${variant === "square" ? " square" : ""}`} style={style} aria-hidden="true" />;
 }
 
-function label(condition: Condition): string {
+function label(condition: Condition, depth?: number): string {
   switch (condition.state) {
     case "heatwave": {
       const day = daysBetween(condition.event_start!, condition.date!) + 1;
@@ -27,20 +27,23 @@ function label(condition: Condition): string {
     case "no_normal":
       return "No normal";
     case "offline":
-      return `No data since ${formatDate(condition.date!)}`;
+      return `No data${depth === undefined ? "" : ` at ${depth} m`} since ${formatDate(condition.date!)}`;
     default:
       return "No data yet";
   }
 }
 
-/** Status is never color alone: a shaped swatch plus a text label. */
-export function StateBadge({ condition }: { condition: Condition }) {
+/**
+ * Status is never color alone: a shaped swatch plus a text label. `depth`, where the badge stands apart from its
+ * depth (a table of buoys at one depth), names it in "No data at 1 m since …", which isn't the whole buoy's date.
+ */
+export function StateBadge({ condition, depth }: { condition: Condition; depth?: number }) {
   const look = stateLook(condition);
   const muted = condition.state === "offline" || condition.state === "no_data" || condition.state === "no_normal";
   return (
     <span className={`state${muted ? " muted" : ""}`}>
       <Swatch {...look} />
-      {label(condition)}
+      {label(condition, depth)}
     </span>
   );
 }

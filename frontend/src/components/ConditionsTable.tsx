@@ -45,10 +45,11 @@ export function ConditionsTable({ buoys, depth, pathFor }: Props) {
                   <span className="buoy-name">{buoy.name}</span>
                 </Link>
               </th>
-              <td className="num">{formatTemp(condition.temperature)}</td>
-              <td className="num">{formatSigned(condition.anomaly)}</td>
+              {/* An offline buoy's last values are months or years old: left out, so they can't pass for today's. */}
+              <td className="num">{formatTemp(offline ? null : condition.temperature)}</td>
+              <td className="num">{formatSigned(offline ? null : condition.anomaly)}</td>
               <td>
-                <StateBadge condition={condition} />
+                <StateBadge condition={condition} depth={depth} />
               </td>
             </tr>
           );
