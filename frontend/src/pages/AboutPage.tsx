@@ -89,7 +89,7 @@ export function AboutPage() {
         <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>. Each buoy is compared
         with the nearest grid cell that has data
         {farthest > 0 && `, at most ${Math.ceil(farthest)} km away`}. Satellite heatwaves are found the same way as the
-        buoys', against the same normal, and only days with data from both are compared.
+        buoys', against the cell's own 2003–2022 normal, and only days with data from both are compared.
       </p>
       <p>
         At 1 m, about a third of heatwave days have no satellite heatwave. That share is the one to hold the 20 and 50 m

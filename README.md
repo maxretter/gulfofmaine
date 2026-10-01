@@ -90,7 +90,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   the oldest day still preliminary if the final product has fallen further
   behind, from the final product where it exists and the preliminary one
   after, so final values replace preliminary ones. Satellite heatwaves use
-  the same method and 2003–2022 baseline as the buoys.
+  the same method and 2003–2022 baseline years as the buoys, with each cell's
+  own normal.
 - **Quality control and daily means** ([`heatwaves/qc.py`](heatwaves/qc.py)).
   Readings that UMaine's own flag doesn't mark good are dropped, and so are
   any the QARTOD aggregate flag marks suspect or failed. In every dataset read
