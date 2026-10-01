@@ -61,7 +61,7 @@ export function SatellitePage() {
                   <p className="tile-delta">
                     of {loading ? "the" : days.toLocaleString()} heatwave days had no heatwave at the surface above.
                     {depth === 1 &&
-                      " The buoys' 1 m temperatures track the satellite's closely, so this is the share to compare the others with."}
+                      " The buoys' shallowest depth, to compare the others with."}
                   </p>
                 </div>
               );
