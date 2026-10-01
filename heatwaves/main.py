@@ -103,9 +103,10 @@ async def revalidate_api_responses(
 
 # Added last, so it's outermost and compresses what the rest return. The ETag
 # above is of the uncompressed JSON, since gzip's output varies with its timestamp.
-# A buoy's full daily record is 1.3 MB of JSON. Level 5 gzips it 3.3-fold in
-# about 36 ms; the default, 9, takes 88 ms to make it 2% smaller. The downloads
-# go as they are, so their Content-Length, ETag and byte ranges are of the file's bytes.
+# A buoy's full daily record is about 860 KB of JSON, which level 5 gzips about
+# 5.8-fold. Before /daily rounded to 0.001 it was 1.3 MB, and level 5 took 36 ms
+# where the default, 9, took 88 ms to make it 2% smaller. The downloads go as
+# they are, so their Content-Length, ETag and byte ranges are of the file's bytes.
 app.add_middleware(
     GZipMiddleware,
     minimum_size=1000,
