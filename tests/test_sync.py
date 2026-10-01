@@ -7,14 +7,14 @@ import httpx
 import pandas as pd
 import pytest
 import xarray as xr
-from sqlalchemy import event, select
+from sqlalchemy import delete, event, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from heatwaves import sync
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
-from heatwaves.models import Buoy, DailyMean, Event, Series
+from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import GriddapSource, TabledapSource
 from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
 from heatwaves.sync import ensure_catalog, publish, sync_all, sync_one, sync_series
@@ -330,6 +330,44 @@ def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_
     # One small request for A01's 1 m dataset, both variables at once; no catalog, M01 or satellite.
     [request] = requests
     assert "/tabledap/A01_ocean_001m.json?time_modified" in request
+
+
+def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_factory):
+    today = dt.datetime.now(dt.UTC).date()
+    with session_factory() as session:
+        # A month of readings: far too few for a normal.
+        recent = seasonal_temperatures((today - dt.timedelta(days=30)).isoformat(), today)
+        series = add_series(session, recent)
+
+        before, after = sync.update_heatwaves(session, series)
+        session.commit()
+
+        assert (before.state, after.state) == ("no_data", "normal")
+        assert (series.latest_date, series.latest_value) == (today, pytest.approx(recent.iloc[-1]))
+        assert (series.latest_climatology, series.latest_threshold, series.days_above) == (None, None, 0)
+    requests: list[str] = []
+    erddap = recorded_erddap([("", NO_MATCH)], requests)
+
+    assert sync_all(session_factory, erddap, buoy_sources(erddap), everything=False) == 0
+
+    [request] = requests
+    assert "/tabledap/A01_ocean_001m.json?time_modified" in request
+
+
+def test_a_series_that_loses_its_normal_loses_its_heatwaves(session):
+    temperatures = seasonal_temperatures("2003-01-01", "2026-09-27")
+    temperatures.iloc[-8:] += 2.5
+    series = add_series(session, temperatures)
+    sync.update_heatwaves(session, series)
+    assert session.scalars(select(Event)).all()
+    # Reprocessed upstream, the baseline years are gone.
+    session.execute(delete(DailyMean).where(DailyMean.date < dt.date(2023, 1, 1)))
+
+    sync.update_heatwaves(session, series)
+
+    assert session.scalars(select(Event)).all() == []
+    assert session.scalars(select(ClimatologyDay)).all() == []
+    assert (series.latest_date, series.latest_climatology) == (dt.date(2026, 9, 27), None)
 
 
 def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_factory, session):

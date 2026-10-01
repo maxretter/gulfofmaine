@@ -181,7 +181,9 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
     """Recompute a series' climatology, events and latest status from its daily means.
 
     Every variable gets a climatology, as its normal; only temperature gets
-    events. Returns the series' state today, before and after.
+    events. A series with too little data in the baseline for a normal has
+    neither, but still gets its newest day and value. Returns the series'
+    state today, before and after.
     """
     today = dt.datetime.now(dt.UTC).date()
     before = state.current(session, series, today)
@@ -198,9 +200,18 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
         analysis = hobday.analyze(daily, BASELINE)
     except hobday.InsufficientData as error:
         log.warning("%s: can't compute heatwaves: %s", series.label, error)
-        return before, before
+        analysis = None
 
     session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
+    session.execute(delete(Event).where(Event.series_id == series.id))
+    if analysis is None:
+        # The newest day still says whether the series is reporting, which
+        # decides whether the quick rounds between full ones check it.
+        series.latest_date, series.latest_value = rows[-1].date, rows[-1].value
+        series.latest_climatology = series.latest_threshold = None
+        series.days_above = 0
+        return before, state.current(session, series, today)
+
     session.execute(
         insert(ClimatologyDay),
         [
@@ -218,7 +229,6 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
             )
         ],
     )
-    session.execute(delete(Event).where(Event.series_id == series.id))
     if analysis.events and series.variable == "temperature":
         session.execute(
             insert(Event),
