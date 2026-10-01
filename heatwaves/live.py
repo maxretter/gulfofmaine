@@ -45,9 +45,11 @@ class ReadingMessage(BaseModel):
 
 
 class StatusMessage(BaseModel):
-    """A series' state changed, or its heatwave in progress did (its dates, category or intensity).
+    """A series' state changed, or its heatwave in progress or paused did (its dates, category or intensity).
 
-    A heatwave that only grew or changed has "heatwave" as both states. Depth 0 is the satellite.
+    A heatwave that only grew or changed has "heatwave" as both states; a paused one that changed, "paused".
+    A heatwave that dips below the threshold is "paused" while what follows could still be joined to it
+    (heatwaves.state), and "heatwave" again, the same one, if it is. Depth 0 is the satellite.
     """
 
     type: Literal["status"] = "status"
@@ -55,7 +57,7 @@ class StatusMessage(BaseModel):
     depth: int
     date: dt.date | None  # newest day with data
     state: State
-    category: int | None  # of the heatwave in progress
+    category: int | None  # of the heatwave in progress or paused
     days_above: int  # consecutive days above the threshold, ending on `date`
     previous_state: State
     previous_category: int | None

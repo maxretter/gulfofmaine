@@ -20,6 +20,8 @@ function label(condition: Condition, depth?: number): string {
       const day = daysBetween(condition.event_start!, condition.date!) + 1;
       return `${condition.category_name} heatwave · day ${day}`;
     }
+    case "paused":
+      return `${condition.category_name} heatwave · paused`;
     case "above_threshold":
       return `Above threshold · ${condition.days_above} day${condition.days_above === 1 ? "" : "s"}`;
     case "normal":
@@ -57,6 +59,10 @@ export function StateLegend() {
           {name}
         </span>
       ))}
+      <span className="state">
+        <Swatch {...stateLook({ state: "paused", category: 1 })} />
+        Heatwave paused
+      </span>
       <span className="state">
         <Swatch {...stateLook({ state: "above_threshold", category: null })} />
         Above threshold

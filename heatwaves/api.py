@@ -23,7 +23,7 @@ from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
 from heatwaves.queries import AT_BUOY, DECIMALS
 from heatwaves.sources import connect
-from heatwaves.state import OFFLINE_AFTER, State, state_of
+from heatwaves.state import OFFLINE_AFTER, State, latest_by_series, state_of
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -54,7 +54,7 @@ class Condition(BaseModel):
     anomaly: float | None  # temperature minus climatology
     threshold: float | None
     days_above: int  # consecutive days above the threshold, ending on `date`
-    category: int | None  # of the heatwave in progress
+    category: int | None  # of the heatwave in progress or paused (heatwaves.state)
     category_name: str | None
     event_start: dt.date | None
     synced_at: dt.datetime | None  # when the sync job last checked ERDDAP
@@ -287,15 +287,12 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
     for series in temperatures:
         depths[series.buoy_id].append(series)
     satellites = queries.satellite_temperatures(session)
-    ongoing = {
-        event.series_id: event
-        for event in session.scalars(select(Event).join(Series).where(Event.end_date == Series.latest_date))
-    }
+    latest = latest_by_series(session)
     spans = queries.extents(session, [each.id for each in (*temperatures, *satellites.values())])
     first_dates = {series_id: first for series_id, (first, _) in spans.items()}
 
     def condition(series: Series) -> Condition:
-        return describe(series, ongoing.get(series.id), first_dates.get(series.id), on)
+        return describe(series, latest.get(series.id), first_dates.get(series.id), on)
 
     def satellite(series: Series | None) -> SatelliteCondition | None:
         if series is None:
@@ -320,15 +317,20 @@ def buoy_conditions(session: Session, on: dt.date) -> list[BuoyOut]:
     ]
 
 
-def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, on: dt.date) -> Condition:
+def describe(series: Series, latest: Event | None, first_date: dt.date | None, on: dt.date) -> Condition:
+    """`latest` is the series' most recent heatwave, if any."""
     anomaly = None
     if series.latest_value is not None and series.latest_climatology is not None:
         anomaly = series.latest_value - series.latest_climatology
+    state = state_of(series, latest, on).state
+    # The heatwave in progress or paused; an offline series still names the one its last day was in.
+    ongoing = latest is not None and latest.end_date == series.latest_date
+    heatwave = latest if ongoing or state == "paused" else None
     return Condition(
         depth=series.depth,
         dataset_id=series.dataset_id,
         erddap_url=SOURCES[series.source].page_url(series),
-        state=state_of(series, ongoing, on).state,
+        state=state,
         first_date=first_date,
         date=series.latest_date,
         temperature=series.latest_value,
@@ -336,9 +338,9 @@ def describe(series: Series, ongoing: Event | None, first_date: dt.date | None, 
         anomaly=anomaly,
         threshold=series.latest_threshold,
         days_above=series.days_above,
-        category=ongoing.category if ongoing else None,
-        category_name=ongoing.category_name if ongoing else None,
-        event_start=ongoing.start_date if ongoing else None,
+        category=heatwave.category if heatwave else None,
+        category_name=heatwave.category_name if heatwave else None,
+        event_start=heatwave.start_date if heatwave else None,
         synced_at=series.synced_at,
         reading_at=series.latest_reading_at,
         reading=series.latest_reading,

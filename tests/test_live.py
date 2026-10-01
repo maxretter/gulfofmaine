@@ -14,7 +14,7 @@ import psycopg
 import pytest
 from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from heatwaves import live, main
@@ -111,6 +111,54 @@ def test_a_sync_announces_a_heatwave_in_progress_that_grows_or_changes(session, 
     assert warmer.previous_category == warmer.category
 
 
+def test_a_sync_announces_a_heatwave_pausing_and_resuming_as_the_same_heatwave(
+    session, normal_until_yesterday
+):
+    series = normal_until_yesterday
+    days = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY)
+    store(session, [series], download(series, days[:-1] + 2.5))
+    [start] = session.scalars(select(Event.start_date).where(Event.end_date == TODAY - dt.timedelta(days=1)))
+
+    # Today's mean so far is below the threshold: the heatwave is paused, not over.
+    [paused] = store(session, [series], download(series, days[-1:] - 2.0))
+
+    assert isinstance(paused, StatusMessage)
+    assert (paused.previous_state, paused.state, paused.date) == ("heatwave", "paused", TODAY)
+    assert paused.category == paused.previous_category is not None
+
+    # Today again, from more hours, above the threshold: the same heatwave goes on.
+    [resumed] = store(session, [series], download(series, days[-1:] + 2.5))
+
+    assert isinstance(resumed, StatusMessage)
+    assert (resumed.previous_state, resumed.state) == ("paused", "heatwave")
+    assert resumed.previous_category == resumed.category == paused.category
+    assert session.scalars(select(Event.start_date).where(Event.end_date == TODAY)).all() == [start]
+
+
+def test_a_sync_announces_a_paused_heatwave_ending_once_nothing_can_be_joined_to_it(session):
+    temperatures = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=3))
+    temperatures.iloc[-12:] -= 2.0
+    temperatures.iloc[-7:] += 4.5
+    series = add_series(session, temperatures)
+    update_heatwaves(session, series)
+    session.commit()
+    cool = seasonal_temperatures(str(TODAY - dt.timedelta(days=2)), TODAY) - 2.0
+
+    [paused], still, [over] = (
+        store(session, [series], download(series, cool[day : day + 1])) for day in range(3)
+    )
+
+    assert isinstance(paused, StatusMessage)
+    assert (paused.previous_state, paused.state) == ("heatwave", "paused")
+    assert paused.category is not None
+    # A second day below changes nothing on the feed: a spell from tomorrow could still be joined on.
+    assert still == []
+    # After a third, one would start too late.
+    assert isinstance(over, StatusMessage)
+    assert (over.previous_state, over.state) == ("paused", "normal")
+    assert (over.previous_category, over.category) == (paused.category, None)
+
+
 def test_a_sync_that_changes_neither_reading_nor_heatwave_announces_nothing(session, normal_until_yesterday):
     series = normal_until_yesterday
     warm = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY) + 2.5
@@ -154,18 +202,24 @@ def test_a_buoy_sync_publishes_its_newest_good_reading(monkeypatch, session):
 
 
 @pytest.mark.parametrize(
-    ("latest", "days_above", "ongoing", "expected"),
+    ("latest", "days_above", "heatwave", "expected"),
     [
         (None, 0, None, ("no_data", None)),
-        (TODAY - dt.timedelta(days=4), 9, 2, ("offline", None)),
-        (TODAY - dt.timedelta(days=3), 9, 2, ("heatwave", 2)),
+        (TODAY - dt.timedelta(days=4), 9, (2, TODAY - dt.timedelta(days=4)), ("offline", None)),
+        (TODAY - dt.timedelta(days=3), 9, (2, TODAY - dt.timedelta(days=3)), ("heatwave", 2)),
+        # The newest heatwave ended two days ago: as far back as a spell from tomorrow can join it.
+        (TODAY, 0, (2, TODAY - dt.timedelta(days=2)), ("paused", 2)),
+        (TODAY, 0, (2, TODAY - dt.timedelta(days=3)), ("normal", None)),
+        # Three days back above, after a dip of two.
+        (TODAY, 3, (3, TODAY - dt.timedelta(days=5)), ("paused", 3)),
+        (TODAY, 3, (3, TODAY - dt.timedelta(days=6)), ("above_threshold", None)),
         (TODAY, 3, None, ("above_threshold", None)),
         (TODAY, 0, None, ("normal", None)),
     ],
 )
-def test_state_rules(latest, days_above, ongoing, expected):
+def test_state_rules(latest, days_above, heatwave, expected):
     series = Series(latest_date=latest, days_above=days_above, latest_climatology=12.0)
-    event = Event(category=ongoing) if ongoing else None
+    event = Event(category=heatwave[0], end_date=heatwave[1]) if heatwave else None
 
     result = state_of(series, event, TODAY)
     assert (result.state, result.category) == expected

@@ -248,6 +248,17 @@ describe("live messages", () => {
     expect(enteredHeatwave(reading)).toBe(false);
   });
 
+  it("doesn't announce a paused heatwave that goes on, which is the same heatwave", () => {
+    const dip: StatusMessage[] = [
+      entered,
+      // A day below the threshold.
+      { ...entered, date: "2026-09-29", state: "paused", previous_state: "heatwave", previous_category: 1, days_above: 0 },
+      // Five days back above: joined on.
+      { ...entered, date: "2026-10-04", previous_state: "paused", previous_category: 1 },
+    ];
+    expect(dip.map(enteredHeatwave)).toEqual([true, false, false]);
+  });
+
   it("shows a notice for each heatwave that starts, until dismissed or for 20 seconds", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(keys.buoys, buoys);

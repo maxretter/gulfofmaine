@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import type { Condition, State } from "../api/types";
-import { buoyStatus, heatwaveSummary } from "./state";
+import { categories } from "./colors";
+import { buoyStatus, heatwaveSummary, stateLook } from "./state";
 
 const states = (...list: State[]) => list.map((state) => ({ state }));
+
+describe("how a state is drawn", () => {
+  it("draws a paused heatwave hollow, in its category's color: on hold, neither going on nor over", () => {
+    expect(stateLook({ state: "paused", category: 3 })).toEqual({ color: categories[3].color, variant: "hollow" });
+    expect(stateLook({ state: "heatwave", category: 3 })).toEqual({ color: categories[3].color, variant: "dot" });
+  });
+});
 
 describe("the front page's summary", () => {
   it("counts heatwaves among the buoys reporting, leaving out those with no recent data", () => {
@@ -34,6 +42,20 @@ describe("the front page's summary", () => {
     expect(heatwaveSummary(states("no_data"), 50)).toBe("No buoy is reporting from 50 m.");
   });
 
+  it("counts a paused heatwave as one, on hold, and says how many are paused", () => {
+    expect(heatwaveSummary(states("heatwave", "paused", "normal"), 50)).toBe(
+      "2 of the 3 buoys reporting from 50 m are in a heatwave, 1 of them paused.",
+    );
+    expect(heatwaveSummary(states("paused", "normal", "above_threshold"), 20)).toBe(
+      "1 of the 3 buoys reporting from 20 m is in a heatwave, now paused. 1 more is above the threshold.",
+    );
+    expect(heatwaveSummary(states("paused", "paused"), 1)).toBe("All 2 buoys reporting from 1 m are in a heatwave, both paused.");
+    expect(heatwaveSummary(states("paused", "paused", "paused", "normal"), 1)).toBe(
+      "3 of the 4 buoys reporting from 1 m are in a heatwave, all paused.",
+    );
+    expect(heatwaveSummary(states("paused", "offline"), 50)).toBe("The one buoy reporting from 50 m is in a heatwave, now paused.");
+  });
+
   it("leaves the buoys without a normal out of the count, and says so", () => {
     expect(heatwaveSummary(states("heatwave", "normal", "no_normal"), 50)).toBe(
       "1 of the 2 buoys reporting from 50 m is in a heatwave. A buoy without a normal isn't counted.",
@@ -55,6 +77,13 @@ describe("a buoy's status in the list of buoys", () => {
     const status = buoyStatus([at(1, "heatwave"), at(20, "above_threshold"), at(50, "heatwave", { category: 2 })]);
     expect(status.text).toBe("In a heatwave at 1 and 50 m");
     expect(status.condition?.depth).toBe(50);
+  });
+
+  it("names the depths where a heatwave is paused, after those where one goes on", () => {
+    const both = buoyStatus([at(1, "paused", { category: 4 }), at(20, "heatwave"), at(50, "paused", { category: 2 })]);
+    expect([both.text, both.condition?.depth]).toEqual(["In a heatwave at 20 m, paused at 1 and 50 m", 20]);
+    const paused = buoyStatus([at(1, "above_threshold"), at(20, "paused", { category: 2 }), at(50, "normal")]);
+    expect([paused.text, paused.condition?.depth]).toEqual(["Heatwave paused at 20 m", 20]);
   });
 
   it("falls back to the depths above the threshold, then to none", () => {

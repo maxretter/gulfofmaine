@@ -32,7 +32,7 @@ export interface Condition {
   depth: number;
   dataset_id: string;
   erddap_url: string;
-  state: "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
+  state: "heatwave" | "paused" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
   first_date: string | null;
   date: string | null;
   temperature: number | null;
@@ -204,7 +204,7 @@ export interface SatelliteCondition {
   depth: number;
   dataset_id: string;
   erddap_url: string;
-  state: "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
+  state: "heatwave" | "paused" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
   first_date: string | null;
   date: string | null;
   temperature: number | null;
@@ -239,10 +239,10 @@ export interface StatusMessage {
   buoy: string;
   depth: number;
   date: string | null;
-  state: "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
+  state: "heatwave" | "paused" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
   category: number | null;
   days_above: number;
-  previous_state: "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
+  previous_state: "heatwave" | "paused" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
   previous_category: number | null;
 }
 

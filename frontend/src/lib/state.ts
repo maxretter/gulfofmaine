@@ -10,6 +10,9 @@ export function stateLook(condition: Pick<Condition, "state" | "category">): { c
   switch (condition.state) {
     case "heatwave":
       return { color: categories[condition.category ?? 1].color, variant: "dot" };
+    case "paused":
+      // The heatwave's color, hollow: on hold, neither going on nor over.
+      return { color: categories[condition.category ?? 1].color, variant: "hollow" };
     case "above_threshold":
       return { color: categories[1].color, variant: "ring" };
     case "normal":
@@ -24,12 +27,14 @@ export function stateLook(condition: Pick<Condition, "state" | "category">): { c
 
 /**
  * How many of the buoys reporting from `depth` are in a heatwave, and how many more are above the threshold, in a
- * sentence or two. Those with no recent data aren't reporting. Those without a normal can't be in a heatwave or out
- * of one, so they're left out of the count, and it says so.
+ * sentence or two. A buoy whose heatwave is paused is in one, on hold, and the sentence says how many are. Those with
+ * no recent data aren't reporting. Those without a normal can't be in a heatwave or out of one, so they're left out of
+ * the count, and it says so.
  */
 export function heatwaveSummary(conditions: Pick<Condition, "state">[], depth: number): string {
   const reporting = conditions.filter((c) => !["offline", "no_data", "no_normal"].includes(c.state)).length;
-  const hot = conditions.filter((c) => c.state === "heatwave").length;
+  const paused = conditions.filter((c) => c.state === "paused").length;
+  const hot = conditions.filter((c) => c.state === "heatwave").length + paused;
   const warm = conditions.filter((c) => c.state === "above_threshold").length;
   const unjudged = conditions.filter((c) => c.state === "no_normal").length;
   const buoys = `buoys reporting from ${depth} m`;
@@ -44,22 +49,32 @@ export function heatwaveSummary(conditions: Pick<Condition, "state">[], depth: n
       : unjudged === 1
         ? " A buoy without a normal isn't counted."
         : ` ${unjudged} buoys without a normal aren't counted.`;
+  const onHold =
+    paused === 0
+      ? ""
+      : paused < hot
+        ? `, ${paused} of them paused`
+        : hot === 1
+          ? ", now paused"
+          : hot === 2
+            ? ", both paused"
+            : ", all paused";
   if (reporting === 1)
-    return `The one buoy reporting from ${depth} m ${hot ? "is in a heatwave" : warm ? "is above the heatwave threshold" : "isn't in a heatwave"}.${aside}`;
+    return `The one buoy reporting from ${depth} m ${hot ? `is in a heatwave${onHold}` : warm ? "is above the heatwave threshold" : "isn't in a heatwave"}.${aside}`;
   const heatwaves =
     hot === 0
       ? `None of the ${reporting} ${buoys} is in a heatwave.`
       : hot === reporting
-        ? `All ${reporting} ${buoys} are in a heatwave.`
-        : `${hot} of the ${reporting} ${buoys} ${hot === 1 ? "is" : "are"} in a heatwave.`;
+        ? `All ${reporting} ${buoys} are in a heatwave${onHold}.`
+        : `${hot} of the ${reporting} ${buoys} ${hot === 1 ? "is" : "are"} in a heatwave${onHold}.`;
   if (warm === 0) return `${heatwaves}${aside}`;
   return `${heatwaves} ${warm}${hot ? " more" : ""} ${warm === 1 ? "is" : "are"} above the threshold.${aside}`;
 }
 
 /**
- * A buoy's status across its depths, for the list of buoys: the depths in a heatwave, else those above the threshold,
- * else none, or no normal when none of the depths reporting has one. `condition` is the one to draw it with: the most
- * severe.
+ * A buoy's status across its depths, for the list of buoys: the depths in a heatwave and those where one is paused,
+ * else those above the threshold, else none, or no normal when none of the depths reporting has one. `condition` is
+ * the one to draw it with: the most severe heatwave going on, else the most severe paused.
  */
 export function buoyStatus(series: Condition[]): { text: string; condition: Condition | null } {
   const reporting = series.filter((s) => s.state !== "offline" && s.state !== "no_data");
@@ -67,13 +82,17 @@ export function buoyStatus(series: Condition[]): { text: string; condition: Cond
     const last = latest(series.map((s) => s.date));
     return { text: last ? `No data since ${formatDate(last)}` : "No data yet", condition: series[0] ?? null };
   }
+  const depths = (list: Condition[]) => `${formatList(list.map((s) => s.depth))} m`;
+  const worst = (list: Condition[]) => list.reduce((a, b) => ((b.category ?? 0) > (a.category ?? 0) ? b : a));
   const hot = reporting.filter((s) => s.state === "heatwave");
+  const paused = reporting.filter((s) => s.state === "paused");
   if (hot.length > 0) {
-    const worst = hot.reduce((a, b) => ((b.category ?? 0) > (a.category ?? 0) ? b : a));
-    return { text: `In a heatwave at ${formatList(hot.map((s) => s.depth))} m`, condition: worst };
+    const text = `In a heatwave at ${depths(hot)}${paused.length ? `, paused at ${depths(paused)}` : ""}`;
+    return { text, condition: worst(hot) };
   }
+  if (paused.length > 0) return { text: `Heatwave paused at ${depths(paused)}`, condition: worst(paused) };
   const warm = reporting.filter((s) => s.state === "above_threshold");
-  if (warm.length > 0) return { text: `Above the threshold at ${formatList(warm.map((s) => s.depth))} m`, condition: warm[0] };
+  if (warm.length > 0) return { text: `Above the threshold at ${depths(warm)}`, condition: warm[0] };
   const judged = reporting.filter((s) => s.state !== "no_normal");
   if (judged.length === 0) return { text: "No normal", condition: reporting[0] };
   return { text: "No heatwave", condition: judged[0] };

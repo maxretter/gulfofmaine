@@ -48,6 +48,23 @@ def test_buoys_report_the_heatwave_in_progress(client, session, heatwave_now):
     assert condition["synced_at"] is not None
 
 
+def test_buoys_report_a_paused_heatwave_as_they_do_one_in_progress(client, session, stopped_clock):
+    temperatures = seasonal_temperatures("2003-01-01", TODAY)
+    temperatures.iloc[-9:-1] += 2.5
+    temperatures.iloc[-1] -= 2.0  # today, a dip below the threshold
+    update_heatwaves(session, add_series(session, temperatures))
+    session.commit()
+
+    [buoy] = client.get("/api/buoys").json()
+    [condition] = buoy["series"]
+    paused = session.scalars(select(Event)).one()
+    assert paused.end_date == TODAY - dt.timedelta(days=1)
+    assert (condition["state"], condition["days_above"]) == ("paused", 0)
+    assert condition["category"] == paused.category
+    assert condition["category_name"] == paused.category_name
+    assert condition["event_start"] == paused.start_date.isoformat()
+
+
 def test_buoys_give_each_series_its_own_first_day(client, session, stopped_clock):
     for depth, first, source in (
         (1, "2003-01-01", "buoy"),

@@ -49,7 +49,8 @@ export function withReading(buoys: Buoy[], reading: ReadingMessage): Buoy[] {
 
 /**
  * A buoy depth (not the satellite) that has just gone into a heatwave: one reporting normally the day before, not
- * one coming back from an outage, or filled in for the first time, already in one.
+ * one coming back from an outage, or filled in for the first time, already in one, nor one whose paused heatwave
+ * resumes: that is the same heatwave.
  */
 export function enteredHeatwave(message: LiveMessage): message is StatusMessage {
   return (
@@ -61,8 +62,8 @@ export function enteredHeatwave(message: LiveMessage): message is StatusMessage 
 }
 
 /**
- * One buoy depth entering a heatwave on one day: the status's newest day, not the heatwave's start, so one that
- * leaves and re-enters on a later day, as across a short dip, gets a new id.
+ * One buoy depth entering a heatwave on one day: the status's newest day, as the message doesn't carry the heatwave's
+ * start. A heatwave across a short dip is paused, not left, so it isn't entered again.
  */
 export function alertId(alert: StatusMessage): string {
   return `${alert.buoy}-${alert.depth}-${alert.date}`;

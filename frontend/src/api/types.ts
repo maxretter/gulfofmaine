@@ -3,9 +3,11 @@
 // contract.ts holds them to the API's own types (schema.ts): the type check
 // fails if one drifts from what the API sends.
 
-// "no_normal": reporting, but with too little data in the baseline for a normal, so neither in a heatwave nor
-// out of one.
-export type State = "heatwave" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
+// "paused": the newest day isn't in a heatwave, but the days since the last one, a dip below the threshold and
+// perhaps a run back above it, could still be joined to it (heatwaves/state.py); category and event_start are that
+// heatwave's. "no_normal": reporting, but with too little data in the baseline for a normal, so neither in a
+// heatwave nor out of one.
+export type State = "heatwave" | "paused" | "above_threshold" | "normal" | "no_normal" | "offline" | "no_data";
 
 export interface Condition {
   depth: number;
@@ -19,7 +21,7 @@ export interface Condition {
   anomaly: number | null;
   threshold: number | null;
   days_above: number;
-  category: number | null;
+  category: number | null; // of the heatwave in progress or paused
   category_name: string | null;
   event_start: string | null;
   synced_at: string | null;
@@ -203,8 +205,10 @@ export interface ReadingMessage {
 }
 
 /**
- * A series' state changed, or its heatwave in progress did (its dates, category or intensity). A heatwave that only
- * grew or changed has "heatwave" as both states. Depth 0 is the satellite.
+ * A series' state changed, or its heatwave in progress or paused did (its dates, category or intensity). A heatwave
+ * that only grew or changed has "heatwave" as both states; a paused one that changed, "paused". A heatwave that dips
+ * below the threshold is "paused" while what follows could still be joined to it, and "heatwave" again, the same one,
+ * if it is. Depth 0 is the satellite.
  */
 export interface StatusMessage {
   type: "status";

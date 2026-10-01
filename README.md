@@ -172,11 +172,13 @@ lives in the URL, so any view can be bookmarked or shared and the back button
 works:
 
 - **Now** (`/?depth=50`). Every buoy's latest daily mean at one depth, on a map
-  and in a table, with a line saying how many are in a heatwave. Each buoy
-  leads to its own page. Above them, the whole record at 50 m as warming
-  stripes, a month to a stripe; hover one for its month.
+  and in a table, with a line saying how many are in a heatwave, and how many
+  of those heatwaves are paused. Each buoy leads to its own page. Above them,
+  the whole record at 50 m as warming stripes, a month to a stripe; hover one
+  for its month.
 - **Buoys** (`/buoys`). Every buoy, retired ones included: its depths, the span
-  of its record, how many heatwaves it has logged and whether it's in one now.
+  of its record, how many heatwaves it has logged and whether it's in one now,
+  or one is paused.
 - **A page per buoy** (`/buoys/F01?depth=20&from=2021-05-01&to=2021-12-31`).
   Its latest readings and status at each depth, and its record: a strip of the
   whole record at one depth, with heatwaves shaded, sits above the detailed
@@ -208,11 +210,11 @@ works:
 - **Live.** The page keeps a WebSocket open to `/api/live` and writes each
   new reading into TanStack Query's cache, so the tiles show the latest
   reading and the map marker pulses as it arrives; a status change refetches
-  what depends on heatwaves, and a buoy depth entering one gets a notice. The
-  header says whether the feed is connected. The connection reconnects with
-  backoff, drops itself if the server's 30-second pings stop, and refetches
-  everything on screen each time it connects, the first time too, to cover
-  what it missed.
+  what depends on heatwaves, and a buoy depth entering one gets a notice, but
+  not one whose paused heatwave goes on. The header says whether the feed is
+  connected. The connection reconnects with backoff, drops itself if the
+  server's 30-second pings stop, and refetches everything on screen each time
+  it connects, the first time too, to cover what it missed.
 - **About** (`/about`). How heatwaves are found, the origin rules signal by
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their
@@ -254,7 +256,7 @@ every page as the site's mark.
 | `GET /api/annual?depth=&min_category=&origin=` | Heatwave days and observed days per buoy and year, in the heatwaves `/api/events` lists for the same filters; without `depth`, at any depth, a day counting once |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
-| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering or leaving a heatwave, or the dates, category or intensity of its heatwave in progress changing) and `ping` every 30 s |
+| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering, pausing or leaving a heatwave, or the dates, category or intensity of its heatwave in progress or paused changing) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
 | `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |
@@ -378,7 +380,7 @@ heatwaves/
   sources.py     what changed at each data source since the last sync
   sync.py        store, recompute, and the sync job (python -m heatwaves.sync)
   live.py        the live feed: NOTIFY from the sync, LISTEN and WebSocket in the API
-  state.py       a series' state: heatwave, above threshold, normal, no normal, offline
+  state.py       a series' state: heatwave, paused, above threshold, normal, no normal, offline
   queries.py     reads of the stored record shared by the API and reports
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
   products.py    the record as CF NetCDF and CSV files, for downloads and ERDDAP
@@ -441,14 +443,17 @@ tests/           backend tests; frontend tests sit beside their code
   anomaly carry a `long_name` but no CF standard name, and the ACDD check
   notes that.
 - **Live status is the newest day's.** A series is in a heatwave while its
-  newest day ends one. When a heatwave dips below the threshold for a day or
-  two, the status turns normal, then above the threshold, and back to the
-  heatwave on the fifth day above it, when detection joins the two spells:
-  the live feed announces a leave and a new entry, and the site shows a
-  notice, for what the record shows as one heatwave. The newest day can be
+  newest day ends one. Detection joins a spell of five or more days above
+  the threshold to the heatwave before it across a gap of up to two days,
+  so when a heatwave dips below the threshold, its status is paused, with
+  its category and start, for as long as what follows could still be
+  joined on: a dip of one or two days, then up to four days back above. On
+  the fifth day back above, the spell is joined on and the status is that
+  heatwave's again, with no notice of a new one; once a join can't happen,
+  the status is normal or above the threshold. The newest day can be
   today: it counts from about 18:00 UTC, once it has 18 hours of data, on a
-  mean of those hours until the rest arrive, so near the threshold the status
-  can change on part of a day, and again once it's complete.
+  mean of those hours until the rest arrive, so near the threshold the
+  status can change on part of a day, and again once it's complete.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
 

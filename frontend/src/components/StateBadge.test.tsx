@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { Condition, State } from "../api/types";
+import { categories } from "../lib/colors";
 import { StateBadge, StateLegend } from "./StateBadge";
 
 afterEach(cleanup);
@@ -16,6 +17,16 @@ describe("StateBadge", () => {
     const badge = screen.getByText("No normal");
     expect(badge.className).toBe("state muted");
     expect(screen.queryByText("No heatwave")).toBeNull();
+  });
+
+  it("names a paused heatwave by its category, as a heatwave on hold rather than none", () => {
+    render(<StateBadge condition={condition("paused", { category: 2, category_name: "Strong", event_start: "2026-09-20" })} />);
+
+    const badge = screen.getByText("Strong heatwave · paused");
+    expect(badge.className).toBe("state");
+    const swatch = badge.querySelector(".swatch") as HTMLElement;
+    expect(swatch.style.background).toBe("transparent");
+    expect(swatch.style.boxShadow).toContain(categories[2].color);
   });
 
   it("keeps the other states' labels", () => {
@@ -35,5 +46,12 @@ describe("StateBadge", () => {
 
     const labels = Array.from(document.querySelectorAll(".legend .state"), (each) => each.textContent);
     expect(labels.slice(-3)).toEqual(["No heatwave", "No normal", "No recent data"]);
+  });
+
+  it("puts a paused heatwave in the legend after the categories, before above the threshold", () => {
+    render(<StateLegend />);
+
+    const labels = Array.from(document.querySelectorAll(".legend .state"), (each) => each.textContent);
+    expect(labels.slice(0, 6)).toEqual(["Moderate", "Strong", "Severe", "Extreme", "Heatwave paused", "Above threshold"]);
   });
 });
