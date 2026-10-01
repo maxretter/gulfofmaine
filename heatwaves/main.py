@@ -4,13 +4,16 @@ uvicorn heatwaves.main:app
 """
 
 import asyncio
+import base64
 import contextlib
 import hashlib
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import cast
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
@@ -36,6 +39,7 @@ app = FastAPI(
     title="Gulf of Maine heatwaves",
     summary="Marine heatwaves at University of Maine buoys at 1, 20 and 50 m, beside NOAA's satellite data.",
     version="0.2.0",
+    docs_url=None,  # served below
     redoc_url=None,
     # Starlette would redirect /api/buoys/ to /api/buoys, at the request's Host and the
     # scheme Caddy saw: whatever Host a client sent, and http behind a TLS proxy.
@@ -43,6 +47,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(api.router)
+
+# Swagger UI at one version, where FastAPI's default takes the newest 5.x on the CDN.
+SWAGGER_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0/"
+
+
+@app.get("/docs", include_in_schema=False)
+def docs() -> HTMLResponse:
+    """Swagger UI, with a content security policy that allows its files and its one inline script.
+
+    Caddy gives every other response the app's policy, which would block both.
+    """
+    page = get_swagger_ui_html(
+        openapi_url=cast(str, app.openapi_url),
+        title=f"{app.title} - Swagger UI",
+        swagger_js_url=f"{SWAGGER_UI}swagger-ui-bundle.js",
+        swagger_css_url=f"{SWAGGER_UI}swagger-ui.css",
+        swagger_favicon_url="/favicon.svg",  # the app's
+    )
+    [script] = re.findall(r"<script>(.*?)</script>", bytes(page.body).decode(), re.DOTALL)
+    digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    page.headers["Content-Security-Policy"] = (
+        f"default-src 'self'; script-src {SWAGGER_UI} 'sha256-{digest}'; style-src {SWAGGER_UI}; "
+        "img-src 'self' data:; frame-ancestors 'none'"
+    )
+    return page
 
 
 @app.middleware("http")

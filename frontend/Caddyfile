@@ -8,6 +8,17 @@
 :80 {
 	encode zstd gzip
 
+	# On every response: the app's, the API's and ERDDAP's.
+	header {
+		X-Content-Type-Options nosniff
+		# OpenStreetMap's tile servers block requests without a Referer; this sends them only the origin.
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	# The app's policy, which the API's JSON gets too: inline styles are Leaflet's and
+	# React's style attributes; there are no inline scripts. Set only on a response
+	# without one of its own: /docs sets its own (heatwaves/main.py), as /erddap does below.
+	header ?Content-Security-Policy "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+
 	@api path /api/* /docs /openapi.json /healthz
 	handle @api {
 		reverse_proxy {$API_UPSTREAM:api:8000}
@@ -15,18 +26,13 @@
 
 	# Only with Compose's erddap profile; a 502 without it.
 	handle /erddap* {
+		# ERDDAP's pages run inline scripts and event handlers, so this rules out only framing.
+		header Content-Security-Policy "frame-ancestors 'none'"
 		reverse_proxy {$ERDDAP_UPSTREAM:erddap:8080}
 	}
 
 	handle {
 		root * /srv
-		header {
-			X-Content-Type-Options nosniff
-			# OpenStreetMap's tile servers block requests without a Referer; this sends them only the origin.
-			Referrer-Policy strict-origin-when-cross-origin
-			# Inline styles are Leaflet's and React's style attributes; there are no inline scripts.
-			Content-Security-Policy "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
-		}
 		# Hashed build output never changes under the same name. A name that
 		# isn't there, such as an old build's, gets a plain 404, not the app
 		# with a year's Cache-Control.
