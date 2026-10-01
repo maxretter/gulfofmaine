@@ -82,6 +82,11 @@ class BuoyOut(BaseModel):
 Variable = Literal["temperature", "salinity"]
 
 
+# Daily values go out to 0.001, of a degree C or on the salinity scale, finer
+# than any of the sensors measure: a full record gzips to 150 KB, not 400 KB.
+DECIMALS = 3
+
+
 class Day(BaseModel):
     date: dt.date
     value: float | None  # null when the day has too little data
@@ -373,11 +378,11 @@ def daily(
     """Daily means of a variable with its climatology and heatwave threshold.
 
     Temperature is in degrees C and salinity on the practical salinity
-    scale. Depth 0 is the satellite's sea surface temperature at the buoy.
-    Defaults to the 365 days ending on the newest observation. Days without
-    enough data are included with a null value, so gaps stay visible.
-    `start` and `end` must fall between 2001-01-01, before which no record
-    begins, and a year from today.
+    scale, each to 0.001. Depth 0 is the satellite's sea surface temperature
+    at the buoy. Defaults to the 365 days ending on the newest observation.
+    Days without enough data are included with a null value, so gaps stay
+    visible. `start` and `end` must fall between 2001-01-01, before which no
+    record begins, and a year from today.
     """
     series = get_series(session, buoy_id, depth, variable)
     end = end or series.latest_date or today()
@@ -393,6 +398,7 @@ def daily(
     frame = queries.daily(session, series.id, start, end)
     if frame is None:
         raise HTTPException(404, f"No climatology yet for {series.label}")
+    frame = frame.round(DECIMALS)
     return [
         Day(
             date=date,

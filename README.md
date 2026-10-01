@@ -119,8 +119,9 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   record at the buoy) and an events table, each also as CSV. They follow the
   CF conventions 1.11 as discrete sampling geometries, one time series per
   file, with ACDD 1.3 metadata, and are built from the same reads as the JSON
-  API; tests check that a download matches the API exactly, and run the IOOS
-  compliance checker's CF and ACDD checks on sample files.
+  API; tests check that a download, rounded to the API's 0.001, matches the
+  API exactly, and run the IOOS compliance checker's CF and ACDD checks on
+  sample files.
   [`erddap/datasets.xml`](erddap/datasets.xml), drafted by ERDDAP's
   `GenerateDatasetsXml`, serves them from ERDDAP as two datasets. Opening one
   takes three lines:
@@ -218,7 +219,7 @@ every page as the site's mark.
 | --- | --- |
 | `GET /api/buoys` | Every buoy with the latest conditions at each depth, and the satellite's with its grid cell |
 | `GET /api/buoys/{id}` | One buoy |
-| `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`; gaps are `null`; depth 0 is the satellite |
+| `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`, to 0.001; gaps are `null`; depth 0 is the satellite |
 | `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin |
 | `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
 | `GET /api/onsets?year=&depth=` | Each buoy's first heatwave of a year, and its daily anomaly and heatwave days |

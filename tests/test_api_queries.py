@@ -1,6 +1,7 @@
 """API queries over one set of series, built once for the module: these tests only read."""
 
 import datetime as dt
+import re
 
 import pandas as pd
 import pytest
@@ -88,6 +89,15 @@ def test_daily_series_rejects_a_reversed_range_and_a_series_without_a_normal(cli
     reversed_range = f"start={TODAY}&end={TODAY - dt.timedelta(days=1)}"
     assert client.get(f"/api/buoys/A01/1/daily?{reversed_range}").status_code == 422
     assert client.get("/api/buoys/B01/20/daily").status_code == 404
+
+
+def test_daily_series_goes_to_the_nearest_thousandth(client):
+    response = client.get("/api/buoys/A01/20/daily?start=2021-01-01&end=2021-12-31")
+    stored = seasonal_temperatures("2003-01-01", TODAY, seed=1)["2021"]
+
+    assert [day["value"] for day in response.json()] == pytest.approx(stored.tolist(), abs=5e-4)
+    # Every number, the normal, threshold and anomaly too, has three decimals at most.
+    assert max(len(decimals) for decimals in re.findall(r"\.(\d+)", response.text)) == 3
 
 
 def test_daily_series_runs_from_2001_to_a_year_from_today(client):

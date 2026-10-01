@@ -60,7 +60,7 @@ def api_daily(client, depth: int, start, end, variable: str = "temperature") -> 
     return pd.DataFrame(days).set_index("date").astype(float)
 
 
-def test_daily_files_match_the_json_api_exactly(client, tmp_path):
+def test_daily_files_match_the_json_api_exactly_to_its_decimals(client, tmp_path):
     nc = open_netcdf(client.get("/api/data/A01/50.nc").content, tmp_path).to_dataframe()
     nc.index = pd.DatetimeIndex(nc.index).strftime("%Y-%m-%d")
     csv = read_csv(client.get("/api/data/a01/50.csv").content, index_col="date")
@@ -68,7 +68,9 @@ def test_daily_files_match_the_json_api_exactly(client, tmp_path):
     # Every day from the first to the last with temperature or salinity.
     assert (nc.index[0], nc.index[-1]) == ("2003-01-01", "2021-07-15")
     start, end = nc.index[0], nc.index[-1]
-    for table in (nc, csv):
+    # The files keep every digit stored; the API rounds each number to api.DECIMALS.
+    assert not nc["temperature"].equals(nc["temperature"].round(api.DECIMALS))
+    for table in (nc.round(api.DECIMALS), csv.round(api.DECIMALS)):
         for depth, variable, prefix in ((50, "temperature", "temperature"), (0, "temperature", "satellite")):
             expected = api_daily(client, depth, start, end, variable)
             value = "temperature" if prefix == "temperature" else "satellite_temperature"
