@@ -59,8 +59,9 @@ export function AboutPage() {
         <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a>, checked about every 10 minutes. A reading
         is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed; in
         September 2026 the QARTOD flag marked no reading suspect, and failed only readings UMaine's flag already marks.
-        Readings are averaged by hour, then by day, and a day needs 18 hours with data. M01 has sent no data since
-        September 2025 and N01 since October 2021; their records are kept.
+        Readings are averaged by hour, then by day, and a day needs 18 hours with data, so the current day counts from
+        about 18:00 UTC on the hours so far. M01 has sent no data since September 2025 and N01 since October 2021;
+        their records are kept.
       </p>
 
       <h2 id="origin">Origin labels</h2>

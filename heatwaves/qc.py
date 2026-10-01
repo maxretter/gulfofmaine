@@ -12,7 +12,10 @@ from collections.abc import Iterable
 import pandas as pd
 import xarray as xr
 
-MIN_HOURS = 18  # hourly bins a day needs for its mean to count
+# Hourly bins a day needs for its mean to count. The current UTC day has
+# them once its 18th hour (17:00-18:00) has a reading, so it's stored from
+# about 18:00 UTC on the hours so far, and re-read as the rest arrive.
+MIN_HOURS = 18
 
 # UMaine's flag uses 0 for quality_good. The QARTOD aggregate flag uses
 # 3 for suspect and 4 for fail. Asked for the distinct combinations of the

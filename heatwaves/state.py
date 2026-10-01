@@ -9,6 +9,11 @@ normal, then above_threshold, and heatwave again on the fifth day back
 above, when detection joins the new spell to it (hobday.MAX_GAP). The live
 feed announces a leave and a new entry for what the record shows as one
 heatwave, with the same start.
+
+The newest day can be the current UTC day, from about 18:00 UTC, when it
+has the hours qc.MIN_HOURS asks for. Its mean is of the hours so far until
+the rest are read, so near the threshold the state can change on part of a
+day, and again once the day is complete.
 """
 
 import datetime as dt

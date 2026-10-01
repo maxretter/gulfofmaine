@@ -409,7 +409,10 @@ tests/           backend tests; frontend tests sit beside their code
   two, the status turns normal, then above the threshold, and back to the
   heatwave on the fifth day above it, when detection joins the two spells:
   the live feed announces a leave and a new entry, and the site shows a
-  notice, for what the record shows as one heatwave.
+  notice, for what the record shows as one heatwave. The newest day can be
+  today: it counts from about 18:00 UTC, once it has 18 hours of data, on a
+  mean of those hours until the rest arrive, so near the threshold the status
+  can change on part of a day, and again once it's complete.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
 
