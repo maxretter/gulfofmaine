@@ -1,6 +1,6 @@
 import * as Plot from "@observablehq/plot";
 import { extent, range } from "d3";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import { type ObservedYear, useObservedDays } from "../api/queries";
 import type { Buoy, HeatwaveEvent, Origin } from "../api/types";
@@ -119,8 +119,8 @@ interface HeatmapProps extends Pick<Props, "buoys" | "selected" | "onSelect"> {
 
 function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProps) {
   const { buoy: selectedBuoy, year: selectedYear } = selected;
+  const [first, last] = extent(cells, (d) => d.year) as [number, number];
   const options = useMemo((): Plot.PlotOptions => {
-    const [first, last] = extent(cells, (d) => d.year) as [number, number];
     const chartWidth = Math.max(width, 640);
     const describe = (d: Cell) =>
       `${d.buoy_id} ${names.get(d.buoy_id)}, ${d.year}\n` +
@@ -153,21 +153,31 @@ function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProp
         Plot.tip(cells, Plot.pointer({ x: "year", y: "buoy_id", title: describe })),
       ],
     };
-  }, [cells, width, buoys, names, selectedBuoy, selectedYear]);
+  }, [cells, width, first, last, buoys, names, selectedBuoy, selectedYear]);
 
+  // On narrow screens the grid scrolls sideways. It starts at the recent years, and keeps its place when it's redrawn
+  // for a selected cell or new data; only other years, or another width, start it at the recent years again.
+  const scroll = useRef({ layout: "", left: 0 });
+  const layout = `${first}-${last} ${width}`;
   // Plot's pointer interaction keeps the cell under the cursor in `plot.value`.
   const onRender = useCallback(
     (plot: PlotElement) => {
-      // On narrow screens the grid scrolls sideways; start at the recent years.
       const frame = plot.closest(".chart");
-      if (frame) frame.scrollLeft = frame.scrollWidth;
+      if (frame) {
+        frame.scrollLeft = scroll.current.layout === layout ? scroll.current.left : frame.scrollWidth;
+        scroll.current.layout = layout;
+      }
       const click = () => {
         if (plot.value) onSelect(plot.value.buoy_id, plot.value.year);
       };
       plot.addEventListener("click", click);
-      return () => plot.removeEventListener("click", click);
+      return () => {
+        // Read before the plot goes, while the grid still holds the place.
+        if (frame) scroll.current.left = frame.scrollLeft;
+        plot.removeEventListener("click", click);
+      };
     },
-    [onSelect],
+    [onSelect, layout],
   );
 
   return <PlotFigure options={options} onRender={onRender} />;
