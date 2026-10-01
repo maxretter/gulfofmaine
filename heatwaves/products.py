@@ -78,8 +78,9 @@ DAILY_MEAN = (
     f"flag doesn't mark suspect or fail; days with fewer than {qc.MIN_HOURS} hours of data are missing."
 )
 CATEGORY = (
-    "The category of the heatwave the day belongs to, from its peak (Hobday et al. 2018), on every "
-    f"day of it, including gaps of up to {hobday.MAX_PAD} days that detection filled in. "
+    "The category of the heatwave the day belongs to (Hobday et al. 2018): the most multiples of the "
+    "threshold's distance above normal it reached on any day, which needn't be the peak day. Set on "
+    f"every day of it, including gaps of up to {hobday.MAX_PAD} days that detection filled in. "
     "Missing on days that are neither in a heatwave nor observed."
 )
 

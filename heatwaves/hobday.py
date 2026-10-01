@@ -4,8 +4,9 @@ A marine heatwave is a spell of at least five days on which the daily mean
 temperature is above a seasonally varying threshold: the 90th percentile of
 temperatures for that time of year over a fixed baseline period. Events
 separated by two days or fewer are joined into one. Each event is categorized
-(Hobday et al. 2018) by how many multiples of the threshold's distance above
-the climatology its peak reached: 1 Moderate, 2 Strong, 3 Severe, 4 Extreme.
+(Hobday et al. 2018) by the most multiples of the threshold's distance above
+the climatology it reached on any day, which needn't be its peak day, the
+day furthest above the climatology: 1 Moderate, 2 Strong, 3 Severe, 4 Extreme.
 
 Everything here is a plain function over xarray and pandas objects, with no
 database or network access. The parameters are the defaults of the reference

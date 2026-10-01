@@ -20,7 +20,7 @@ function rankLine(events: HeatwaveEvent[], event: HeatwaveEvent, key: RankKey, s
   return rank === 1 ? `The ${superlative} of ${among}` : `${formatOrdinal(rank)} ${superlative} of ${among}`;
 }
 
-/** How far the peak rose, in multiples of the gap between normal and the threshold: what sets the category. */
+/** The most multiples of the gap between normal and the threshold reached on any day: what sets the category. */
 function multiple(category: number): string {
   return category === 4 ? "4× or more" : `${category}–${category + 1}×`;
 }
