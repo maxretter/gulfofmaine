@@ -13,9 +13,9 @@ says how each source finds what changed. Storing is the same for all of
 them: the fetched days replace the stored ones, then each series' heatwaves
 are recomputed from its full record, and each heatwave whose origin rests
 on the changed days is judged again. What changed goes out on the live
-feed (heatwaves.live) when the transaction commits, and after a round that
-stored anything the NetCDF and CSV products (heatwaves.products) are
-rewritten.
+feed (heatwaves.live) when the transaction commits, and at the end of a
+round the NetCDF and CSV products (heatwaves.products) of each buoy depth
+it changed are rewritten.
 """
 
 import argparse
@@ -411,17 +411,40 @@ def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], serie
         return "unchanged"
 
 
-def publish(session_factory: sessionmaker, directory: Path) -> None:
-    """Rewrite the NetCDF and CSV products from the stored record (heatwaves.products)."""
+# The daily files, by buoy and depth, this process has yet to write to each products directory
+# since their data changed. Until a write to a directory succeeds, every one: a process stopped
+# between storing and writing may have left any behind, and code deployed since may write them
+# differently.
+_unwritten: dict[Path, set[tuple[str, int]]] = {}
+
+
+def publish(
+    session_factory: sessionmaker, directory: Path, changed: Collection[tuple[str, int]] | None = None
+) -> None:
+    """Rewrite the NetCDF and CSV products from the stored record (heatwaves.products).
+
+    Every daily file, or those `changed`, by buoy and depth, with any still
+    unwritten; and the events each time.
+    """
+    unwritten = _unwritten.get(directory)
+    depths = None if changed is None or unwritten is None else unwritten | set(changed)
+    if depths is not None:
+        _unwritten[directory] = depths
     started = time.monotonic()
     try:
         with session_factory() as session:
-            products.write(session, directory)
+            products.write(session, directory, depths)
     except Exception:
-        # The stored record is up to date; the files catch up after the next round that stores something.
+        # The stored record is up to date; the files are written at the next round.
         log.exception("Writing the products to %s failed", directory)
         return
-    log.info("Wrote the products to %s in %.1f s", directory, time.monotonic() - started)
+    _unwritten[directory] = set()
+    log.info(
+        "Wrote the products to %s in %.1f s (%s)",
+        directory,
+        time.monotonic() - started,
+        "every file" if depths is None else f"{len(depths)} buoy depths, and the events",
+    )
 
 
 def sync_all(
@@ -440,12 +463,14 @@ def sync_all(
     positions; when it can't, that counts as a failed fetch and the round
     goes on.
 
-    The products in `products_dir`, if given, are rewritten at the end when
-    anything new was stored, or when there are none yet: once a round, as
-    a rewrite takes several seconds.
+    The products in `products_dir`, if given, are rewritten at the end,
+    once a round: the files of each buoy depth the round changed and any
+    left unwritten (every one, at a process's first round, see `publish`),
+    and the events.
     """
     failures = 0
     with session_factory() as session:
+        before = products.extras(session) if products_dir is not None else {}
         if everything and not ensure_catalog(session, erddap):
             failures += 1
         # One series from each fetch; sync_one brings the rest along.
@@ -460,9 +485,44 @@ def sync_all(
             query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
         series_ids = session.scalars(query).all()
     outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
-    if products_dir is not None and ("updated" in outcomes or not products.listing(products_dir)):
-        publish(session_factory, products_dir)
+    if products_dir is not None:
+        stored = [
+            series_id for series_id, outcome in zip(series_ids, outcomes, strict=True) if outcome == "updated"
+        ]
+        try:
+            with session_factory() as session:
+                changed = _changed_files(session, stored, before)
+        except Exception:
+            _unwritten.pop(products_dir, None)  # so the next write is of every file
+            raise
+        # Any left unwritten too: every file, at a process's first round.
+        if changed or _unwritten.get(products_dir) != set() or not products.listing(products_dir):
+            publish(session_factory, products_dir, changed)
     return failures + outcomes.count("failed")
+
+
+def _changed_files(
+    session: Session, stored: Collection[int], before: Mapping[tuple[str, int], object]
+) -> set[tuple[str, int]]:
+    """The daily files whose contents a round changed, by buoy and depth.
+
+    Those of each dataset `stored` (one series ID from each), each file at a
+    buoy for its satellite series, which every depth's file holds, and those
+    whose products.extras differ from `before`.
+    """
+    after = products.extras(session)
+    changed = {key for key, extras in after.items() if extras != before.get(key)}
+    datasets = session.execute(select(Series.source, Series.dataset_id).where(Series.id.in_(stored))).all()
+    for source, dataset_id in datasets:
+        for buoy_id, depth in session.execute(
+            select(Series.buoy_id, Series.depth).where(
+                Series.source == source, Series.dataset_id == dataset_id
+            )
+        ):
+            changed |= {
+                key for key in after if key[0] == buoy_id and (source == "satellite" or key[1] == depth)
+            }
+    return changed
 
 
 def main(argv: list[str] | None = None) -> int:

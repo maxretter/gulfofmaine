@@ -68,9 +68,12 @@ def test_daily_files_match_the_json_api_exactly_to_its_decimals(client, tmp_path
     # Every day from the first to the last with temperature or salinity.
     assert (nc.index[0], nc.index[-1]) == ("2003-01-01", "2021-07-15")
     start, end = nc.index[0], nc.index[-1]
-    # The files keep every digit stored; the API rounds each number to api.DECIMALS.
+    # The NetCDF keeps every digit stored; the API rounds each number to api.DECIMALS, and so does the CSV.
     assert not nc["temperature"].equals(nc["temperature"].round(api.DECIMALS))
-    for table in (nc.round(api.DECIMALS), csv.round(api.DECIMALS)):
+    assert products.DECIMALS == api.DECIMALS
+    places = client.get("/api/data/A01/50.csv").text.splitlines()[1].split(",")[1].split(".")[1]
+    assert 0 < len(places) <= api.DECIMALS
+    for table in (nc.round(api.DECIMALS), csv):
         for depth, variable, prefix in ((50, "temperature", "temperature"), (0, "temperature", "satellite")):
             expected = api_daily(client, depth, start, end, variable)
             value = "temperature" if prefix == "temperature" else "satellite_temperature"

@@ -129,13 +129,15 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   and their evidence are stored on each event, and judged again whenever the
   days they rest on change, at any of the buoys and depths they read.
 - **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
-  After a sync round that stores new data, the job rewrites one NetCDF file
-  per buoy and depth (the daily temperature, normal, threshold, anomaly and
-  heatwave category, each heatwave's origin, salinity, and the satellite's
-  record at the buoy) and an events table, each also as CSV. They follow the
-  CF conventions 1.11 as discrete sampling geometries, one time series per
+  One NetCDF file per buoy and depth (the daily temperature, normal,
+  threshold, anomaly and heatwave category, each heatwave's origin, salinity,
+  and the satellite's record at the buoy) and an events table, each also as
+  CSV. After a sync round that stores new data, the job rewrites the files of
+  each buoy and depth whose data changed, and the events table. They follow
+  the CF conventions 1.11 as discrete sampling geometries, one time series per
   file, with ACDD 1.3 metadata, and are built from the same reads as the JSON
-  API; tests check that a download, rounded to the API's 0.001, matches the
+  API. The daily CSV gives each value to the API's 0.001, the NetCDF every
+  digit stored; tests check that a download, rounded to 0.001, matches the
   API exactly, and run the IOOS compliance checker's CF and ACDD checks on
   sample files.
   [`erddap/datasets.xml`](erddap/datasets.xml), drafted by ERDDAP's

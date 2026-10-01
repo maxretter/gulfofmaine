@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from sqlalchemy import delete, event, select, text
+from sqlalchemy import delete, event, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -301,6 +301,109 @@ def test_a_round_rewrites_the_products_when_it_stores_data(monkeypatch, session_
     # Something new: they're rewritten, even when other fetches failed.
     assert round_of("failed", "updated") > 0
     assert csv.exists()
+
+
+class NewDays:
+    """A source with new days for the datasets in `new`, by dataset ID, and nothing new for the rest."""
+
+    def __init__(self) -> None:
+        self.new: dict[str, pd.Series] = {}
+
+    def fetch(self, series: Sequence[Series]) -> Download | None:
+        values = self.new.pop(series[0].dataset_id, None)
+        if values is None:
+            return None
+        days = pd.DatetimeIndex(values.index, name="date")
+        frame = pd.DataFrame({"value": values.to_numpy(), "hours": 24}, index=days)
+        stamp = dt.datetime(2026, 9, 28, tzinfo=dt.UTC)
+        return Download(days[0].date(), days[-1].date(), {each.id: frame for each in series}, stamp)
+
+    def page_url(self, series: Series) -> str:
+        return ""
+
+
+def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, session_factory, tmp_path):
+    days = pd.date_range("2025-01-01", "2025-06-30")
+    with session_factory() as session:
+        for buoy_id, depth, source in (
+            ("A01", 1, "buoy"),
+            ("A01", 50, "buoy"),
+            ("B01", 20, "buoy"),
+            ("A01", 0, "satellite"),
+        ):
+            add_series(session, pd.Series(10.0, index=days), buoy_id, depth, source=source)
+        # A heatwave at B01 20 m, whose origin nothing at A01 bears on.
+        b01 = session.scalars(select(Series).where(Series.buoy_id == "B01")).one()
+        start, end = days[10].date(), days[20].date()
+        session.add(
+            Event(
+                series_id=b01.id,
+                start_date=start,
+                end_date=end,
+                peak_date=start,
+                max_intensity=2.0,
+                mean_intensity=1.0,
+                category=1,
+                origin="offshore",
+            )
+        )
+        session.commit()
+    erddap = recorded_erddap(CATALOG, [])
+    source = NewDays()
+    june = pd.Series(11.0, index=pd.date_range("2025-06-29", "2025-07-01"))
+
+    def round_of(**new: pd.Series) -> set[str]:
+        """The files a round rewrites, in which these datasets have new days."""
+        source.new = new
+        written = {path.name: path.stat().st_mtime_ns for path in tmp_path.rglob("*.*")}
+        sync_all(session_factory, erddap, {"buoy": source, "satellite": source}, products_dir=tmp_path)
+        return {
+            path.name for path in tmp_path.rglob("*.*") if written.get(path.name) != path.stat().st_mtime_ns
+        }
+
+    def files(*names: str) -> set[str]:
+        return {f"{name}.{format}" for name in (*names, "gom_heatwaves_events") for format in ("nc", "csv")}
+
+    a01_1, a01_50, b01_20 = "A01_heatwaves_001m", "A01_heatwaves_050m", "B01_heatwaves_020m"
+    # Nothing new, but no files yet: every one is written.
+    assert round_of() == files(a01_1, a01_50, b01_20)
+    assert round_of() == set()
+    assert round_of(A01_ocean_050m=june) == files(a01_50)
+    # The satellite is in every file at each of its buoys.
+    assert round_of(**{OISST: june}) == files(a01_1, a01_50, b01_20)
+
+    # A store at A01 1 m that changes the origin of the heatwave at B01.
+    def relabel(session: Session, changed: object) -> None:
+        session.execute(update(Event).where(Event.series_id == b01.id).values(origin="surface"))
+
+    with monkeypatch.context() as patched:
+        patched.setattr(sync, "update_origins", relabel)
+        assert round_of(A01_ocean_001m=june) == files(a01_1, b01_20)
+
+    # The catalog moves a buoy back to where ERDDAP has it.
+    with session_factory() as session:
+        session.get_one(Buoy, "A01").latitude = 42.0
+        session.commit()
+    assert round_of() == files(a01_1, a01_50)
+
+    # A write that fails leaves its files to the next round, new data or not.
+    def fails(*args: object) -> None:
+        raise OSError("No space left on device")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(sync.products, "write", fails)
+        assert round_of(A01_ocean_050m=june + 1) == set()
+    assert round_of() == files(a01_50)
+
+    # A new process writes every file at its first round, as does the round after one that
+    # couldn't tell which files it changed.
+    del sync._unwritten[tmp_path]
+    assert round_of() == files(a01_1, a01_50, b01_20)
+    with monkeypatch.context() as patched:
+        patched.setattr(sync, "_changed_files", fails)
+        with pytest.raises(OSError):
+            round_of(A01_ocean_001m=june + 1)
+    assert round_of() == files(a01_1, a01_50, b01_20)
 
 
 def test_a_failed_write_leaves_the_sync_alone(session_factory, series, tmp_path, caplog):

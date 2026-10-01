@@ -16,8 +16,10 @@ Two products, each as NetCDF and as CSV:
   the columns of /api/events.
 
 Values come from the same reads as the JSON API (heatwaves.queries), so the
-files and the API can't disagree. The sync job rewrites every product after
-each change, replacing each file whole, so a reader never sees half of one.
+files and the API can't disagree; the daily CSV gives them to DECIMALS
+places as the API does, and the NetCDF keeps every digit. The sync job
+rewrites a buoy depth's files when its data change, and the events each
+time, replacing each file whole, so a reader never sees half of one.
 """
 
 import argparse
@@ -26,7 +28,8 @@ import logging
 import os
 import sys
 import tempfile
-from collections.abc import Callable, Hashable
+from collections import defaultdict
+from collections.abc import Callable, Collection, Hashable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -547,9 +550,16 @@ def _iso(time: pd.Timestamp) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Places the daily CSV gives each value to, as the JSON API does (api.DECIMALS).
+DECIMALS = 3
+
+
 def daily_csv(table: pd.DataFrame) -> pd.DataFrame:
-    """A daily table as its CSV has it: flags as integers, the origin as a word, blanks for missing."""
-    out = table.copy()
+    """A daily table as its CSV has it: values to DECIMALS places, flags as integers, the origin as a word.
+
+    Missing values are blank.
+    """
+    out = table.round(DECIMALS)
     for name in BYTE_VARIABLES & set(out.columns) - {"heatwave_origin"}:
         out[name] = out[name].astype("Int64")
     out["heatwave_origin"] = out["heatwave_origin"].map(
@@ -691,25 +701,57 @@ def _encoding(ds: xr.Dataset) -> dict[Hashable, dict]:
     return encoding
 
 
-def write(session: Session, directory: Path) -> None:
-    """Write every product to `directory`, replacing each file whole."""
+def extras(session: Session) -> dict[tuple[str, int], tuple]:
+    """What each daily file shows that a sync can change without storing its own series, by buoy and depth.
+
+    Its buoy's name and position, which the catalog can move, and its
+    heatwaves' origins, which judging the heatwaves at other buoys and
+    depths again can change.
+    """
+    buoys = {
+        row.id: tuple(row)
+        for row in session.execute(select(Buoy.id, Buoy.name, Buoy.latitude, Buoy.longitude))
+    }
+    origins: dict[tuple[str, int], list[tuple[dt.date, str | None]]] = defaultdict(list)
+    for buoy_id, depth, start, label in session.execute(
+        select(Series.buoy_id, Series.depth, Event.start_date, Event.origin)
+        .join(Series)
+        .where(queries.AT_BUOY)
+        .order_by(Event.start_date)
+    ):
+        origins[buoy_id, depth].append((start, label))
+    return {
+        (buoy_id, depth): (buoys.get(buoy_id), tuple(origins[buoy_id, depth]))
+        for buoy_id, depth in session.execute(select(Series.buoy_id, Series.depth).where(queries.AT_BUOY))
+    }
+
+
+def write(session: Session, directory: Path, depths: Collection[tuple[str, int]] | None = None) -> None:
+    """Write the products to `directory`, replacing each file whole.
+
+    Every daily file, or those of `depths`, by buoy and depth, and any
+    missing; the events each time.
+    """
     (directory / DAILY).mkdir(parents=True, exist_ok=True)
     satellites = {
         each.buoy_id: each for each in session.scalars(select(Series).where(Series.source == "satellite"))
     }
-    depths = session.execute(
+    every = session.execute(
         select(Series.buoy_id, Series.depth)
         .where(Series.source == "buoy", Series.variable == "temperature")
         .order_by(Series.buoy_id, Series.depth)
     ).all()
-    for buoy_id, depth in depths:
+    for buoy_id, depth in every:
+        nc, csv = (daily_path(directory, buoy_id, depth, format) for format in FORMATS)
+        if depths is not None and (buoy_id, depth) not in depths and nc.exists() and csv.exists():
+            continue
         buoy = session.get_one(Buoy, buoy_id)
         table = daily_table(session, buoy, depth)
         if table is None:
             continue
         ds = daily_dataset(table, buoy, depth, satellites.get(buoy_id))
-        _replace(daily_path(directory, buoy_id, depth, "nc"), partial(_write_netcdf, ds))
-        _replace(daily_path(directory, buoy_id, depth, "csv"), daily_csv(table).to_csv)
+        _replace(nc, partial(_write_netcdf, ds))
+        _replace(csv, daily_csv(table).to_csv)
 
     events = events_table(session)
     if not events.empty:
