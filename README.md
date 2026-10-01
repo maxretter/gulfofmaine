@@ -250,6 +250,19 @@ and `gom_heatwaves_events` (see [`erddap/`](erddap)):
 docker compose --profile erddap up -d --build
 ```
 
+The database isn't backed up, since everything in it comes from NERACOOS and
+CoastWatch: if the `db` volume is lost, the sync job's next full round
+rebuilds it, as on a first start, in a few minutes (as long as NERACOOS still
+serves every dataset, the retired buoys' included). A new major version of
+Postgres goes the same way. Change the `db` image's tag and run
+`docker compose up -d`: the new version starts an empty cluster in a
+directory of its own in the volume (`/var/lib/postgresql/19/docker`, beside
+the untouched `18/docker`), and `migrate` creates the tables. Then
+`docker compose restart sync`, so the rebuild starts at once rather than at
+the job's next hourly full round; the site fills in as it goes. Once it's
+done, `docker compose exec db rm -rf /var/lib/postgresql/18` frees the old
+version's space.
+
 For development, run the backend with [uv](https://docs.astral.sh/uv/) and
 SQLite, and the frontend with Vite, which forwards API requests to uvicorn:
 
