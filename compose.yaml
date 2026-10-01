@@ -9,6 +9,10 @@ x-backend: &backend
   build: .
   image: gom-heatwaves
   restart: unless-stopped
+  # As PID 1, Python ignores SIGTERM, so the sync job took Docker's 10 s and a
+  # SIGKILL to stop. Docker's init passes the signal on. The job can stop
+  # anywhere: it stores each series in one transaction and replaces each file whole.
+  init: true
   environment:
     DATABASE_URL: postgresql+psycopg://heatwaves:${POSTGRES_PASSWORD:?set it in .env}@db/heatwaves
   # The NetCDF and CSV products: written by the sync job, served by the API and ERDDAP.
