@@ -164,6 +164,24 @@ def judge(record: Record, buoy: str, depth: int, onset: dt.date) -> Evidence:
     )
 
 
+def inputs(buoy: str, depth: int) -> set[tuple[str, int]]:
+    """The buoys and depths whose records `judge` reads for a heatwave at this buoy and depth."""
+    return {
+        (buoy, depth),
+        (buoy, SURFACE),
+        *((DEEP_BUOY, below) for below in DEEP_DEPTHS),
+        *((other, depth) for other in (*OFFSHORE_BUOYS, *WESTERN_BUOYS)),
+    }
+
+
+def window(onset: dt.date) -> tuple[dt.date, dt.date]:
+    """The first and last days of those records that `judge` reads for a heatwave starting on `onset`.
+
+    The day before LOOKBACK too: whether a heatwave day is an onset depends on it.
+    """
+    return onset - dt.timedelta(days=LOOKBACK + 1), onset + dt.timedelta(days=AFTER)
+
+
 def signals(record: Record, buoy: str, depth: int, onset: dt.date) -> pd.DataFrame:
     """Each signal day by day over an event's evidence window, for charts.
 

@@ -19,7 +19,7 @@ from sqlalchemy import delete, event, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import live, sync
+from heatwaves import hobday, live, origin, queries, sync
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap, format_time, parse_time
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
@@ -454,10 +454,10 @@ def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_fac
         recent = seasonal_temperatures((today - dt.timedelta(days=30)).isoformat(), today)
         series = add_series(session, recent)
 
-        before, after = sync.update_heatwaves(session, series)
+        updated = sync.update_heatwaves(session, series)
         session.commit()
 
-        assert (before.state, after.state) == ("no_data", "no_normal")
+        assert (updated.before.state, updated.after.state) == ("no_data", "no_normal")
         assert (series.latest_date, series.latest_value) == (today, pytest.approx(recent.iloc[-1]))
         assert (series.latest_climatology, series.latest_threshold, series.days_above) == (None, None, 0)
     requests: list[str] = []
@@ -483,6 +483,193 @@ def test_a_series_that_loses_its_normal_loses_its_heatwaves(session):
     assert session.scalars(select(Event)).all() == []
     assert session.scalars(select(ClimatologyDay)).all() == []
     assert (series.latest_date, series.latest_climatology) == (dt.date(2026, 9, 27), None)
+
+
+def download(series: Series, values: pd.Series) -> Download:
+    """What a source would return for one series: these daily values."""
+    days = pd.DatetimeIndex(values.index, name="date")
+    return Download(
+        first_day=days[0].date(),
+        last_day=days[-1].date(),
+        daily={series.id: pd.DataFrame({"value": values.to_numpy(), "hours": 24}, index=days)},
+        modified_through=dt.datetime(2026, 9, 28, tzinfo=dt.UTC),
+    )
+
+
+def derived(session: Session) -> list[tuple]:
+    """Everything update_heatwaves and update_origins derive from the daily means, but database IDs."""
+    queries = [
+        select(
+            ClimatologyDay.series_id,
+            ClimatologyDay.day_of_year,
+            ClimatologyDay.mean,
+            ClimatologyDay.threshold,
+        ),
+        select(
+            Event.series_id,
+            Event.start_date,
+            Event.end_date,
+            Event.peak_date,
+            Event.max_intensity,
+            Event.mean_intensity,
+            Event.category,
+            Event.origin,
+            Event.evidence,
+        ),
+        select(
+            Series.id,
+            Series.latest_date,
+            Series.latest_value,
+            Series.latest_climatology,
+            Series.latest_threshold,
+            Series.days_above,
+        ),
+    ]
+    return [
+        tuple(row)
+        for query in queries
+        for row in session.execute(query.order_by(*query.selected_columns[:2]))
+    ]
+
+
+def test_a_normal_is_computed_again_only_when_a_day_it_comes_from_changes(monkeypatch, session):
+    temperatures = seasonal_temperatures("2002-12-01", "2023-06-30")
+    temperatures.iloc[-10:] += 2.5
+    # A gap at the baseline's start, which interpolation fills from 2002-12-30 and 2003-01-02.
+    temperatures = temperatures.drop(pd.date_range("2002-12-31", "2003-01-01"))
+    series = add_series(session, temperatures)
+    sync.update_heatwaves(session, series)
+    computed: list[pd.Series] = []
+    climatology = hobday.climatology
+    monkeypatch.setattr(
+        sync.hobday, "climatology", lambda daily, *args: computed.append(daily) or climatology(daily, *args)
+    )
+
+    def recomputed() -> list:
+        sync.update_heatwaves(session, series)
+        return derived(session)
+
+    # A day too early to fill the gap: the stored normal stands, as it would be computed anew.
+    earlier = pd.Timestamp(sync.NORMAL_DAYS[0] - dt.timedelta(days=1))
+    sync.store(session, [series], download(series, temperatures[earlier:earlier] + 3))
+    assert computed == []
+    assert derived(session) == recomputed()
+
+    # The day that fills it: the normal changes.
+    before = derived(session)
+    computed.clear()
+    first = pd.Timestamp(sync.NORMAL_DAYS[0])
+    sync.store(session, [series], download(series, temperatures[first:first] + 3))
+    assert len(computed) == 1
+    after = derived(session)
+    assert after != before
+    assert after == recomputed()
+
+    # After the baseline, as on every hour.
+    computed.clear()
+    sync.store(session, [series], download(series, temperatures["2023-06-25":] + 0.5))
+    assert computed == []
+    assert derived(session) == recomputed()
+
+
+def test_a_store_judges_again_only_the_origins_its_days_bear_on(monkeypatch, session):
+    # As in tests/test_api_origin.py, but in 2025, after the baseline: at A01 50 m a heatwave
+    # from Apr 14 that every signal says is offshore, at M01 50 m one from Feb 13, and at M01
+    # 100 m one from Mar 20.
+    calm = slice("2025-01-01", "2025-05-31")  # noise-free, so each heatwave's edges are exact
+    days = pd.date_range("2003-01-01", "2025-06-30")
+
+    def warmed(offset: float, seed: int, heatwave: slice | None = None) -> pd.Series:
+        values = seasonal_temperatures("2003-01-01", "2025-06-30", seed=seed) + offset
+        values[calm] = seasonal_temperatures("2003-01-01", "2025-06-30", noise=0)[calm] + offset
+        if heatwave is not None:
+            values[heatwave] += 2.5
+        return values
+
+    salinity = pd.Series(32 + np.random.default_rng(9).normal(0, 0.1, len(days)), index=days)
+    salinity[calm] = 32.3
+    region = {
+        ("A01", 50, "temperature"): warmed(0, 0, slice("2025-04-14", "2025-04-28")),
+        ("A01", 1, "temperature"): warmed(6, 1),
+        ("M01", 50, "temperature"): warmed(0, 2, slice("2025-02-13", "2025-02-22")),
+        ("M01", 100, "temperature"): warmed(-3, 3, slice("2025-03-20", "2025-04-05")),
+        ("A01", 50, "salinity"): salinity,
+    }
+    series = {key: add_series(session, values, *key) for key, values in region.items()}
+    for each in series.values():
+        sync.update_heatwaves(session, each)
+    sync.update_origins(session)
+    onset = dt.date(2025, 4, 14)
+    april = session.scalars(select(Event).where(Event.series_id == series["A01", 50, "temperature"].id)).one()
+    judged: list[tuple[str, int, dt.date]] = []
+    judge = sync.origin.judge
+    monkeypatch.setattr(
+        sync.origin, "judge", lambda record, *event: judged.append(event) or judge(record, *event)
+    )
+
+    def store(key: tuple[str, int, str], days: slice, change: float) -> list[tuple[str, int, dt.date]]:
+        """The heatwaves whose origin storing these days of a series, changed by `change`, judges again."""
+        judged.clear()
+        sync.store(session, [series[key]], download(series[key], region[key][days] + change))
+        return list(judged)
+
+    def judged_afresh() -> bool:
+        """Whether every stored origin is as judging it from the whole record finds it."""
+        record = queries.origin_record(session)
+        events = session.execute(
+            select(Event.origin, Event.evidence, Event.start_date, Series.buoy_id, Series.depth)
+            .join(Series)
+            .where(Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
+        ).all()
+        return all(
+            event.evidence == judge(record, event.buoy_id, event.depth, event.start_date).to_json()
+            and event.origin == event.evidence["origin"]
+            for event in events
+        )
+
+    assert judged_afresh()
+    evidence = [april.evidence]
+    for key, days, change in [
+        (("A01", 1, "temperature"), slice("2025-03-20", "2025-04-10"), -3.0),  # stratification
+        (("M01", 100, "temperature"), slice("2025-03-20", "2025-04-05"), -2.5),  # no heatwave at depth
+        (("A01", 50, "salinity"), slice("2025-04-01", "2025-04-20"), -0.3),  # fresher
+    ]:
+        assert store(key, days, change) == [("A01", 50, onset)]
+        session.refresh(april)
+        assert april.evidence not in evidence
+        evidence.append(april.evidence)
+        assert judged_afresh()
+
+    # A new heatwave at A01 50 m gets its origin, though its window runs past the record's
+    # end; the April one, unchanged, keeps its row.
+    june = ("A01", 50, dt.date(2025, 6, 20))
+    assert store(("A01", 50, "temperature"), slice("2025-06-20", None), 2.5) == [june]
+    assert judged_afresh()
+    assert session.get_one(Event, april.id).evidence == evidence[-1]
+
+    # The first day the April heatwave's origin reads, and the day before.
+    first = pd.Timestamp(origin.window(onset)[0])
+    assert store(("A01", 1, "temperature"), slice(first, first), 0.1) == [("A01", 50, onset)]
+    before = first - pd.Timedelta(days=1)
+    assert store(("A01", 1, "temperature"), slice(before, before), 0.1) == []
+    assert judged_afresh()
+
+
+def test_a_window_of_the_origin_record_holds_the_days_the_whole_record_does(session):
+    # So a mean over a window adds the same values in the same order: none of the days past
+    # where a series' data begin or end, which pairwise summation would group differently.
+    for depth, start, end in ((50, "2003-01-01", "2025-06-30"), (1, "2005-01-01", "2025-06-20")):
+        sync.update_heatwaves(session, add_series(session, seasonal_temperatures(start, end), "A01", depth))
+    whole = queries.origin_record(session)
+
+    for first, last in [
+        (dt.date(2025, 6, 1), dt.date(2025, 7, 15)),
+        (dt.date(2004, 12, 1), dt.date(2005, 2, 1)),
+    ]:
+        part = queries.origin_record(session, first, last)
+        assert part.temperature.keys() == whole.temperature.keys()
+        for key, frame in whole.temperature.items():
+            assert part.temperature[key].equals(frame.loc[pd.Timestamp(first) : pd.Timestamp(last)]), key
 
 
 def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_factory, session):

@@ -1,3 +1,4 @@
+import dataclasses
 import datetime as dt
 
 import pandas as pd
@@ -225,6 +226,47 @@ def test_recent_onsets_at_every_buoy_oldest_first():
     onsets = origin.recent_onsets(record(onsets={"M01": -60, "B01": -95, "E01": -30}), 50, ONSET)
 
     assert onsets == [("M01", day(-60)), ("E01", day(-30)), ("A01", day(0))]  # B01's is too long before
+
+
+def test_a_judgment_reads_only_its_inputs_over_its_window():
+    full = record()
+    first, last = (pd.Timestamp(day) for day in origin.window(ONSET))
+
+    def outside(frame: pd.DataFrame) -> pd.DataFrame:
+        """The frame with every value outside the window changed."""
+        changed = frame.copy()
+        changed.loc[(changed.index < first) | (changed.index > last), ["value", "anomaly"]] += 5.0
+        return changed
+
+    changed = origin.Record(
+        temperature={key: outside(frame) for key, frame in full.temperature.items()}
+        | {("E01", 50): daily(20.0)},
+        salinity={key: outside(frame) for key, frame in full.salinity.items()} | {("A01", 1): daily(35.0)},
+        heatwave_days={
+            **full.heatwave_days,
+            ("E01", 50): heatwave(-10, -5),  # not a buoy whose onsets count
+            ("M01", 50): pd.concat([heatwave(-100, -95), full.heatwave_days["M01", 50]]),
+            ("A01", 1): heatwave(origin.AFTER + 1, origin.AFTER + 10),
+        },
+    )
+
+    assert origin.judge(changed, "A01", 50, ONSET) == origin.judge(full, "A01", 50, ONSET)
+
+
+def test_the_window_takes_in_the_day_before_the_lookback():
+    # A heatwave at M01 on the lookback's first day began then, unless it was one the day before too.
+    assert origin.window(ONSET) == (day(-origin.LOOKBACK - 1), day(origin.AFTER))
+    begins = record(onsets={"M01": -origin.LOOKBACK})
+    earlier = dataclasses.replace(
+        begins,
+        heatwave_days={
+            **begins.heatwave_days,
+            ("M01", 50): heatwave(-origin.LOOKBACK - 1, -origin.LOOKBACK + 6),
+        },
+    )
+
+    assert origin.judge(begins, "A01", 50, ONSET).offshore_onset == day(-origin.LOOKBACK)
+    assert origin.judge(earlier, "A01", 50, ONSET).offshore_onset is None
 
 
 def test_evidence_serializes_dates_for_json():

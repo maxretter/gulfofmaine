@@ -11,9 +11,11 @@ Each fetch covers every series in one dataset: all the variables of a
 buoy's dataset, or every buoy's cell of the satellite grid. heatwaves.sources
 says how each source finds what changed. Storing is the same for all of
 them: the fetched days replace the stored ones, then each series' heatwaves
-are recomputed from its full record. What changed goes out on the live feed
-(heatwaves.live) when the transaction commits, and after a round that stored
-anything the NetCDF and CSV products (heatwaves.products) are rewritten.
+are recomputed from its full record, and each heatwave whose origin rests
+on the changed days is judged again. What changed goes out on the live
+feed (heatwaves.live) when the transaction commits, and after a round that
+stored anything the NetCDF and CSV products (heatwaves.products) are
+rewritten.
 """
 
 import argparse
@@ -21,13 +23,15 @@ import datetime as dt
 import logging
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import httpx
 import pandas as pd
-from sqlalchemy import delete, func, insert, select, update
+import xarray as xr
+from sqlalchemy import Row, delete, func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from heatwaves import hobday, live, origin, products, queries, state
@@ -47,6 +51,16 @@ Outcome = Literal["updated", "unchanged", "failed"]
 SYNC_LOCK = 0x68656174
 # How often, kept running, a round checks every series rather than only the buoys still reporting.
 FULL_ROUND = dt.timedelta(hours=1)
+
+# The days a series' normal is computed from: the baseline years, and the days
+# either side whose values can fill a short gap at its ends (hobday.climatology).
+NORMAL_DAYS = (
+    dt.date(BASELINE[0], 1, 1) - dt.timedelta(days=hobday.MAX_PAD),
+    dt.date(BASELINE[1], 12, 31) + dt.timedelta(days=hobday.MAX_PAD),
+)
+
+# Days of the record that changed at a buoy and depth, in any variable: (buoy, depth, first, last).
+Change = tuple[str, int, dt.date, dt.date]
 
 
 def ensure_catalog(session: Session, erddap: Erddap) -> bool:
@@ -119,9 +133,9 @@ def sync_series(session: Session, sources: Mapping[str, Source], series: Series)
 def one_sync_at_a_time(session: Session) -> None:
     """Wait until no other process is syncing, then keep it that way until this transaction ends.
 
-    A one-off run (after a deploy, say) can overlap the scheduled job, and
-    every sync rewrites every heatwave's origin. On Postgres only; SQLite
-    allows one writer anyway.
+    A one-off run (after a deploy, say) can overlap the scheduled job, and a
+    sync rewrites the origins of heatwaves at other buoys too. On Postgres
+    only; SQLite allows one writer anyway.
     """
     if session.get_bind().dialect.name == "postgresql":
         session.execute(select(func.pg_advisory_xact_lock(SYNC_LOCK)))
@@ -130,12 +144,15 @@ def one_sync_at_a_time(session: Session) -> None:
 def store(session: Session, series: Sequence[Series], download: Download) -> list[live.Message]:
     """Replace each series' daily means over the downloaded span, then recompute its heatwaves.
 
-    Every heatwave's origin is then judged again, since the evidence for one
-    comes from other series too. Returns the live feed's messages: each newer
-    temperature reading, and each temperature series whose state changed or
-    whose heatwave in progress grew or changed.
+    Each heatwave whose origin rests on the changed days, at any buoy since
+    the evidence for one comes from other series too, is then judged again.
+    Returns the live feed's messages: each newer temperature reading, and
+    each temperature series whose state changed or whose heatwave in
+    progress grew or changed.
     """
     messages: list[live.Message] = []
+    changed: list[Change] = []
+    new_normal = download.first_day <= NORMAL_DAYS[1] and download.last_day >= NORMAL_DAYS[0]
     for each in series:
         daily = download.daily[each.id]
         session.execute(
@@ -171,9 +188,13 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             # Only a newer reading goes out on the live feed, which pages take as the latest.
             if newer and each.variable == "temperature":
                 messages.append(live.reading_message(each))
-        before, after = update_heatwaves(session, each)
-        if each.variable == "temperature" and after != before:
-            messages.append(live.status_message(each, before, after))
+        updated = update_heatwaves(session, each, new_normal)
+        if each.variable == "temperature" and updated.after != updated.before:
+            messages.append(live.status_message(each, updated.before, updated.after))
+        changed += [
+            (each.buoy_id, each.depth, first, last)
+            for first, last in [(download.first_day, download.last_day), *updated.changed]
+        ]
         log.info(
             "%s: re-read %s to %s (%d days)",
             each.label,
@@ -181,17 +202,30 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             download.last_day,
             len(daily),
         )
-    update_origins(session)
+    update_origins(session, changed)
     return messages
 
 
-def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, SeriesState]:
-    """Recompute a series' climatology, events and latest status from its daily means.
+@dataclass(frozen=True)
+class Updated:
+    """What update_heatwaves did to a series."""
+
+    before: SeriesState  # its state today
+    after: SeriesState
+    # Spans of days, first to last, whose anomalies or heatwave days it may have changed: every
+    # day when it computed the normal, else those of each heatwave it added or removed.
+    changed: list[tuple[dt.date, dt.date]]
+
+
+def update_heatwaves(session: Session, series: Series, new_normal: bool = True) -> Updated:
+    """Recompute a series' events and latest status from its daily means, and its climatology.
 
     Every variable gets a climatology, as its normal; only temperature gets
-    events. A series with too little data in the baseline for a normal has
-    neither, but still gets its newest day and value. Returns the series'
-    state today, before and after.
+    events. Without `new_normal`, the stored climatology stands: the same
+    as one computed anew while none of NORMAL_DAYS has changed. A series
+    with too little data in the baseline for a normal has neither, but still
+    gets its newest day and value. Heatwaves found again as they were keep
+    their rows, and with them their origin.
     """
     today = dt.datetime.now(dt.UTC).date()
     before = state.current(session, series, today)
@@ -201,43 +235,105 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
         .order_by(DailyMean.date)
     ).all()
     if not rows:
-        return before, before
+        return Updated(before, before, [])
     daily = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
 
-    try:
-        analysis = hobday.analyze(daily, BASELINE)
-    except hobday.InsufficientData as error:
-        log.warning("%s: can't compute heatwaves: %s", series.label, error)
-        analysis = None
+    normal = None if new_normal else _stored_normal(session, series)
+    changed: list[tuple[dt.date, dt.date]] = []
+    if normal is None:
+        changed.append((rows[0].date, rows[-1].date))
+        session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
+        try:
+            normal = hobday.climatology(daily, BASELINE)
+        except hobday.InsufficientData as error:
+            log.warning("%s: can't compute heatwaves: %s", series.label, error)
+        else:
+            session.execute(
+                insert(ClimatologyDay),
+                [
+                    {
+                        "series_id": series.id,
+                        "day_of_year": int(day),
+                        "mean": float(mean),
+                        "threshold": float(threshold),
+                    }
+                    for day, mean, threshold in zip(
+                        normal["day_of_year"].values,
+                        normal["mean"].values,
+                        normal["threshold"].values,
+                        strict=True,
+                    )
+                ],
+            )
 
-    session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
-    session.execute(delete(Event).where(Event.series_id == series.id))
-    if analysis is None:
+    frame = hobday.align(daily, normal) if normal is not None else None
+    events = hobday.detect_events(frame) if frame is not None and series.variable == "temperature" else []
+    changed += _replace_events(session, series, events)
+    if frame is None:
         # The newest day still says whether the series is reporting, which
         # decides whether the quick rounds between full ones check it.
         series.latest_date, series.latest_value = rows[-1].date, rows[-1].value
         series.latest_climatology = series.latest_threshold = None
         series.days_above = 0
-        return before, state.current(session, series, today)
+        return Updated(before, state.current(session, series, today), changed)
 
-    session.execute(
-        insert(ClimatologyDay),
-        [
-            {
-                "series_id": series.id,
-                "day_of_year": int(day),
-                "mean": float(mean),
-                "threshold": float(threshold),
-            }
-            for day, mean, threshold in zip(
-                analysis.climatology["day_of_year"].values,
-                analysis.climatology["mean"].values,
-                analysis.climatology["threshold"].values,
-                strict=True,
-            )
-        ],
+    status = hobday.latest_status(frame)
+    series.latest_date = status.date
+    series.latest_value = status.temperature
+    series.latest_climatology = status.climatology
+    series.latest_threshold = status.threshold
+    series.days_above = status.days_above
+    return Updated(before, state.current(session, series, today), changed)
+
+
+def _stored_normal(session: Session, series: Series) -> xr.Dataset | None:
+    """A series' stored climatology, as hobday.climatology returns it; None if it has none."""
+    rows = session.execute(
+        select(ClimatologyDay.day_of_year, ClimatologyDay.mean, ClimatologyDay.threshold)
+        .where(ClimatologyDay.series_id == series.id)
+        .order_by(ClimatologyDay.day_of_year)
+    ).all()
+    if not rows:
+        return None
+    return xr.Dataset(
+        {
+            "mean": ("day_of_year", [row.mean for row in rows]),
+            "threshold": ("day_of_year", [row.threshold for row in rows]),
+        },
+        coords={"day_of_year": [row.day_of_year for row in rows]},
     )
-    if analysis.events and series.variable == "temperature":
+
+
+def _replace_events(
+    session: Session, series: Series, events: Sequence[hobday.Event]
+) -> list[tuple[dt.date, dt.date]]:
+    """Store a series' heatwaves in place of its old ones. Returns the span of each one added or removed.
+
+    One found again with the same dates, intensities and category keeps its row.
+    """
+    stored = {
+        tuple(row[1:]): row.id
+        for row in session.execute(
+            select(
+                Event.id,
+                Event.start_date,
+                Event.end_date,
+                Event.peak_date,
+                Event.max_intensity,
+                Event.mean_intensity,
+                Event.category,
+            ).where(Event.series_id == series.id)
+        )
+    }
+    found = {
+        (event.start, event.end, event.peak, event.max_intensity, event.mean_intensity, event.category): event
+        for event in events
+    }
+    gone = [key for key in stored if key not in found]
+    new = [event for key, event in found.items() if key not in stored]
+    if gone:
+        session.execute(delete(Event).where(Event.id.in_([stored[key] for key in gone])))
+    if new:
         session.execute(
             insert(Event),
             [
@@ -250,37 +346,50 @@ def update_heatwaves(session: Session, series: Series) -> tuple[SeriesState, Ser
                     "mean_intensity": event.mean_intensity,
                     "category": event.category,
                 }
-                for event in analysis.events
+                for event in new
             ],
         )
-    status = analysis.status
-    series.latest_date = status.date
-    series.latest_value = status.temperature
-    series.latest_climatology = status.climatology
-    series.latest_threshold = status.threshold
-    series.days_above = status.days_above
-    return before, state.current(session, series, today)
+    return [(start, end) for start, end, *_ in gone] + [(event.start, event.end) for event in new]
 
 
-def update_origins(session: Session) -> None:
-    """Label every heatwave at the depths heatwaves.origin covers with where its heat likely came from."""
-    record = queries.origin_record(session)
+def update_origins(session: Session, changed: Collection[Change] | None = None) -> None:
+    """Label heatwaves at the depths heatwaves.origin covers with where their heat likely came from.
+
+    Every one, or with `changed`, those not labeled yet and those whose
+    evidence a changed span of the record falls in.
+    """
     events = session.execute(
-        select(Event.id, Event.start_date, Series.buoy_id, Series.depth)
+        select(Event.id, Event.start_date, Event.origin, Series.buoy_id, Series.depth)
         .join(Series)
         .where(Series.source == "buoy", Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
     ).all()
+    if changed is not None:
+        events = [event for event in events if event.origin is None or _rests_on(event, changed)]
+    if not events:
+        return
+    windows = [origin.window(event.start_date) for event in events]
+    record = queries.origin_record(
+        session, min(first for first, _ in windows), max(last for _, last in windows)
+    )
     judged = [
         (event.id, origin.judge(record, event.buoy_id, event.depth, event.start_date)) for event in events
     ]
-    if judged:
-        session.execute(
-            update(Event),
-            [
-                {"id": event_id, "origin": evidence.origin, "evidence": evidence.to_json()}
-                for event_id, evidence in judged
-            ],
-        )
+    session.execute(
+        update(Event),
+        [
+            {"id": event_id, "origin": evidence.origin, "evidence": evidence.to_json()}
+            for event_id, evidence in judged
+        ],
+    )
+
+
+def _rests_on(event: Row, changed: Collection[Change]) -> bool:
+    """Whether a changed span of the record is among what judging a heatwave reads."""
+    inputs = origin.inputs(event.buoy_id, event.depth)
+    first, last = origin.window(event.start_date)
+    return any(
+        (buoy, depth) in inputs and start <= last and end >= first for buoy, depth, start, end in changed
+    )
 
 
 def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], series_id: int) -> Outcome:

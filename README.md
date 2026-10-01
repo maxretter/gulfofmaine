@@ -126,7 +126,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   written for this project, not a published or tested method. They are pure
   functions, unit-tested on synthetic series, and their thresholds are served
   at `/api/origin/rules` so the About page can't drift from the code. Labels
-  and their evidence are stored on each event and recomputed with it.
+  and their evidence are stored on each event, and judged again whenever the
+  days they rest on change, at any of the buoys and depths they read.
 - **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
   After a sync round that stores new data, the job rewrites one NetCDF file
   per buoy and depth (the daily temperature, normal, threshold, anomaly and
@@ -346,7 +347,9 @@ pings. Of browsers, it serves only pages whose `Origin` matches the request's
 `Host`, so a proxy in front has to pass `Host` on unchanged, as Caddy and
 Vite do, or the origins listed in `LIVE_ORIGINS` (comma-separated). After
 changing the method, run `python -m heatwaves.sync --recompute` to rebuild
-every series from stored data and its files; `python -m heatwaves.products`
+every series from stored data and its files, since a sync computes a normal
+again only when data in its baseline years change, and judges an origin
+again only when the days it rests on do; `python -m heatwaves.products`
 rewrites just the files.
 
 ## Layout

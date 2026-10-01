@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from heatwaves import origin
@@ -122,15 +122,35 @@ def observed_days(session: Session, series_ids: Collection[int]) -> dict[int, pd
     return {series_id: pd.DatetimeIndex(sorted(days[series_id]), name="date") for series_id in series_ids}
 
 
+def extents(session: Session, series_ids: Collection[int]) -> dict[int, tuple[dt.date, dt.date]]:
+    """Each series' first and last days with data. Series without any are left out.
+
+    Two lookups per series on daily_mean's key, rather than a scan of the table.
+    """
+    first = select(func.min(DailyMean.date)).where(DailyMean.series_id == Series.id).scalar_subquery()
+    last = select(func.max(DailyMean.date)).where(DailyMean.series_id == Series.id).scalar_subquery()
+    return {
+        series_id: (first_day, last_day)
+        for series_id, first_day, last_day in session.execute(
+            select(Series.id, first, last).where(Series.id.in_(series_ids))
+        )
+        if first_day is not None
+    }
+
+
 def origin_record(
     session: Session, start: dt.date | None = None, end: dt.date | None = None
 ) -> origin.Record:
     """Every buoy series the origins of heatwaves are judged from, from `start` to `end`.
 
-    The whole record by default. Heatwave days are always complete.
+    The whole record by default. Either way each series' frame begins and ends
+    where its data do, so a window within `start` to `end` holds the same days
+    as in the whole record, and a mean over it comes to the same bits.
+    Heatwave days are always complete.
     """
     series = session.scalars(select(Series).where(Series.source == "buoy")).all()
-    frames = {each.id: daily(session, each.id, start, end) for each in series}
+    spans = extents(session, [each.id for each in series])
+    frames = {each.id: _within(daily(session, each.id, start, end), spans.get(each.id)) for each in series}
     temperatures = [each for each in series if each.variable == "temperature"]
     days = heatwave_days(session, [each.id for each in temperatures])
     return origin.Record(
@@ -146,6 +166,15 @@ def origin_record(
         },
         heatwave_days={(each.buoy_id, each.depth): days[each.id] for each in temperatures},
     )
+
+
+def _within(frame: pd.DataFrame | None, span: tuple[dt.date, dt.date] | None) -> pd.DataFrame | None:
+    """The days of a frame from `daily` between a series' first and last days with data, if any."""
+    if frame is None:
+        return None
+    if span is None:
+        return frame.iloc[:0]
+    return frame.loc[pd.Timestamp(span[0]) : pd.Timestamp(span[1])]
 
 
 _NO_DAYS = pd.Series([], index=pd.DatetimeIndex([], name="date"), dtype=int)
