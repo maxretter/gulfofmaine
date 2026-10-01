@@ -74,8 +74,8 @@ THRESHOLD = (
     f"{hobday.MIN_DURATION} days above it (Hobday et al. 2016)."
 )
 DAILY_MEAN = (
-    "The mean of hourly means of the readings that neither UMaine's flag nor the QARTOD aggregate "
-    f"flag marks bad; days with fewer than {qc.MIN_HOURS} hours of data are missing."
+    "The mean of hourly means of the readings that UMaine's flag marks good and the QARTOD aggregate "
+    f"flag doesn't mark suspect or fail; days with fewer than {qc.MIN_HOURS} hours of data are missing."
 )
 CATEGORY = (
     "The category of the heatwave the day belongs to, from its peak (Hobday et al. 2018), on every "

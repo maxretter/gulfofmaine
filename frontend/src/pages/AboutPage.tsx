@@ -56,7 +56,8 @@ export function AboutPage() {
         Temperature and salinity come from the University of Maine buoys A01, B01, E01, F01, I01, M01 and N01, at 1, 20
         and 50 m and at M01 also 100–250 m, through the{" "}
         <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a>, checked about every 10 minutes. A reading
-        is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed.
+        is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed; in
+        September 2026 the QARTOD flag marked no reading suspect, and failed only readings UMaine's flag already marks.
         Readings are averaged by hour, then by day, and a day needs 18 hours with data. M01 has sent no data since
         September 2025 and N01 since October 2021; their records are kept.
       </p>

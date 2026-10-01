@@ -2,8 +2,9 @@
 
 Every variable in the UMaine datasets on NERACOOS ERDDAP carries two flags:
 UMaine's own ({variable}_qc) and the QARTOD aggregate ({variable}_qc_agg).
-Readings either flag marks as bad are dropped before averaging, so the same
-functions serve temperature, salinity or any other variable.
+Readings that UMaine's flag doesn't mark good, or that the QARTOD flag marks
+suspect or fail, are dropped before averaging, so the same functions serve
+temperature, salinity or any other variable.
 """
 
 from collections.abc import Iterable
@@ -14,7 +15,12 @@ import xarray as xr
 MIN_HOURS = 18  # hourly bins a day needs for its mean to count
 
 # UMaine's flag uses 0 for quality_good. The QARTOD aggregate flag uses
-# 3 for suspect and 4 for fail.
+# 3 for suspect and 4 for fail. Asked for the distinct combinations of the
+# flags in every dataset (2026-09-30), ERDDAP had no reading marked suspect:
+# the aggregate is 1 (pass) wherever UMaine's flag is 0, and 4 (fail) or 2
+# (not evaluated) wherever it isn't, so for now UMaine's flag alone decides.
+# On the readings it marks good, the individual tests ({variable}_qc_tests)
+# that ran are gap, syntax, location and gross range; the rest weren't.
 GOOD_UMAINE_FLAG = 0
 BAD_QARTOD_FLAGS = [3, 4]
 
