@@ -1,5 +1,7 @@
 // Shapes returned by the FastAPI backend (heatwaves/api.py). Dates are
 // ISO strings ("2026-09-27"); timestamps are ISO datetimes in UTC.
+// contract.ts holds them to the API's own types (schema.ts): the type check
+// fails if one drifts from what the API sends.
 
 // "no_normal": reporting, but with too little data in the baseline for a normal, so neither in a heatwave nor
 // out of one.
