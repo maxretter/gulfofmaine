@@ -39,6 +39,7 @@ class Download:
     modified_through: dt.datetime  # where the next fetch starts
     # By series ID: the newest good reading, from sources with readings more often than daily.
     latest: dict[int, Reading] = field(default_factory=dict)
+    preliminary_from: dt.date | None = None  # the first day read from a preliminary product
 
 
 class Source(Protocol):
@@ -157,11 +158,13 @@ class GriddapSource:
     size of the box.
 
     Every hour one tiny request asks for the preliminary product's newest
-    day. When there is a new one, the last REREAD days are read again: from
-    the final product as far as it goes, then from the preliminary one. So
-    preliminary days are replaced by final ones as they appear, the same way
-    UMaine's post-recovery data replaces its real-time data. The first fetch
-    reads everything from `start`, a year per request.
+    day. When there is a new one, the last REREAD days are read again, or
+    more if any older day stored is still preliminary (the final product
+    can fall weeks behind): from the final product as far as it goes, then
+    from the preliminary one. So preliminary days are replaced by final ones
+    as they appear, the same way UMaine's post-recovery data replaces its
+    real-time data. The first fetch reads everything from `start`, a year
+    per request.
     """
 
     REREAD = dt.timedelta(days=30)
@@ -198,14 +201,19 @@ class GriddapSource:
             self._place(unplaced, final_through)
 
         first_day = self.start if seen is None else (seen - self.REREAD).date()
+        # Back to the oldest day still preliminary, however far the final product fell behind.
+        preliminary = [s.preliminary_from for s in series if s.preliminary_from is not None]
+        first_day = min([first_day, *preliminary])
         last_day = newest.date()
         spans = [(self.final, first, last) for first, last in years(first_day, min(final_through, last_day))]
+        preliminary_from = None
         if last_day > final_through:
-            spans.append((self.preliminary, max(first_day, final_through + dt.timedelta(days=1)), last_day))
+            preliminary_from = max(first_day, final_through + dt.timedelta(days=1))
+            spans.append((self.preliminary, preliminary_from, last_day))
         grids = [self._box(dataset_id, first, last, series) for dataset_id, first, last in spans]
         grids = [grid[self.variable] for grid in grids if grid is not None]
         daily = {s.id: _cell(grids, s) for s in series}
-        return Download(first_day, last_day, daily, newest)
+        return Download(first_day, last_day, daily, newest, preliminary_from=preliminary_from)
 
     def _box(
         self, dataset_id: str, first: dt.date, last: dt.date, series: Sequence[Series]

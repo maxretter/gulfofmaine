@@ -66,6 +66,9 @@ class Series(Base):
     # Where the next sync starts: the newest ERDDAP time_modified read for a
     # buoy, or the newest day read for a satellite.
     modified_through: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
+    # A satellite's first day stored from the preliminary product, if any:
+    # the next sync reads again from there, so the final product replaces it.
+    preliminary_from: Mapped[dt.date | None]
     synced_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
 
     # Conditions on the most recent day with data.

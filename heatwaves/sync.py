@@ -158,6 +158,7 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
                 ],
             )
         each.modified_through = download.modified_through
+        each.preliminary_from = download.preliminary_from
         reading = download.latest.get(each.id)
         stored_at = each.latest_reading_at
         newer = reading is not None and (stored_at is None or reading.time > stored_at)

@@ -87,10 +87,11 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   with data to each buoy (a buoy's own cell can be empty near the coast). One
   request reads all six cells as a small box, so the first run backfills 2001
   onwards in about 26 yearly requests. After that, one tiny request an
-  hour asks for the newest day; each new day re-reads the past 30 from the
-  final product where it exists and the preliminary one after, so final values
-  replace preliminary ones. Satellite heatwaves use the same method and
-  2003–2022 baseline as the buoys.
+  hour asks for the newest day; each new day re-reads the past 30, or back to
+  the oldest day still preliminary if the final product has fallen further
+  behind, from the final product where it exists and the preliminary one
+  after, so final values replace preliminary ones. Satellite heatwaves use
+  the same method and 2003–2022 baseline as the buoys.
 - **Quality control and daily means** ([`heatwaves/qc.py`](heatwaves/qc.py)).
   Readings flagged bad by UMaine's own flag, or suspect/failed by the QARTOD
   aggregate flag, are dropped. The rest are averaged into hourly bins, then

@@ -157,3 +157,51 @@ def test_a_day_erddap_snaps_to_is_stored_once(session, satellites):
 
     days = sorted(days_of(session, a01))
     assert days == [dt.date(2025, 12, 30), dt.date(2026, 1, 1), dt.date(2026, 1, 2), dt.date(2026, 1, 3)]
+
+
+class TwoProducts(Erddap):
+    """The final product and the preliminary one, each through a day that a test moves along.
+
+    Every cell reads 15 °C in the final product and 10 °C in the preliminary one.
+    """
+
+    def __init__(self, final: dt.date, preliminary: dt.date) -> None:
+        super().__init__(COASTWATCH, httpx.Client())
+        self.through = {OISST: final, OISST_PRELIMINARY: preliminary}
+
+    def last_time(self, dataset_id: str) -> dt.datetime:
+        return dt.datetime.combine(self.through[dataset_id], dt.time(12), dt.UTC)
+
+    def grid(self, dataset_id: str, variable: str, axes: Sequence[Axis]) -> xr.Dataset | None:
+        span = axes[0]
+        assert isinstance(span, tuple)  # a range of days
+        days = pd.date_range(str(span[0])[:10], str(span[1])[:10]) + pd.Timedelta(hours=12)
+        assert days[-1].date() <= self.through[dataset_id]
+        values = np.full((len(days), 1, 1, 1), 15.0 if dataset_id == OISST else 10.0)
+        coords = {"time": days, "zlev": [0.0], "latitude": [42.625], "longitude": [-70.625]}
+        return xr.Dataset({variable: (list(coords), values)}, coords=coords)
+
+
+def test_preliminary_days_are_replaced_however_far_the_final_product_falls_behind(session, satellites):
+    a01 = satellites[0]
+    for series in satellites:
+        series.latitude, series.longitude, series.distance_km = CELLS["A01"]
+    erddap = TwoProducts(final=dt.date(2026, 6, 30), preliminary=dt.date(2026, 7, 14))
+    sources = {"satellite": GriddapSource(erddap, OISST, OISST_PRELIMINARY, start=dt.date(2026, 6, 1))}
+    assert sync_series(session, sources, a01)
+    assert a01.preliminary_from == dt.date(2026, 7, 1)
+
+    # The final product stalls for two months while the preliminary one goes on...
+    for day in pd.date_range("2026-07-15", "2026-08-31").date:
+        erddap.through[OISST_PRELIMINARY] = day
+        assert sync_series(session, sources, a01)
+    assert a01.preliminary_from == dt.date(2026, 7, 1)
+    # ...then catches up.
+    erddap.through = {OISST: dt.date(2026, 8, 17), OISST_PRELIMINARY: dt.date(2026, 9, 1)}
+    assert sync_series(session, sources, a01)
+
+    days = days_of(session, a01)
+    assert {day for day, value in days.items() if value == 10.0} == set(
+        pd.date_range("2026-08-18", "2026-09-01").date
+    )
+    assert a01.preliminary_from == dt.date(2026, 8, 18)
