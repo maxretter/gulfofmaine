@@ -25,25 +25,29 @@ to every depth, so heatwaves at 20 and 50 m can be seen beside those at the
 surface.
 
 Each buoy but N01 is also compared with NOAA's OISST satellite record of sea
-surface temperature, in the nearest grid cell with data. On 68% of the days
-those six buoys logged a heatwave at 50 m, the satellite showed none at the
-surface; at 1 m, the share is 35%. Each share pools that depth's heatwave
-days from every buoy, so the two rest on different days and a different mix
-of buoys, and aren't a like-for-like comparison.
+surface temperature, in the nearest grid cell with data. At 1 m, those six
+buoys' daily temperatures follow the satellite's closely: pooled, they
+correlate at 0.99, mostly through the seasons they share, and their anomalies
+from each series' own normal at 0.89. On 68% of the days the six logged a
+heatwave at 50 m, the satellite showed none at the surface; at 1 m, the share
+is 35%. Each share pools that depth's heatwave days from every buoy, so the
+two rest on different days and a different mix of buoys, and aren't a
+like-for-like comparison.
 
 Each heatwave at 20 and 50 m also gets a label from five signals: Offshore when
 they point to warm water arriving at depth, Surface when they point to heat
 from the surface reaching down, Unclear when they don't agree. These are this
 project's own rules of thumb, not a published or tested method. Of the 77
-heatwaves at 20 and 50 m that began in 2021, 46 are labeled offshore and 2
-surface; of the 85 that began in 2012, 16 offshore and 31 surface. Across the
+heatwaves at 20 and 50 m that began in 2021, 44 are labeled offshore and 2
+surface; of the 85 that began in 2012, 17 offshore and 30 surface. Across the
 whole record about half are Unclear, and the site says so.
 
 Heatwaves that began in 2021 lasted 1,076 days in all at 20 m and 1,033 at
 50 m, summed over the buoys, against 571 at 1 m. The longest in the record ran
 165 days at 150 m in Jordan Basin (M01), from January to June 2023, and 163
 days at 20 m at F01 (West Penobscot Bay), from June to November 2021.
-(Figures as of 2026-09-29.)
+(Figures as of 2026-10-01, from `scripts/readme_figures.py` and
+`scripts/satellite_correlation.py`.)
 
 ![F01's page for 2021: the whole record at 20 m with a brushed range, and daily temperature at three depths against the normal, the heatwave threshold and the satellite](docs/buoy.png)
 
@@ -337,6 +341,13 @@ from its own normal.
 PYTHONPATH=. uv run scripts/satellite_correlation.py
 ```
 
+From the stored record, the figures this README's "Why" quotes, and the
+fewest baseline years any normal draws on:
+
+```sh
+PYTHONPATH=. uv run scripts/readme_figures.py
+```
+
 The sync tests replay real ERDDAP responses recorded in `tests/data` (listed
 by URL pattern in `tests/conftest.py`); the climatology and event tests use
 synthetic series with known answers.
@@ -381,20 +392,22 @@ frontend/src/
   state/         the buoys' view <-> URL
   lib/           dates, formatting, colors, event filtering
 erddap/          datasets.xml and an image that serves the files from ERDDAP
-scripts/         comparison with the reference implementation; 1 m against the satellite
+scripts/         comparison with the reference implementation; 1 m against the satellite; this README's figures
 tests/           backend tests; frontend tests sit beside their code
 ```
 
 ## Decisions and limitations
 
-- **A 20-year baseline.** Hobday et al. base their definition on 30 years;
-  the longest records here start in 2001, so the normal uses 2003–2022, and
-  each buoy and depth takes the days in it that it has data for. It needs
-  data on at least half the baseline's days, and some at every time of year,
-  but nothing checks how many years each time of year draws on: where a
-  record often missed a season, its normal and threshold there rest on the
-  few years it has. The baseline is fixed rather than moving, so if the water
-  warms, heatwaves against it become more frequent.
+- **A 20-year baseline.** Hobday et al. base their definition on 30 years; the
+  longest records here start in 2001, so the normal uses 2003–2022, and each
+  buoy and depth takes the days in it that it has data for. It needs data on
+  at least half the baseline's days, and some at every time of year, but
+  nothing checks how many years each time of year draws on: where a record
+  often missed a season, its normal and threshold there rest on the few years
+  it has. In the record as of 2026-10-01, the fewest any normal draws on, at
+  any time of year, is 10 of the 20 years (N01 at 20 m). The baseline is fixed
+  rather than moving, so if the water warms, heatwaves against it become more
+  frequent.
 - **Rules, not a model, for origins.** Every label has to be explainable on the
   page, so it comes from five thresholds and a vote rather than anything fitted.
   The cost is a lot of Unclear (about half), which the site shows rather than

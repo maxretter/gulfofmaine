@@ -72,9 +72,11 @@ export function AboutPage() {
         from both are compared.
       </p>
       <p>
-        At 1 m, about a third of heatwave days have no satellite heatwave. That share is the one to hold the 20 and 50 m
-        figures against, though each depth's share pools its own heatwave days from every buoy, so they don't rest on
-        the same days.
+        At 1 m, the buoys' daily temperatures follow the satellite's closely: pooled over the six, they correlate at
+        0.99, mostly through the seasons, and their anomalies from each series' own normal at 0.89 (as of October 2026).
+        Even so, about a third of heatwave days at 1 m have no satellite heatwave. That share is the one to hold the 20
+        and 50 m figures against, though each depth's share pools its own heatwave days from every buoy, so they don't
+        rest on the same days.
       </p>
 
       <h2 id="data">API and files</h2>
@@ -116,7 +118,8 @@ function HeatwaveMethod({ method }: { method: Method }) {
         each side of it must last {days} to count. The normal and the {percentile} percentile are computed as in that
         paper, for each buoy and depth, from the years {baselineYears(method)} that it has data for. A record needs data
         on at least half the days of those years, however they fall through the year, so for a season it often missed,
-        its normal rests on fewer years. Its category follows{" "}
+        its normal rests on fewer years; in these records, as of October 2026, never fewer than 10 at any time of year.
+        Its category follows{" "}
         <a href="https://doi.org/10.5670/oceanog.2018.205">Hobday et al. (2018)</a>: how far above normal it rose, in
         multiples of the gap between the normal and the threshold: {categoryScale(method)}.
       </p>
