@@ -101,6 +101,11 @@ def climatology(temperature: pd.Series, baseline: tuple[int, int]) -> xr.Dataset
     years; the pool's mean and 90th percentile are then smoothed with a
     SMOOTH_WIDTH-day running mean that wraps around the new year.
 
+    The baseline needs data on at least half its days, and every calendar
+    day's pool needs a value. Nothing checks how many years a pool draws on,
+    so for a time of year the record often missed, the mean and threshold
+    rest on the few years it has.
+
     Returns a Dataset with `mean` and `threshold` along a `day_of_year`
     dimension (1-366).
     """

@@ -359,9 +359,12 @@ tests/           backend tests; frontend tests sit beside their code
 
 - **A 20-year baseline.** Hobday et al. base their definition on 30 years;
   the longest records here start in 2001, so the normal uses 2003–2022, and
-  each buoy and depth takes the years in it that it has data for (at least
-  half). The baseline is fixed rather than moving, so if the water warms,
-  heatwaves against it become more frequent.
+  each buoy and depth takes the days in it that it has data for. It needs
+  data on at least half the baseline's days, and some at every time of year,
+  but nothing checks how many years each time of year draws on: where a
+  record often missed a season, its normal and threshold there rest on the
+  few years it has. The baseline is fixed rather than moving, so if the water
+  warms, heatwaves against it become more frequent.
 - **Rules, not a model, for origins.** Every label has to be explainable on the
   page, so it comes from five thresholds and a vote rather than anything fitted.
   The cost is a lot of Unclear (about half), which the site shows rather than

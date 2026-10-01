@@ -34,8 +34,10 @@ export function AboutPage() {
         days apart or less joined into one, following{" "}
         <a href="https://doi.org/10.1016/j.pocean.2015.12.014">Hobday et al. (2016)</a>. The normal and the 90th
         percentile are computed as in that paper, for each buoy and depth, from the years 2003–2022 that it has data
-        for. Its category follows <a href="https://doi.org/10.5670/oceanog.2018.205">Hobday et al. (2018)</a>: how far
-        above normal it rose, in multiples of the gap between the normal and the threshold:{" "}
+        for. A record needs data on at least half the days of those years, however they fall through the year, so for
+        a season it often missed, its normal rests on fewer years. Its category follows{" "}
+        <a href="https://doi.org/10.5670/oceanog.2018.205">Hobday et al. (2018)</a>: how far above normal it rose, in
+        multiples of the gap between the normal and the threshold:{" "}
         {Object.entries(categories)
           .map(([n, c]) => `${c.name} (${n}×${n === "4" ? " or more" : ""})`)
           .join(", ")}

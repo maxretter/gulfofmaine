@@ -64,8 +64,9 @@ DIFFERENCE = {"units": "degree_Celsius", "units_metadata": "temperature: differe
 
 WINDOW = 2 * hobday.WINDOW_HALF_WIDTH + 1
 NORMAL = (
-    f"The mean for the day of year over {BASELINE[0]}-{BASELINE[1]}, pooled over a {WINDOW}-day window "
-    f"and smoothed with a {hobday.SMOOTH_WIDTH}-day running mean (Hobday et al. 2016)."
+    f"The mean for the day of year over {BASELINE[0]}-{BASELINE[1]}, from the days with data, pooled over "
+    f"a window of {WINDOW} days and smoothed with a {hobday.SMOOTH_WIDTH}-day running mean "
+    "(Hobday et al. 2016)."
 )
 THRESHOLD = (
     f"The {hobday.PERCENTILE:.0%} percentile for the day of year over {BASELINE[0]}-{BASELINE[1]}, "
