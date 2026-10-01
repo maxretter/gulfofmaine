@@ -70,7 +70,6 @@ def test_daily_files_match_the_json_api_exactly_to_its_decimals(client, tmp_path
     start, end = nc.index[0], nc.index[-1]
     # The NetCDF keeps every digit stored; the API rounds each number to api.DECIMALS, and so does the CSV.
     assert not nc["temperature"].equals(nc["temperature"].round(api.DECIMALS))
-    assert products.DECIMALS == api.DECIMALS
     places = client.get("/api/data/A01/50.csv").text.splitlines()[1].split(",")[1].split(".")[1]
     assert 0 < len(places) <= api.DECIMALS
     for table in (nc.round(api.DECIMALS), csv):

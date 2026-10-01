@@ -18,6 +18,11 @@ from heatwaves.models import ClimatologyDay, DailyMean, Event, Series
 AT_BUOY = (Series.source == "buoy") & (Series.variable == "temperature")
 SATELLITE = (Series.source == "satellite") & (Series.variable == "temperature")
 
+# Daily values go out to 0.001, from the API and in the daily CSV
+# (heatwaves.products), of a degree C or on the salinity scale, finer than any
+# of the sensors measure: a full record's JSON gzips to 150 KB, not 400 KB.
+DECIMALS = 3
+
 
 def buoy_temperatures(session: Session, depth: int | None = None) -> list[Series]:
     """The buoys' temperature series at `depth`, or at every depth, by buoy and then depth.

@@ -21,7 +21,7 @@ from heatwaves.config import settings
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
-from heatwaves.queries import AT_BUOY
+from heatwaves.queries import AT_BUOY, DECIMALS
 from heatwaves.sources import connect
 from heatwaves.state import OFFLINE_AFTER, State, state_of
 
@@ -80,11 +80,6 @@ class BuoyOut(BaseModel):
 
 
 Variable = Literal["temperature", "salinity"]
-
-
-# Daily values go out to 0.001, of a degree C or on the salinity scale, finer
-# than any of the sensors measure: a full record gzips to 150 KB, not 400 KB.
-DECIMALS = 3
 
 
 class Day(BaseModel):

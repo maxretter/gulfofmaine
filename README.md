@@ -370,6 +370,7 @@ heatwaves/
   queries.py     reads of the stored record shared by the API and reports
   models.py      SQLAlchemy tables; migrations/ holds the Alembic history
   products.py    the record as CF NetCDF and CSV files, for downloads and ERDDAP
+  metadata.py    those files' CF and ACDD attributes
   api.py         JSON API; main.py wires up the FastAPI app
   stations.py    the series tracked (buoy, depth, variable, source) and baseline
 frontend/src/
