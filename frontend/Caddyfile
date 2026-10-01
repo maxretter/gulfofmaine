@@ -3,6 +3,12 @@
 {
 	admin off
 	auto_https off
+	# The proxy in front, which does the TLS, reaches this from a private address (a Docker network or
+	# the host's port mapping): its X-Forwarded-For and -Proto pass through, so the API sees each
+	# visitor's address and https, not the proxy's. Anyone else's are replaced, as before.
+	servers {
+		trusted_proxies static private_ranges
+	}
 }
 
 :80 {
