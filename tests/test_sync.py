@@ -3,23 +3,27 @@
 import datetime as dt
 import json
 import operator
+import os
 import re
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from time import monotonic, sleep
 
 import httpx
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from sqlalchemy import delete, event, select
+from sqlalchemy import delete, event, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from heatwaves import live, sync
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap, format_time, parse_time
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
-from heatwaves.sources import GriddapSource, TabledapSource
+from heatwaves.sources import Download, GriddapSource, TabledapSource
 from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
 from heatwaves.sync import ensure_catalog, publish, sync_all, sync_one, sync_series
 from tests.conftest import (
@@ -33,6 +37,11 @@ from tests.conftest import (
     add_series,
     recorded_erddap,
     seasonal_temperatures,
+)
+
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
+postgres_only = pytest.mark.skipif(
+    not TEST_DATABASE_URL.startswith("postgresql"), reason="the sync's lock is Postgres's (TEST_DATABASE_URL)"
 )
 
 
@@ -499,6 +508,100 @@ def test_a_recompute_and_the_catalog_wait_for_any_other_sync(monkeypatch, sessio
     assert len(locked) == 1
     ensure_catalog(session, recorded_erddap(CATALOG, []))
     assert locked[1] is session
+
+
+class HeldSource:
+    """A buoy source that, asked what changed, answers only once let go: a sync partway through a download."""
+
+    def __init__(self, download: Download | None = None) -> None:
+        self.download = download
+        self.asked = threading.Event()
+        self.go = threading.Event()
+        self.started_from: list[dt.datetime | None] = []  # the high-water mark of each fetch
+
+    def fetch(self, series: Sequence[Series]) -> Download | None:
+        self.started_from.append(series[0].modified_through)
+        self.asked.set()
+        if not self.go.wait(10):
+            raise TimeoutError("never let go")
+        return self.download
+
+    def page_url(self, series: Series) -> str:
+        return ""
+
+
+# Whether anyone waits for the sync's lock: a lock on a bigint key is split into classid and objid.
+WAITING_FOR_THE_SYNC_LOCK = text(
+    "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+    " AND (classid::bigint << 32 | objid::bigint) = :key"
+)
+
+
+def waits_for_the_sync_lock(session_factory: sessionmaker, task: Future) -> bool:
+    """Whether `task` comes to wait for the sync's lock, rather than finishing, within a few seconds."""
+    deadline = monotonic() + 10
+    while not task.done() and monotonic() < deadline:
+        with session_factory() as observer:
+            if observer.scalar(WAITING_FOR_THE_SYNC_LOCK, {"key": sync.SYNC_LOCK}):
+                return True
+        sleep(0.02)
+    return False
+
+
+@postgres_only
+def test_a_second_sync_waits_for_the_first_to_commit(session_factory, series):
+    stored_through = dt.datetime(2026, 9, 28, 16, tzinfo=dt.UTC)
+    day = dt.date(2026, 9, 28)
+    new_day = pd.DataFrame({"value": [15.1], "hours": [24]}, index=pd.DatetimeIndex([day], name="date"))
+    first = HeldSource(Download(day, day, {series.id: new_day}, stored_through))
+    second = HeldSource()  # nothing new
+    second.go.set()
+
+    with ThreadPoolExecutor(2) as pool:
+        try:
+            syncing = pool.submit(sync_one, session_factory, {"buoy": first}, series.id)
+            assert first.asked.wait(10)  # the first has the lock, and is partway through its download
+            waiting = pool.submit(sync_one, session_factory, {"buoy": second}, series.id)
+
+            assert waits_for_the_sync_lock(session_factory, waiting)
+            assert second.started_from == []
+        finally:
+            first.go.set()
+        assert syncing.result(timeout=10) == "updated"
+        assert waiting.result(timeout=10) == "unchanged"
+
+    # It started from where the first left off, rather than downloading the same days again.
+    assert second.started_from == [stored_through]
+
+
+def recompute(session_factory: sessionmaker) -> object:
+    return sync.main(["--recompute"])
+
+
+def update_catalog(session_factory: sessionmaker) -> object:
+    with session_factory() as session:
+        return ensure_catalog(session, recorded_erddap(CATALOG, []))
+
+
+@postgres_only
+@pytest.mark.parametrize(("other", "done"), [(recompute, 0), (update_catalog, True)])
+def test_a_recompute_or_the_catalog_waits_for_a_sync_in_progress(
+    monkeypatch, session_factory, series, other: Callable[[sessionmaker], object], done
+):
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    held = HeldSource()
+
+    with ThreadPoolExecutor(2) as pool:
+        try:
+            syncing = pool.submit(sync_one, session_factory, {"buoy": held}, series.id)
+            assert held.asked.wait(10)
+            waiting = pool.submit(other, session_factory)
+
+            assert waits_for_the_sync_lock(session_factory, waiting)
+        finally:
+            held.go.set()
+        assert syncing.result(timeout=10) == "unchanged"
+        assert waiting.result(timeout=30) == done
 
 
 def test_a_series_has_one_heatwave_starting_on_a_day(session):

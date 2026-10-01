@@ -1,11 +1,13 @@
 """The live feed: what a sync announces, and how the API relays it to browsers (heatwaves.live)."""
 
+import asyncio
+import contextlib
 import dataclasses
 import datetime as dt
 import json
 import os
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 import pandas as pd
 import psycopg
@@ -24,6 +26,8 @@ from heatwaves.state import SeriesState, state_of
 from heatwaves.sync import store, sync_series, update_heatwaves
 from tests.conftest import A01_SYNC, add_series, recorded_erddap, seasonal_temperatures
 
+# The sync judges each series' state on the wall clock's day (sync.update_heatwaves), so these
+# follow it. A series whose newest day is TODAY stays reporting for state.OFFLINE_AFTER after.
 TODAY = dt.datetime.now(dt.UTC).date()
 NOW = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
 
@@ -261,6 +265,78 @@ def test_the_feed_closes_connections_it_has_to_drop():
         assert closed.value.code == 1013
 
 
+class Listening:
+    """Stands in for the relay's LISTEN connection to Postgres, delivering what the test puts in `notices`."""
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+        self.notices: asyncio.Queue[str | psycopg.Error] = asyncio.Queue()
+
+    async def __aenter__(self) -> Listening:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+    async def execute(self, statement: str) -> None:
+        self.statements.append(statement)
+
+    async def notifies(self) -> AsyncIterator[psycopg.Notify]:
+        while True:
+            notice = await self.notices.get()
+            if isinstance(notice, psycopg.Error):
+                raise notice  # the connection is lost
+            yield psycopg.Notify(live.CHANNEL, notice, 1)
+
+
+def test_the_relay_reconnects_and_has_browsers_refetch_what_they_missed(monkeypatch, caplog):
+    async def scenario() -> None:
+        # Each attempt to connect gets the next of these, once the test has put it here.
+        attempts: asyncio.Queue[Listening | psycopg.Error] = asyncio.Queue()
+
+        async def connect(url: str, **options: object) -> Listening:
+            attempt = await attempts.get()
+            if isinstance(attempt, psycopg.Error):
+                raise attempt
+            return attempt
+
+        monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
+        hub = Hub(max_clients=2)
+        browser = hub.join()
+        assert browser is not None
+        relay = asyncio.create_task(live.relay("postgresql://db/heatwaves", hub, retry=0))
+        try:
+            first = Listening()
+            attempts.put_nowait(first)
+            first.notices.put_nowait("one")
+            # Relayed, and nothing missed yet, so the browser isn't asked to reconnect.
+            assert await asyncio.wait_for(browser.get(), 5) == "one"
+
+            # The connection drops, and Postgres, restarting, refuses the next one.
+            first.notices.put_nowait(psycopg.OperationalError("server closed the connection unexpectedly"))
+            attempts.put_nowait(psycopg.OperationalError("connection refused"))
+            second = Listening()
+            attempts.put_nowait(second)
+
+            # Once listening again, the relay closes the browser's connection, so it reconnects and refetches.
+            assert await asyncio.wait_for(browser.get(), 5) is None
+            hub.leave(browser)
+            reconnected = hub.join()
+            assert reconnected is not None
+            second.notices.put_nowait("two")
+            assert await asyncio.wait_for(reconnected.get(), 5) == "two"
+            assert first.statements == second.statements == [f"LISTEN {live.CHANNEL}"]
+        finally:
+            relay.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await relay
+
+    asyncio.run(scenario())
+
+    failures = [r for r in caplog.records if r.name == live.__name__ and r.levelname == "WARNING"]
+    assert len(failures) == 2  # the lost connection and the refused one
+
+
 def test_only_postgres_has_a_feed():
     assert live.libpq_url("postgresql+psycopg://heatwaves:secret@db/heatwaves") == (
         "postgresql://heatwaves:secret@db/heatwaves"
@@ -302,3 +378,44 @@ def test_the_api_relays_every_notice_to_browsers(monkeypatch, libpq_url):
 
         assert json.loads(browser.receive_text()) == json.loads(message.model_dump_json())
     engine.dispose()
+
+
+async def listening_backend(db: psycopg.AsyncConnection) -> int:
+    """The process ID of the connection Postgres has LISTENing on CHANNEL, once there is one."""
+    deadline = time.monotonic() + 10
+    while True:
+        cursor = await db.execute(
+            "SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND query = %s",
+            [f"LISTEN {live.CHANNEL}"],
+        )
+        row = await cursor.fetchone()
+        if row is not None:
+            return row[0]
+        assert time.monotonic() < deadline, "the relay never started listening"
+        await asyncio.sleep(0.05)
+
+
+@postgres_only
+def test_the_relay_listens_again_once_its_connection_is_cut(libpq_url):
+    async def scenario() -> None:
+        hub = Hub(max_clients=2)
+        browser = hub.join()
+        assert browser is not None
+        relay = asyncio.create_task(live.relay(libpq_url, hub, retry=0.05))
+        try:
+            async with await psycopg.AsyncConnection.connect(libpq_url, autocommit=True) as db:
+                # As when Postgres restarts, or the network drops the connection.
+                await db.execute("SELECT pg_terminate_backend(%s)", [await listening_backend(db)])
+
+                assert await asyncio.wait_for(browser.get(), 10) is None  # reconnect and refetch
+                hub.leave(browser)
+                reconnected = hub.join()
+                assert reconnected is not None
+                await db.execute("SELECT pg_notify(%s, 'after')", [live.CHANNEL])
+                assert await asyncio.wait_for(reconnected.get(), 10) == "after"
+        finally:
+            relay.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await relay
+
+    asyncio.run(scenario())
