@@ -58,7 +58,7 @@ class Condition(BaseModel):
     category_name: str | None
     event_start: dt.date | None
     synced_at: dt.datetime | None  # when the sync job last checked ERDDAP
-    reading_at: dt.datetime | None  # newest hourly reading; null for the satellite
+    reading_at: dt.datetime | None  # newest reading that passed quality control; null for the satellite
     reading: float | None
 
 

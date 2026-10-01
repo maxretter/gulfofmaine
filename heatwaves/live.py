@@ -35,7 +35,7 @@ PING_EVERY = 30.0  # seconds; keeps idle connections open through proxies and tu
 
 
 class ReadingMessage(BaseModel):
-    """A buoy depth has a newer hourly temperature reading."""
+    """A buoy depth has a newer temperature reading, one that passed quality control."""
 
     type: Literal["reading"] = "reading"
     buoy: str

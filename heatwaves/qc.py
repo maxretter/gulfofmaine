@@ -56,14 +56,14 @@ def daily_means(readings: pd.Series, min_hours: int = MIN_HOURS) -> pd.DataFrame
     """Daily means of good readings (from `good_readings`).
 
     Readings are averaged into hourly bins before the daily mean, so that a
-    day's value doesn't depend on the sampling rate, which has been hourly
-    and half-hourly over the buoys' history. Days with fewer than
-    `min_hours` hourly bins are left out.
+    day's value doesn't depend on the sampling rate, which differs: in
+    samples from 2001 to 2026, every 30 minutes at 1 m and hourly at 20 m
+    and below. Days with fewer than `min_hours` hourly bins are left out.
 
     Returns a frame indexed by UTC day, with `value` and `hours` columns.
     """
-    # Resampled in pandas: for one long 1-D series it is about a thousand
-    # times faster than xarray's resample without the optional flox package.
+    # Resampled in pandas: for 25 years of half-hourly readings it took 15-40 ms,
+    # and xarray's resample, without the optional flox package, 25-28 s.
     by_day = readings.resample("1h").mean().resample("1D")
     daily = pd.DataFrame({"value": by_day.mean(), "hours": by_day.count()})
     daily = daily[daily["hours"] >= min_hours]

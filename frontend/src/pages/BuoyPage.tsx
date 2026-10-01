@@ -150,7 +150,7 @@ function Tile({ label, condition, day }: { label: string; condition: Condition; 
           {ownDay && <p>Daily mean for {formatDate(ownDay)}</p>}
           {condition.reading_at && (
             <p>
-              <span className="tile-foot-label">Hourly reading</span>
+              <span className="tile-foot-label">Latest reading</span>
               {formatTemp(condition.reading)} at {formatTime(condition.reading_at)}
             </p>
           )}

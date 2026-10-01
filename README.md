@@ -198,7 +198,7 @@ works:
   on what it measured, and a temperature–salinity diagram of the water before
   and after the onset.
 - **Live.** The page keeps a WebSocket open to `/api/live` and writes each
-  new reading into TanStack Query's cache, so the tiles show the latest hourly
+  new reading into TanStack Query's cache, so the tiles show the latest
   reading and the map marker pulses as it arrives; a status change refetches
   what depends on heatwaves, and a buoy depth entering one gets a notice. The
   header says whether the feed is connected. The connection reconnects with
@@ -245,7 +245,7 @@ every page as the site's mark.
 | `GET /api/annual?depth=&min_category=&origin=` | Heatwave days and observed days per buoy and year, in the heatwaves `/api/events` lists for the same filters; without `depth`, at any depth, a day counting once |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
-| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest hourly temperature), `status` (a series changing state, such as entering or leaving a heatwave, or the dates, category or intensity of its heatwave in progress changing) and `ping` every 30 s |
+| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering or leaving a heatwave, or the dates, category or intensity of its heatwave in progress changing) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
 | `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |
@@ -398,8 +398,8 @@ tests/           backend tests; frontend tests sit beside their code
   site needs JavaScript; the API remains usable on its own.
 - **pandas for resampling.** xarray opens the NetCDF and computes the
   climatology, but resampling one long 1-D series is far faster in pandas:
-  about 800× for 25 years of 10-minute readings, measured against xarray
-  without the optional `flox` package.
+  for 25 years of half-hourly readings, as at 1 m, pandas took 15–40 ms and
+  xarray, without the optional `flox` package, 25–28 s (measured 2026-09-30).
 - **Polling each dataset.** Each dataset's newest time in ERDDAP's
   `allDatasets` table would be one request for all of them, but it lagged:
   measured on 2026-09-29, a reading could be queried at 02:23, but the table
