@@ -92,9 +92,8 @@ export function AboutPage() {
         buoys', against the same normal, and only days with data from both are compared.
       </p>
       <p>
-        At 1 m, the buoys' daily temperatures and the satellite's correlate at about 0.99 at every buoy (September
-        2026), yet about a third of 1 m heatwave days have no satellite heatwave. That share is the one to hold the 20
-        and 50 m figures against.
+        At 1 m, about a third of heatwave days have no satellite heatwave. That share is the one to hold the 20 and 50 m
+        figures against.
       </p>
 
       <h2 id="data">API and files</h2>

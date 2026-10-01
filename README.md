@@ -23,9 +23,8 @@ surface.
 
 Each buoy is also compared with NOAA's OISST satellite record of sea surface
 temperature, in the nearest grid cell. On 68% of the days the buoys logged a
-heatwave at 50 m, the satellite showed none at the surface. At 1 m, where the
-buoys' temperatures track the satellite's closely (a daily correlation of
-about 0.99), that share is 35%, so at 50 m it is about twice as high.
+heatwave at 50 m, the satellite showed none at the surface. At 1 m that
+share is 35%, so at 50 m it is about twice as high.
 
 Each heatwave at 20 and 50 m also gets a label from five signals: Offshore when
 they point to warm water arriving at depth, Surface when they point to heat
@@ -317,6 +316,15 @@ the reference implementation, with no arguments three datasets, or name them.
 PYTHONPATH=. uv run --with scipy scripts/compare_with_reference.py A01_ocean_001m B01_ocean_050m
 ```
 
+From the stored record (`DATABASE_URL`), how closely the buoys at 1 m follow
+the satellite: the daily correlation per buoy and pooled, of the
+temperatures, which the seasons dominate, and of each series' anomalies
+from its own normal.
+
+```sh
+PYTHONPATH=. uv run scripts/satellite_correlation.py
+```
+
 The sync tests replay real ERDDAP responses recorded in `tests/data` (listed
 by URL pattern in `tests/conftest.py`); the climatology and event tests use
 synthetic series with known answers.
@@ -358,7 +366,7 @@ frontend/src/
   state/         the buoys' view <-> URL
   lib/           dates, formatting, colors, event filtering
 erddap/          datasets.xml and an image that serves the files from ERDDAP
-scripts/         comparison with the reference implementation
+scripts/         comparison with the reference implementation; 1 m against the satellite
 tests/           backend tests; frontend tests sit beside their code
 ```
 
