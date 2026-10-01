@@ -11,7 +11,7 @@ from sqlalchemy import delete, event, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from heatwaves import sync
+from heatwaves import live, sync
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
@@ -118,6 +118,7 @@ def test_sync_stops_after_one_request_when_the_newest_stamp_was_already_read(ses
 
 def test_sync_clears_days_whose_rows_are_gone(session, series):
     # ERDDAP stamped changes to these days, but no rows remain in them.
+    series.latest_reading_at, series.latest_reading = dt.datetime(2026, 9, 27, 12, tzinfo=dt.UTC), 15.0
     requests: list[str] = []
     gone = [*A01_SYNC[:2], ("/A01_ocean_001m.nc?", NO_MATCH)]
 
@@ -126,6 +127,21 @@ def test_sync_clears_days_whose_rows_are_gone(session, series):
     days = session.scalars(select(DailyMean.date).where(DailyMean.date >= dt.date(2026, 9, 20))).all()
     assert days == [dt.date(2026, 9, day) for day in (20, 21, 22, 23)]
     assert series.modified_through == dt.datetime(2026, 9, 28, 16, 32, 11, tzinfo=dt.UTC)
+    assert (series.latest_reading_at, series.latest_reading) == (None, None)  # its row is gone too
+
+
+def test_a_reading_failed_since_gives_way_to_the_newest_good_one(monkeypatch, session, series):
+    # Stored by an earlier sync, then failed by quality control: the recorded download has no such reading.
+    spike = dt.datetime(2026, 9, 28, 16, 30, tzinfo=dt.UTC)
+    series.latest_reading_at, series.latest_reading = spike, 30.0
+    published: list[live.Message] = []
+    monkeypatch.setattr(sync.live, "publish", lambda session, messages: published.extend(messages))
+
+    assert sync_series(session, buoy_sources(recorded_erddap(A01_SYNC, [])), series)
+
+    assert (series.latest_reading_at, series.latest_reading) == (spike - dt.timedelta(minutes=30), 15.11)
+    # Older than the one pages were sent, so not announced as a new reading.
+    assert not [message for message in published if isinstance(message, live.ReadingMessage)]
 
 
 def test_catalog_adds_each_series_once_with_its_buoy_position(session):

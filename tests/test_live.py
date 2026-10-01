@@ -112,8 +112,9 @@ def test_a_sync_that_changes_neither_reading_nor_heatwave_announces_nothing(sess
     warm = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY) + 2.5
     store(session, [series], download(series, warm, Reading(NOW, 17.3)))
 
-    # The same days again, as when their rows are stamped anew, and an older reading arriving late.
-    assert store(session, [series], download(series, warm, Reading(NOW - dt.timedelta(hours=1), 17.0))) == []
+    # The days before today again, as when their rows are stamped anew, with an older reading from them.
+    yesterday = NOW - dt.timedelta(days=1)
+    assert store(session, [series], download(series, warm[:-1], Reading(yesterday, 17.0))) == []
     assert series.latest_reading == 17.3
 
     # A day before the heatwave revised, still well below the threshold.

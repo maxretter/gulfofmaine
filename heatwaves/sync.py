@@ -159,9 +159,16 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             )
         each.modified_through = download.modified_through
         reading = download.latest.get(each.id)
-        if reading is not None and (each.latest_reading_at is None or reading.time > each.latest_reading_at):
-            each.latest_reading_at, each.latest_reading = reading.time, reading.value
-            if each.variable == "temperature":
+        stored_at = each.latest_reading_at
+        newer = reading is not None and (stored_at is None or reading.time > stored_at)
+        # A download that re-read the stored reading's day replaces it even
+        # with an older reading, or none: quality control may have failed it since.
+        reread = stored_at is not None and download.first_day <= stored_at.date() <= download.last_day
+        if newer or reread:
+            each.latest_reading_at = reading.time if reading else None
+            each.latest_reading = reading.value if reading else None
+            # Only a newer reading goes out on the live feed, which pages take as the latest.
+            if newer and each.variable == "temperature":
                 messages.append(live.reading_message(each))
         before, after = update_heatwaves(session, each)
         if each.variable == "temperature" and after != before:
