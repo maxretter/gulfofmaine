@@ -2,8 +2,12 @@
 
 import datetime as dt
 import json
+import operator
+import re
+from collections.abc import Sequence
 
 import httpx
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -13,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from heatwaves import live, sync
 from heatwaves.config import settings
-from heatwaves.erddap import Erddap
+from heatwaves.erddap import Erddap, format_time, parse_time
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import GriddapSource, TabledapSource
 from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
@@ -53,10 +57,12 @@ def test_sync_rereads_only_the_days_that_changed(session, series):
 
     assert sync_series(session, buoy_sources(recorded_erddap(A01_SYNC, requests)), series)
 
-    newest, span, data = requests
+    newest, stamped_since, overlap, data = requests
     # Two days of overlap behind the stored high-water mark...
     assert "time_modified>2026-09-24T12:00:00Z" in newest
-    assert "time_modified<=2026-09-28T16:32:11Z" in span
+    # ...for the span of the rows stamped since the mark, and of those stamped and observed in the overlap...
+    assert "time_modified<=2026-09-28T16:32:11Z&time_modified>2026-09-26T12:00:00Z" in stamped_since
+    assert "time_modified<=2026-09-28T16:32:11Z&time>2026-09-24T12:00:00Z" in overlap
     # ...then whole days, covering every row that changed.
     assert data.startswith("https://data.neracoos.org/erddap/tabledap/A01_ocean_001m.nc?time,temperature,")
     assert "time>=2026-09-24T00:00:00Z&time<2026-09-29T00:00:00Z" in data
@@ -94,7 +100,7 @@ def test_sync_fetches_every_variable_of_a_dataset_at_once(session, series):
 
     assert sync_series(session, buoy_sources(recorded_erddap(A01_SYNC_WITH_SALINITY, requests)), salinity)
 
-    _, _, data = requests
+    *_, data = requests
     assert "?time,temperature,temperature_qc,temperature_qc_agg,salinity,salinity_qc,salinity_qc_agg&" in data
     for each, low, high in ((series, 14, 17), (salinity, 31, 32)):
         values = session.scalars(
@@ -142,6 +148,90 @@ def test_a_reading_failed_since_gives_way_to_the_newest_good_one(monkeypatch, se
     assert (series.latest_reading_at, series.latest_reading) == (spike - dt.timedelta(minutes=30), 15.11)
     # Older than the one pages were sent, so not announced as a new reading.
     assert not [message for message in published if isinstance(message, live.ReadingMessage)]
+
+
+COMPARE = {">": operator.gt, ">=": operator.ge, "<": operator.lt, "<=": operator.le}
+
+
+class StampedErddap(Erddap):
+    """A buoy dataset answered as ERDDAP would: rows observed hourly, each with its time_modified stamp."""
+
+    def __init__(self, first: dt.datetime, last: dt.datetime) -> None:
+        super().__init__("https://data.neracoos.org/erddap", httpx.Client())
+        hours = pd.date_range(first, last, freq="h").to_pydatetime()
+        self.stamps = {time: time + dt.timedelta(minutes=30) for time in hours}  # by observation time
+        self.downloads: list[tuple[dt.date, dt.date]] = []
+
+    def matching(self, constraints: Sequence[str]) -> list[dt.datetime]:
+        """The observation times of the rows that meet every constraint."""
+        times = sorted(self.stamps)
+        for constraint in constraints:
+            match = re.fullmatch(r"(time|time_modified)(>=|<=|>|<)(.+)", constraint)
+            assert match is not None, constraint
+            name, op, value = match.groups()
+            column = self.stamps if name == "time_modified" else {t: t for t in times}
+            times = [t for t in times if COMPARE[op](column[t], parse_time(value))]
+        return times
+
+    def rows(self, dataset_id: str, variables: Sequence[str], constraints: Sequence[str] = ()) -> list[dict]:
+        times = self.matching([c for c in constraints if not c.startswith("orderBy")])
+        if not times:
+            return []
+        if 'orderByMax("time_modified")' in constraints:
+            return [{"time_modified": format_time(max(self.stamps[t] for t in times))}]
+        return [{"time": format_time(times[0])}, {"time": format_time(times[-1])}]
+
+    def dataset(
+        self, dataset_id: str, variables: Sequence[str], constraints: Sequence[str] = ()
+    ) -> xr.Dataset:
+        times = pd.DatetimeIndex(self.matching(constraints)).tz_localize(None)
+        self.downloads.append((times[0].date(), times[-1].date()))
+        columns = {"temperature": 15.0, "temperature_qc": 0, "temperature_qc_agg": 1}  # good readings
+        return xr.Dataset(
+            {"time": ("row", times)}
+            | {name: ("row", np.full(len(times), value)) for name, value in columns.items()}
+        )
+
+
+def test_a_reprocessing_is_downloaded_once():
+    mark = dt.datetime(2026, 9, 1, tzinfo=dt.UTC)
+    erddap = StampedErddap(dt.datetime(2026, 6, 1, tzinfo=dt.UTC), mark - dt.timedelta(minutes=30))
+    series = Series(id=1, dataset_id="A01_ocean_001m", variable="temperature", modified_through=mark)
+    source = TabledapSource(erddap)
+    # UMaine replaces June and July with post-recovery data.
+    for time in erddap.stamps:
+        if time < dt.datetime(2026, 8, 1, tzinfo=dt.UTC):
+            erddap.stamps[time] = mark + dt.timedelta(minutes=10)
+
+    # Then the buoy reports hourly for three days, and the sync checks each hour.
+    for hour in range(72):
+        time = mark + dt.timedelta(hours=hour)
+        erddap.stamps[time] = time + dt.timedelta(minutes=30)
+        download = source.fetch([series])
+        assert download is not None
+        series.modified_through = download.modified_through
+
+    reprocessed, *rest = erddap.downloads
+    assert reprocessed == (dt.date(2026, 6, 1), dt.date(2026, 9, 1))
+    # After that, only the days of the overlap, as on any other hour.
+    assert all(first >= dt.date(2026, 8, 30) for first, _ in rest)
+
+
+def test_a_row_that_reaches_erddap_late_is_still_read():
+    mark = dt.datetime(2026, 9, 1, tzinfo=dt.UTC)
+    erddap = StampedErddap(dt.datetime(2026, 8, 1, tzinfo=dt.UTC), mark - dt.timedelta(minutes=30))
+    series = Series(id=1, dataset_id="A01_ocean_001m", variable="temperature", modified_through=mark)
+    # The buoy was quiet from Aug 30 to midday on Aug 31, but for one reading: stamped before the
+    # sync read up to the mark, it reaches ERDDAP after.
+    quiet = (dt.datetime(2026, 8, 30, tzinfo=dt.UTC), dt.datetime(2026, 8, 31, 12, tzinfo=dt.UTC))
+    erddap.stamps = {time: stamp for time, stamp in erddap.stamps.items() if not quiet[0] <= time < quiet[1]}
+    late = dt.datetime(2026, 8, 30, 12, tzinfo=dt.UTC)
+    erddap.stamps[late] = late + dt.timedelta(minutes=30)
+    erddap.stamps[mark] = mark + dt.timedelta(minutes=30)
+
+    assert TabledapSource(erddap).fetch([series])
+
+    assert erddap.downloads == [(late.date(), mark.date())]
 
 
 def test_catalog_adds_each_series_once_with_its_buoy_position(session):

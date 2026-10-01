@@ -65,19 +65,23 @@ def connect(client: httpx.Client) -> dict[str, Source]:
 class TabledapSource:
     """Buoy data from ERDDAP tabledap, fetched incrementally using `time_modified`.
 
-    The data provider stamps every row it writes with `time_modified`. Two
-    small requests, reduced server-side with orderByMax and orderByMinMax,
-    find the newest stamp and the span of days touched since the last sync;
-    only those days are then downloaded and re-averaged. A normal hourly sync
+    The data provider stamps every row it writes with `time_modified`. Small
+    requests, reduced server-side with orderByMax and orderByMinMax, find
+    the newest stamp and the span of days touched since the last sync; only
+    those days are then downloaded and re-averaged. A normal hourly sync
     re-reads a couple of days per dataset. When UMaine replaces real-time
     data with post-recovery data, the new stamps pull the reprocessed days in
     automatically. The first sync reads each dataset's full history, about
     25 years.
     """
 
-    # Rows can reach ERDDAP after rows with later time_modified stamps.
-    # Whenever anything new has been stamped, the sync re-reads this far
-    # behind the newest stamp it had already seen, to catch them.
+    # Rows can reach ERDDAP after rows with later time_modified stamps:
+    # real-time rows, observed shortly before they're stamped. Whenever
+    # anything new has been stamped, the sync re-reads the rows stamped and
+    # observed this far behind the newest stamp it had already seen, to
+    # catch them. Rows stamped in that time but observed before it, as a
+    # reprocessing's are, were read in full when their stamps were new, and
+    # so aren't read again on every round until they leave the overlap.
     OVERLAP = dt.timedelta(days=2)
 
     def __init__(self, erddap: Erddap) -> None:
@@ -99,13 +103,17 @@ class TabledapSource:
             # Nothing stamped since the last sync. Re-reading the overlap
             # anyway would re-fetch a retired buoy's last reprocessing every hour.
             return None
-        span = self.erddap.rows(
-            dataset_id,
-            ["time"],
-            [*since, f"time_modified<={format_time(modified_through)}", 'orderByMinMax("time")'],
-        )
-        first_day = parse_time(span[0]["time"]).date()
-        last_day = parse_time(span[-1]["time"]).date()
+        stamped = [*since, f"time_modified<={format_time(modified_through)}"]
+        if seen is None or modified_through < seen:
+            # The first sync, or the newest stamp went back, as when the newest rows are deleted.
+            times = self._span(dataset_id, stamped)
+        else:
+            # Every row stamped since the last sync, and those of the overlap observed in it too.
+            times = [
+                *self._span(dataset_id, [*stamped, f"time_modified>{format_time(seen)}"]),
+                *self._span(dataset_id, [*stamped, f"time>{format_time(seen - self.OVERLAP)}"]),
+            ]
+        first_day, last_day = min(times).date(), max(times).date()
 
         raw = self.erddap.dataset(
             dataset_id,
@@ -123,6 +131,11 @@ class TabledapSource:
             if not values.empty
         }
         return Download(first_day, last_day, daily, modified_through, latest)
+
+    def _span(self, dataset_id: str, constraints: Sequence[str]) -> list[dt.datetime]:
+        """The first and last times of the rows that match, or none."""
+        rows = self.erddap.rows(dataset_id, ["time"], [*constraints, 'orderByMinMax("time")'])
+        return [parse_time(row["time"]) for row in rows]
 
 
 class GriddapSource:
