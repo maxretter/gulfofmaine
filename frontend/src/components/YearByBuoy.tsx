@@ -3,9 +3,9 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router";
 
 import { useOnsets } from "../api/queries";
-import type { Buoy, HeatwaveEvent, Onsets, Origin } from "../api/types";
+import type { Buoy, HeatwaveEvent, Onsets } from "../api/types";
 import { chartDefaults } from "../lib/chart";
-import { anomalyColor, anomalyScale, colors, origins } from "../lib/colors";
+import { anomalyColor, anomalyScale, colors, ORIGINS, origins } from "../lib/colors";
 import { maxDay, minDay, parseDay } from "../lib/dates";
 import { eventPath } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
@@ -14,7 +14,6 @@ import { Chart } from "./Chart";
 import { Label } from "./Label";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 
-const ORIGINS: Origin[] = ["offshore", "surface", "unclear"];
 const DAY = 86_400_000;
 // Each buoy's row: the temperature strip on top, its heatwaves in a bar under it, centered on the row's label, and air
 // before the next row.

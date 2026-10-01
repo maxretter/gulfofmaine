@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Buoy } from "./api/types";
+import type { Buoy, Method } from "./api/types";
 import { routes } from "./router";
 
 vi.mock("./pages/SatellitePage", () => ({
@@ -42,6 +42,21 @@ const unplaced: Buoy = {
   satellite: null,
 };
 
+const method: Method = {
+  baseline_start: 2003,
+  baseline_end: 2022,
+  percentile: 90,
+  window_half_width: 5,
+  smooth_width: 31,
+  min_duration: 5,
+  max_gap: 2,
+  max_pad: 2,
+  categories: ["Moderate", "Strong", "Severe", "Extreme"],
+  min_hours: 18,
+  offline_after: 3,
+  depths: [1, 20, 50],
+};
+
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -54,7 +69,10 @@ function renderAt(path: string) {
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/buoys" ? [unplaced] : []))),
+    vi.fn(
+      async (url: string) =>
+        new Response(JSON.stringify(url === "/api/buoys" ? [unplaced] : url === "/api/method" ? method : [])),
+    ),
   );
   vi.stubGlobal("scrollTo", () => {}); // jsdom has no scrolling
   // The live feed never connects.

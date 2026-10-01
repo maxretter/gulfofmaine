@@ -1,11 +1,27 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Buoy, DataCatalog, OriginRules, SatelliteCondition } from "../api/types";
+import type { Buoy, DataCatalog, Method, OriginRules, SatelliteCondition } from "../api/types";
 import { AboutPage, MovedToAbout } from "./AboutPage";
+
+/** The site's own method, as /api/method serves it. */
+const siteMethod: Method = {
+  baseline_start: 2003,
+  baseline_end: 2022,
+  percentile: 90,
+  window_half_width: 5,
+  smooth_width: 31,
+  min_duration: 5,
+  max_gap: 2,
+  max_pad: 2,
+  categories: ["Moderate", "Strong", "Severe", "Extreme"],
+  min_hours: 18,
+  offline_after: 3,
+  depths: [1, 20, 50],
+};
 
 const rules: OriginRules = {
   depths: [20, 50],
@@ -100,12 +116,13 @@ describe("AboutPage", () => {
     serve({
       "/api/buoys": [buoy("A01", "Massachusetts Bay", 7.5), buoy("N01", "Northeast Channel", 11.2)],
       "/api/origin/rules": rules,
+      "/api/method": siteMethod,
       "/api/data": catalog,
     });
     renderAt("/");
 
     expect(screen.getByRole("heading", { level: 1, name: "Methods and data" })).toBeTruthy();
-    expect(screen.getByText(/Moderate \(1×\), Strong \(2×\), Severe \(3×\), Extreme \(4× or more\)/)).toBeTruthy();
+    expect(await screen.findByText(/Moderate \(1×\), Strong \(2×\), Severe \(3×\), Extreme \(4× or more\)/)).toBeTruthy();
     // The origin rules, from the API.
     expect(await screen.findByText("+0.15 or more")).toBeTruthy();
     expect(screen.getByText("M01 at 100–250 m")).toBeTruthy();
@@ -121,14 +138,15 @@ describe("AboutPage", () => {
   });
 
   it("still reads when nothing loads, and says the files didn't", async () => {
-    serve({ "/api/buoys": 500, "/api/origin/rules": 500, "/api/data": 500 });
+    serve({ "/api/buoys": 500, "/api/origin/rules": 500, "/api/method": 500, "/api/data": 500 });
     const client = renderAt("/");
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(await screen.findByText("The list of files didn't load.")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Origin labels" })).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getByText(/A label needs 2 more votes than the other side/)).toBeTruthy();
+    expect(screen.getByText("The origin rules didn't load.")).toBeTruthy();
+    expect(screen.getByText("The method's parameters didn't load.")).toBeTruthy();
     expect(screen.queryByText(/at most \d+ km away/)).toBeNull();
     expect(screen.queryByText(/^Every file/)).toBeNull();
   });
@@ -138,6 +156,7 @@ describe("AboutPage", () => {
     renderAt("/", [
       [keys.buoys, []],
       [keys.originRules, rules],
+      [keys.method, siteMethod],
       [["data"], { products: [], variables: [] }], // useDataCatalog's
     ]);
 
@@ -156,5 +175,69 @@ describe("AboutPage", () => {
     renderAt(from);
 
     expect(screen.getByText(`At ${to}`)).toBeTruthy();
+  });
+});
+
+describe("AboutPage's method", () => {
+  /** Not the site's numbers, so that any the page didn't take from the API would show. */
+  const method: Method = {
+    baseline_start: 1991,
+    baseline_end: 2020,
+    percentile: 95,
+    window_half_width: 5,
+    smooth_width: 31,
+    min_duration: 7,
+    max_gap: 3,
+    max_pad: 4,
+    categories: ["Moderate", "Strong"],
+    min_hours: 20,
+    offline_after: 3,
+    depths: [1, 20, 50],
+  };
+
+  function renderPage(withMethod: boolean) {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    client.setQueryData(keys.buoys, []);
+    if (withMethod) client.setQueryData(keys.method, method);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AboutPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+  });
+
+  it("states the method with the API's numbers", () => {
+    renderPage(true);
+    const text = document.querySelector("article")!.textContent;
+
+    expect(text).toContain(
+      "A marine heatwave is at least seven days in a row above the 95th percentile for the time of year, with spells " +
+        "three days apart or less joined into one",
+    );
+    expect(text).toContain("Up to four missing days in a row are filled in");
+    expect(text).toContain("each side of it must last seven days to count");
+    expect(text).toContain("The normal and the 95th percentile are computed as in that paper");
+    expect(text).toContain("from the years 1991–2020 that it has data for");
+    expect(text).toContain("the gap between the normal and the threshold: Moderate (1×), Strong (2× or more).");
+    expect(text).toContain("these records allow 30.");
+    expect(text).toContain("set to fill gaps of up to four days as here");
+    expect(text).toContain("a day needs 20 hours with data, so the current day counts from about 20:00 UTC");
+    expect(text).toContain("against the cell's own 1991–2020 normal");
+  });
+
+  it("says so if the method didn't load, and states none of it", async () => {
+    renderPage(false);
+
+    expect(await screen.findByText("The method's parameters didn't load.")).toBeTruthy();
+    const text = document.querySelector("article")!.textContent;
+    expect(text).not.toContain("percentile");
+    expect(text).not.toContain("hours with data");
+    expect(text).toContain("against the cell's own normal");
   });
 });

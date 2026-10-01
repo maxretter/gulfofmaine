@@ -1,4 +1,4 @@
-import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
 import type {
@@ -9,6 +9,7 @@ import type {
   DayValue,
   EventDetail,
   HeatwaveEvent,
+  Method,
   MonthAnomaly,
   Onsets,
   Origin,
@@ -39,6 +40,7 @@ export const keys = {
   onsets: ["onsets"],
   stripes: ["stripes"],
   originRules: ["origin-rules"],
+  method: ["method"],
 } as const;
 
 /** A response that wasn't OK, with its status. */
@@ -95,11 +97,30 @@ export function useAnnual(depth: number | null, minCategory: number, origin: Ori
   });
 }
 
-/** Each buoy's heatwave days at `depth` against the satellite's, per year. */
-export function useAgreement(depth: number) {
-  return useQuery({
-    queryKey: [...keys.agreement, depth],
-    queryFn: () => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`),
+/** Each buoy's heatwave days against the satellite's, per year, at several depths. */
+export interface Agreements {
+  byDepth: Agreement[][]; // one list per depth, in their order: empty until it loads
+  isPending: boolean; // while any depth is
+  isError: boolean; // if any depth failed
+}
+
+// Outside the hook, so useQueries reruns it only when a result changes, and keeps its result while equal.
+function combineAgreements(results: UseQueryResult<Agreement[]>[]): Agreements {
+  return {
+    byDepth: results.map((result) => result.data ?? []),
+    isPending: results.some((result) => result.isPending),
+    isError: results.some((result) => result.isError),
+  };
+}
+
+/** Each buoy's heatwave days at each of `depths` against the satellite's, per year. */
+export function useAgreements(depths: number[]): Agreements {
+  return useQueries({
+    queries: depths.map((depth) => ({
+      queryKey: [...keys.agreement, depth],
+      queryFn: () => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`),
+    })),
+    combine: combineAgreements,
   });
 }
 
@@ -187,6 +208,15 @@ export function useOriginRules() {
   return useQuery({
     queryKey: keys.originRules,
     queryFn: () => getJSON<OriginRules>("/api/origin/rules"),
+    staleTime: Infinity,
+  });
+}
+
+/** The method's parameters, and the depths the map shows: fixed in the code, so fetched once. */
+export function useMethod() {
+  return useQuery({
+    queryKey: keys.method,
+    queryFn: () => getJSON<Method>("/api/method"),
     staleTime: Infinity,
   });
 }

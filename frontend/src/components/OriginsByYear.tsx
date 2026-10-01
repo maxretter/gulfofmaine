@@ -4,13 +4,12 @@ import { useCallback, useMemo } from "react";
 
 import type { HeatwaveEvent, Origin } from "../api/types";
 import { chartDefaults } from "../lib/chart";
-import { colors, origins } from "../lib/colors";
+import { colors, ORIGINS, origins } from "../lib/colors";
 import { type OriginYear, originsByYear } from "../lib/origin";
 import { Chart } from "./Chart";
 import { Label } from "./Label";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
 
-const ORDER: Origin[] = ["offshore", "surface", "unclear"];
 const HEIGHT = 200;
 const MAX_BAR = 24; // px
 
@@ -25,14 +24,14 @@ interface Props {
 export function OriginsByYear({ events, depth, year, onSelect }: Props) {
   const rows = useMemo(() => originsByYear(events, depth), [events, depth]);
   const totals = useMemo(() => {
-    const counts = Object.fromEntries(ORDER.map((origin) => [origin, 0])) as Record<Origin, number>;
+    const counts = Object.fromEntries(ORIGINS.map((origin) => [origin, 0])) as Record<Origin, number>;
     for (const row of rows) counts[row.origin] += row.count;
     return counts;
   }, [rows]);
-  const all = ORDER.reduce((sum, origin) => sum + totals[origin], 0);
+  const all = ORIGINS.reduce((sum, origin) => sum + totals[origin], 0);
   const byYear = useMemo(() => {
     const years = [...new Set(rows.map((r) => r.year))];
-    return years.map((y) => [y, ...ORDER.map((o) => rows.find((r) => r.year === y && r.origin === o)?.count ?? 0)]);
+    return years.map((y) => [y, ...ORIGINS.map((o) => rows.find((r) => r.year === y && r.origin === o)?.count ?? 0)]);
   }, [rows]);
 
   return (
@@ -41,7 +40,7 @@ export function OriginsByYear({ events, depth, year, onSelect }: Props) {
       minHeight={HEIGHT}
       legend={
         <div className="legend">
-          {ORDER.map((origin) => (
+          {ORIGINS.map((origin) => (
             <span key={origin} className="state">
               {/* Square swatches, filled like the bars (a tag draws Unclear hollow). */}
               <Label color={origins[origin].color} variant="square">
@@ -57,7 +56,7 @@ export function OriginsByYear({ events, depth, year, onSelect }: Props) {
       table={{
         columns: [
           { label: "Year", numeric: true },
-          ...ORDER.map((origin) => ({ label: origins[origin].name, numeric: true })),
+          ...ORIGINS.map((origin) => ({ label: origins[origin].name, numeric: true })),
         ],
         rows: () => byYear,
       }}
@@ -77,7 +76,7 @@ function Columns({ rows, year, width, onSelect }: { rows: OriginYear[]; year: nu
     const totals = domain.map((y) => ({ year: y, count: rows.filter((r) => r.year === y).reduce((s, r) => s + r.count, 0) }));
     const tallest = Math.max(...totals.map((t) => t.count));
     const describe = (y: number) => {
-      const counts = ORDER.map((o) => `${origins[o].name}: ${rows.find((r) => r.year === y && r.origin === o)?.count ?? 0}`);
+      const counts = ORIGINS.map((o) => `${origins[o].name}: ${rows.find((r) => r.year === y && r.origin === o)?.count ?? 0}`);
       return `${y}\n${counts.join("\n")}\nClick to see this year below`;
     };
     return {
@@ -98,7 +97,7 @@ function Columns({ rows, year, width, onSelect }: { rows: OriginYear[]; year: nu
           Plot.stackY({
             x: "year",
             y: "count",
-            order: ORDER,
+            order: ORIGINS,
             z: "origin",
             fill: (d: OriginYear) => origins[d.origin].color,
             insetTop: 1, // with insetBottom, a 2px gap between the stacked origins

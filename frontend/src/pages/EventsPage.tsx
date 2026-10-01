@@ -16,7 +16,7 @@ import {
   toEventParams,
 } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
-import { buoyPath, DEPTHS } from "../state/buoyView";
+import { buoyPath, DEFAULT_DEPTH } from "../state/buoyView";
 
 const PAGE = 100;
 
@@ -201,7 +201,7 @@ export function EventsPage() {
               {" "}
               <Link
                 to={buoyPath(filteredBuoy.id, {
-                  depth: filters.depth ?? DEPTHS[0],
+                  depth: filters.depth ?? DEFAULT_DEPTH,
                   ...(filters.year !== null && { from: `${filters.year}-01-01`, to: `${filters.year}-12-31` }),
                 })}
               >

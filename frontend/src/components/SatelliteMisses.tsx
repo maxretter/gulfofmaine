@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { extent, max, range } from "d3";
 import { useMemo } from "react";
 
-import { useAgreement } from "../api/queries";
+import { useAgreements, useMethod } from "../api/queries";
 import { type MissedYear, missedByYear } from "../lib/agreement";
 import { chartDefaults } from "../lib/chart";
 import { satelliteSaw } from "../lib/colors";
@@ -10,32 +10,28 @@ import { Chart } from "./Chart";
 import { PlotFigure } from "./PlotFigure";
 import { Swatch } from "./StateBadge";
 
-const DEPTHS = [20, 50];
 const PANEL_HEIGHT = 140; // px, with its x axis
 const MAX_BAR = 24; // px
 const GAP = 1; // px each side of the 2px surface gap between stacked segments
 
 /**
- * Heatwave days per year at 20 m and 50 m, split into days the satellite also saw a heatwave at the surface and
- * days it saw none: at one buoy, or without `buoy`, summed over them all.
+ * Heatwave days per year at the map's depths below the shallowest, split into days the satellite also saw a
+ * heatwave at the surface and days it saw none: at one buoy, or without `buoy`, summed over them all.
  */
 export function SatelliteMisses({ buoy }: { buoy?: string }) {
-  const shallow = useAgreement(DEPTHS[0]);
-  const deep = useAgreement(DEPTHS[1]);
-  const years = useMemo(
-    () => missedByYear([...(shallow.data ?? []), ...(deep.data ?? [])], buoy),
-    [shallow.data, deep.data, buoy],
-  );
-  const results = [shallow, deep];
-  const loading = results.some((r) => r.isPending);
+  const method = useMethod();
+  const depths = method.data?.depths.slice(1) ?? [];
+  const agreements = useAgreements(depths);
+  const years = useMemo(() => missedByYear(agreements.byDepth.flat(), buoy), [agreements.byDepth, buoy]);
+  const loading = method.isPending || agreements.isPending;
 
   return (
     <Chart
       className="chart"
       loading={loading}
-      error={results.some((r) => r.isError) && "Couldn't load the satellite comparison."}
+      error={(method.isError || agreements.isError) && "Couldn't load the satellite comparison."}
       empty={!loading && years.length === 0 && "No satellite comparison yet: the satellite record hasn't been loaded."}
-      minHeight={DEPTHS.length * (PANEL_HEIGHT + 50)}
+      minHeight={depths.length * (PANEL_HEIGHT + 50)}
       legend={
         <div className="legend">
           <span className="state">
@@ -66,18 +62,18 @@ export function SatelliteMisses({ buoy }: { buoy?: string }) {
           ]),
       }}
     >
-      {(width) => years.length > 0 && <Columns years={years} width={width} />}
+      {(width) => years.length > 0 && <Columns depths={depths} years={years} width={width} />}
     </Chart>
   );
 }
 
 /** One panel per depth, on the same years and the same day scale so their bars compare. */
-function Columns({ years, width }: { years: MissedYear[]; width: number }) {
+function Columns({ depths, years, width }: { depths: number[]; years: MissedYear[]; width: number }) {
   const [first, last] = extent(years, (d) => d.year) as [number, number];
   const most = max(years, (d) => d.missed + d.seen) ?? 0;
   return (
     <div className="chart-panels">
-      {DEPTHS.map((depth) => (
+      {depths.map((depth) => (
         <section className="chart-panel" key={depth}>
           <h3 className="chart-panel-title">
             {depth} m <span className="unit">heatwave days</span>

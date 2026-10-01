@@ -16,14 +16,14 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.types import Receive, Scope, Send
 
-from heatwaves import compare, live, origin, products, queries
+from heatwaves import compare, hobday, live, origin, products, qc, queries, stations
 from heatwaves.config import settings
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
 from heatwaves.origin import Origin, Vote
 from heatwaves.queries import AT_BUOY
 from heatwaves.sources import connect
-from heatwaves.state import State, state_of
+from heatwaves.state import OFFLINE_AFTER, State, state_of
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -176,6 +176,27 @@ class OriginRules(BaseModel):
     western_buoys: list[str]
     deep_buoy: str
     deep_depths: list[int]
+
+
+class Method(BaseModel):
+    """What the pages state the method with.
+
+    Heatwave detection's parameters (heatwaves.hobday), the hours a daily mean needs (heatwaves.qc), when
+    a series is offline (heatwaves.state), and the depths the map shows.
+    """
+
+    baseline_start: int  # first year of the baseline the normal and threshold come from
+    baseline_end: int  # its last year
+    percentile: float  # of the baseline's temperatures for the time of year: the threshold
+    window_half_width: int  # days either side of each day of the year pooled into its normal and threshold
+    smooth_width: int  # days in the running mean that smooths the normal and threshold
+    min_duration: int  # days in a row above the threshold that make a heatwave
+    max_gap: int  # days: heatwaves this many days apart or fewer are joined into one
+    max_pad: int  # days: gaps in the data this long or shorter are filled in; a longer one ends a heatwave
+    categories: list[str]  # names, category 1 first (heatwaves.hobday.CATEGORIES)
+    min_hours: int  # hours with a reading a day needs for its daily mean (heatwaves.qc)
+    offline_after: int  # days: a series whose newest daily mean is older than this is offline
+    depths: list[int]  # meters: those every buoy has, which the map shows
 
 
 class BuoyYear(BaseModel):
@@ -551,6 +572,30 @@ def origin_rules() -> OriginRules:
         western_buoys=list(origin.WESTERN_BUOYS),
         deep_buoy=origin.DEEP_BUOY,
         deep_depths=list(origin.DEEP_DEPTHS),
+    )
+
+
+@router.get("/method")
+def method() -> Method:
+    """The parameters heatwaves are found with, and the rest the site states its method with.
+
+    The rest: the hours with a reading a day needs for its daily mean, the days after which a series is
+    reported offline, and the depths the site's map shows, those every buoy has.
+    """
+    first, last = stations.BASELINE
+    return Method(
+        baseline_start=first,
+        baseline_end=last,
+        percentile=round(hobday.PERCENTILE * 100, 6),
+        window_half_width=hobday.WINDOW_HALF_WIDTH,
+        smooth_width=hobday.SMOOTH_WIDTH,
+        min_duration=hobday.MIN_DURATION,
+        max_gap=hobday.MAX_GAP,
+        max_pad=hobday.MAX_PAD,
+        categories=[hobday.CATEGORIES[category] for category in sorted(hobday.CATEGORIES)],
+        min_hours=qc.MIN_HOURS,
+        offline_after=OFFLINE_AFTER.days,
+        depths=sorted(set.intersection(*(set(depths) for depths in stations.DEPTHS.values()))),
     )
 
 

@@ -132,6 +132,25 @@ export interface OriginRules {
   deep_depths: number[];
 }
 
+/**
+ * What the pages state the method with: heatwave detection's parameters (heatwaves/hobday.py), the hours a daily mean
+ * needs, when a series is offline, and the depths the map shows. Served by the API so the pages use the code's numbers.
+ */
+export interface Method {
+  baseline_start: number; // first year of the baseline the normal and threshold come from
+  baseline_end: number; // its last year
+  percentile: number; // of the baseline's temperatures for the time of year: the threshold
+  window_half_width: number; // days either side of each day of the year pooled into its normal and threshold
+  smooth_width: number; // days in the running mean that smooths the normal and threshold
+  min_duration: number; // days in a row above the threshold that make a heatwave
+  max_gap: number; // days: heatwaves this many days apart or fewer are joined into one
+  max_pad: number; // days: gaps in the data this long or shorter are filled in; a longer one ends a heatwave
+  categories: string[]; // names, category 1 first
+  min_hours: number; // hours with a reading a day needs for its daily mean
+  offline_after: number; // days: a series whose newest daily mean is older than this is offline
+  depths: number[]; // meters: those every buoy has, which the map shows, shallowest first
+}
+
 /** One buoy's year at one depth: its heatwaves, and a value per day of `Onsets.dates`. */
 export interface BuoyYear {
   buoy_id: string;

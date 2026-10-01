@@ -5,8 +5,8 @@ import type { HeatwaveEvent } from "../api/types";
 import { isDay } from "../lib/dates";
 import { eventRange } from "../lib/events";
 
-/** The depths the map can show. Each buoy's own depths come from the API and can include others. */
-export const DEPTHS = [1, 20, 50] as const;
+/** The depth a view shows when its URL names none, in meters: every buoy has 1 m. The map's come from useMethod. */
+export const DEFAULT_DEPTH = 1;
 const DEEPEST = 1000; // meters: anything below is a mistyped URL
 const BUOY_ID = /^[A-Z0-9]{2,8}$/;
 
@@ -31,7 +31,7 @@ export function parseViewParams(params: URLSearchParams): BuoyView {
     [from, to] = [to, from];
   }
   return {
-    depth: Number.isInteger(depth) && depth > 0 && depth <= DEEPEST ? depth : DEPTHS[0],
+    depth: Number.isInteger(depth) && depth > 0 && depth <= DEEPEST ? depth : DEFAULT_DEPTH,
     from,
     to,
   };
@@ -39,7 +39,7 @@ export function parseViewParams(params: URLSearchParams): BuoyView {
 
 export function toViewParams(view: BuoyView): URLSearchParams {
   const params = new URLSearchParams();
-  if (view.depth !== DEPTHS[0]) params.set("depth", String(view.depth));
+  if (view.depth !== DEFAULT_DEPTH) params.set("depth", String(view.depth));
   if (view.from && view.to) {
     params.set("from", view.from);
     params.set("to", view.to);
@@ -53,7 +53,7 @@ function withQuery(path: string, params: URLSearchParams): string {
 
 /** A buoy's page, optionally at a depth and period. */
 export function buoyPath(buoy: string, view: Partial<BuoyView> = {}): string {
-  return withQuery(`/buoys/${buoy}`, toViewParams({ depth: DEPTHS[0], from: null, to: null, ...view }));
+  return withQuery(`/buoys/${buoy}`, toViewParams({ depth: DEFAULT_DEPTH, from: null, to: null, ...view }));
 }
 
 /** A buoy's page zoomed to one of its heatwaves, at its depth. */

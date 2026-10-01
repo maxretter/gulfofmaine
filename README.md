@@ -242,6 +242,7 @@ every page as the site's mark.
 | `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
 | `GET /api/onsets?year=&depth=` | Each buoy's heatwaves through a year, its daily anomaly, and the heatwave each day was part of |
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
+| `GET /api/method` | The parameters heatwaves are found with (baseline years, percentile, pooling window and smoothing, minimum length, gaps joined and filled, category names), the hours a day needs, the days after which a series is offline, and the depths the map shows |
 | `GET /api/annual?depth=&min_category=&origin=` | Heatwave days and observed days per buoy and year, in the heatwaves `/api/events` lists for the same filters; without `depth`, at any depth, a day counting once |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |

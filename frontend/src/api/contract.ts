@@ -27,6 +27,7 @@ export type Contract = [
   Same<App.Onset, Api.Onset>,
   Same<App.EventDetail, EventDetail>,
   Same<App.OriginRules, Api.OriginRules>,
+  Same<App.Method, Api.Method>,
   Same<App.BuoyYear, Api.BuoyYear>,
   Same<App.Onsets, Api.Onsets>,
   Same<App.Agreement, Api.Agreement>,

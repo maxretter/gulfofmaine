@@ -134,6 +134,21 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+export interface Method {
+  baseline_start: number;
+  baseline_end: number;
+  percentile: number;
+  window_half_width: number;
+  smooth_width: number;
+  min_duration: number;
+  max_gap: number;
+  max_pad: number;
+  categories: string[];
+  min_hours: number;
+  offline_after: number;
+  depths: number[];
+}
+
 export interface MonthAnomaly {
   month: string;
   anomaly: number;

@@ -1,5 +1,7 @@
 import { interpolateLab, scaleLinear } from "d3";
 
+import type { Origin } from "../api/types";
+
 // Data colors. Both ramps were checked with a palette validator: monotone
 // lightness, one hue family, and the light end at 2:1 or better against the
 // chart surface. Page chrome colors live in styles.css.
@@ -37,7 +39,10 @@ export const origins = {
   offshore: { name: "Offshore", color: "#008300" },
   surface: { name: "Surface", color: "#e87ba4" },
   unclear: { name: "Unclear", color: colors.muted },
-} as const;
+} as const satisfies Record<Origin, { name: string; color: string }>;
+
+/** Every origin label, in the order the site lists them: the keys above, which the type check holds to Origin's. */
+export const ORIGINS = Object.keys(origins) as Origin[];
 
 /**
  * Temperature anomaly, °C: the reference diverging pair, the blue ramp for
@@ -60,7 +65,10 @@ export function anomalyColor(anomaly: number | null): string | null {
   return anomaly === null ? null : anomalyRamp(anomaly);
 }
 
-/** Heatwave categories after Hobday et al. (2018). */
+/**
+ * Heatwave categories after Hobday et al. (2018). The names are heatwaves/hobday.py's, which /api/method sends too,
+ * but the legends shouldn't wait for it: tests/test_api_method.py checks these against hobday's.
+ */
 export const categories: Record<number, { name: string; color: string }> = {
   1: { name: "Moderate", color: "#e39200" },
   2: { name: "Strong", color: "#e0590f" },

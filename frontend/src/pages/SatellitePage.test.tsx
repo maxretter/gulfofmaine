@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Agreement, Buoy } from "../api/types";
+import type { Agreement, Buoy, Method } from "../api/types";
 import { SatellitePage } from "./SatellitePage";
 
 const row = (buoy_id: string, depth: number, both: number, buoy_only: number): Agreement => ({
@@ -17,10 +17,27 @@ const row = (buoy_id: string, depth: number, both: number, buoy_only: number): A
   neither: 300,
 });
 
+/** As /api/method sends it. */
+const method: Method = {
+  baseline_start: 2003,
+  baseline_end: 2022,
+  percentile: 90,
+  window_half_width: 5,
+  smooth_width: 31,
+  min_duration: 5,
+  max_gap: 2,
+  max_pad: 2,
+  categories: ["Moderate", "Strong", "Severe", "Extreme"],
+  min_hours: 18,
+  offline_after: 3,
+  depths: [1, 20, 50],
+};
+
 const buoy = (id: string, name: string): Buoy => ({ id, name, latitude: 43, longitude: -70, series: [], satellite: null });
 
 function renderPage(agreement: Record<number, Agreement[]>) {
   const client = new QueryClient();
+  client.setQueryData(keys.method, method);
   client.setQueryData(keys.buoys, [buoy("A01", "Massachusetts Bay"), buoy("B01", "Western Maine Shelf"), buoy("N01", "Northeast Channel")]);
   for (const [depth, rows] of Object.entries(agreement)) client.setQueryData([...keys.agreement, Number(depth)], rows);
   render(
@@ -57,6 +74,8 @@ describe("SatellitePage", () => {
 
     const figures = screen.getAllByText(/^At \d+ m$/).map((label) => label.textContent);
     expect(figures).toEqual(["At 50 m", "At 20 m", "At 1 m"]);
+    expect(screen.getByText(/The buoys' shallowest depth/).textContent).toMatch(/^of 80 heatwave days/);
+    expect(screen.getByRole("heading", { name: "Heatwave days at 20 and 50 m, every buoy together" })).toBeTruthy();
     // 50 m: 85 of 100 days missed; 1 m: 30 of 80.
     expect(screen.getByText("85%")).toBeTruthy();
     expect(screen.getByText(/of 100 heatwave days/)).toBeTruthy();

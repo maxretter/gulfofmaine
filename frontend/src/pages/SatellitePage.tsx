@@ -1,11 +1,10 @@
-import type { UseQueryResult } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
 
-import { useAgreement, useBuoys } from "../api/queries";
+import { useAgreements, useBuoys, useMethod } from "../api/queries";
 import type { Agreement } from "../api/types";
 import { SatelliteMisses } from "../components/SatelliteMisses";
 import { missedShare } from "../lib/agreement";
-import { formatPercent } from "../lib/format";
+import { formatList, formatPercent } from "../lib/format";
 import { buoyPath } from "../state/buoyView";
 
 /** Heatwave days at a depth, and the share of them the satellite showed no heatwave for. */
@@ -17,18 +16,17 @@ function summarize(rows: Agreement[]) {
 /** How often a buoy's heatwave had no heatwave at the surface above in the satellite record. /satellite */
 export function SatellitePage() {
   const buoys = useBuoys();
+  const method = useMethod();
   const navigate = useNavigate();
-  // 1 m first in the table, but last among the figures: it's the yardstick for the other two.
-  const depths: [number, UseQueryResult<Agreement[]>][] = [
-    [1, useAgreement(1)],
-    [20, useAgreement(20)],
-    [50, useAgreement(50)],
-  ];
-  const loading = depths.some(([, result]) => result.isPending);
-  const failed = depths.some(([, result]) => result.isError);
-  const rows = (depth: number) => depths.find(([d]) => d === depth)?.[1].data ?? [];
-  const empty = !loading && !failed && depths.every(([, result]) => result.data?.length === 0);
-  const compared = (buoys.data ?? []).filter((buoy) => depths.some(([d]) => rows(d).some((r) => r.buoy_id === buoy.id)));
+  // The map's depths. The shallowest is first in the table, but last among the figures: it's the yardstick for the
+  // others.
+  const depths = method.data?.depths ?? [];
+  const agreements = useAgreements(depths);
+  const loading = method.isPending || agreements.isPending;
+  const failed = method.isError || agreements.isError;
+  const rows = (depth: number) => agreements.byDepth[depths.indexOf(depth)] ?? [];
+  const empty = !loading && !failed && agreements.byDepth.every((each) => each.length === 0);
+  const compared = (buoys.data ?? []).filter((buoy) => depths.some((d) => rows(d).some((r) => r.buoy_id === buoy.id)));
 
   return (
     <>
@@ -44,6 +42,8 @@ export function SatellitePage() {
 
       {failed ? (
         <p className="note">Couldn't load the satellite comparison.</p>
+      ) : method.isPending ? (
+        <p className="note">Loading…</p>
       ) : empty ? (
         <p className="note">
           No satellite comparison yet: the satellite record hasn't been loaded. The sync job reads it from NOAA's
@@ -52,7 +52,7 @@ export function SatellitePage() {
       ) : (
         <>
           <div className="tiles stats">
-            {[50, 20, 1].map((depth) => {
+            {depths.toReversed().map((depth) => {
               const { days, share } = summarize(rows(depth));
               return (
                 <div className="tile" key={depth}>
@@ -60,8 +60,7 @@ export function SatellitePage() {
                   <p className="tile-value">{loading ? "…" : share === null ? "–" : formatPercent(share)}</p>
                   <p className="tile-delta">
                     of {loading ? "the" : days.toLocaleString()} heatwave days had no heatwave at the surface above.
-                    {depth === 1 &&
-                      " The buoys' shallowest depth, to compare the others with."}
+                    {depth === depths[0] && " The buoys' shallowest depth, to compare the others with."}
                   </p>
                 </div>
               );
@@ -69,7 +68,7 @@ export function SatellitePage() {
           </div>
 
           <section className="card">
-            <h2>Heatwave days at 20 and 50 m, every buoy together</h2>
+            <h2>Heatwave days at {formatList(depths.slice(1))} m, every buoy together</h2>
             <SatelliteMisses />
           </section>
 
@@ -84,7 +83,7 @@ export function SatellitePage() {
                   <thead>
                     <tr>
                       <th scope="col">Buoy</th>
-                      {depths.map(([depth]) => (
+                      {depths.map((depth) => (
                         <th scope="col" className="num" key={depth}>
                           {depth} m
                         </th>
@@ -93,7 +92,7 @@ export function SatellitePage() {
                   </thead>
                   <tbody>
                     {compared.map((buoy) => {
-                      const href = buoyPath(buoy.id, { depth: 50 });
+                      const href = buoyPath(buoy.id, { depth: depths.at(-1) });
                       return (
                         <tr key={buoy.id} className="selectable" onClick={() => navigate(href)}>
                           <th scope="row">
@@ -102,7 +101,7 @@ export function SatellitePage() {
                               <span className="buoy-name">{buoy.name}</span>
                             </Link>
                           </th>
-                          {depths.map(([depth]) => {
+                          {depths.map((depth) => {
                             const { days, share } = summarize(rows(depth).filter((r) => r.buoy_id === buoy.id));
                             return (
                               <td className="num" key={depth}>

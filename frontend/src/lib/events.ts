@@ -1,5 +1,6 @@
 import type { DayPoint } from "../api/queries";
 import type { HeatwaveEvent, Origin } from "../api/types";
+import { ORIGINS } from "./colors";
 import { addDays, parseDay } from "./dates";
 
 export interface EventFilters {
@@ -9,8 +10,6 @@ export interface EventFilters {
   minCategory: number;
   origin: Origin | null;
 }
-
-const ORIGINS: Origin[] = ["offshore", "surface", "unclear"];
 
 export type SortKey = "start_date" | "duration" | "max_intensity" | "category";
 export interface Sort {
