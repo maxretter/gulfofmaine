@@ -35,12 +35,14 @@ export function verdict(origin: Origin, votes: Record<Signal, Vote>, margin: num
   } the other way.`;
 }
 
-/** What a signal measured for one heatwave, and the rule that turned it into a vote. */
+/** What a signal measured for one heatwave, and the rule that turned it into a vote, or why it didn't vote. */
 export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, depth: number): string {
+  const few = `fewer than ${rules.min_days} days`; // too few in a window to vote on
   switch (signal) {
     case "salinity": {
       const value = evidence.salinity_anomaly;
-      if (value === null) return `No salinity data at ${depth} m around the onset.`;
+      if (value === null)
+        return `${capitalize(few)} of salinity data at ${depth} m from ${rules.before} days before onset to ${rules.after} after, so it doesn't vote.`;
       const mean = `${formatSigned(value, "", 2)} against normal, on average from ${rules.before} days before onset to ${rules.after} after.`;
       const drift = formatSigned(rules.drift, "", 2);
       if (value < rules.drift) return `${mean} The rules leave out anything below ${drift}, so it doesn't vote.`;
@@ -48,18 +50,24 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
     }
     case "surface_heatwave": {
       const days = evidence.surface_heatwave_days;
-      if (days === null) return `No data at 1 m in the ${rules.before} days before onset.`;
-      if (days > 0) return `${plural(days, "day")} of heatwave at 1 m in the ${rules.before} days before onset, which votes surface.`;
       const none = `No heatwave at 1 m in the ${rules.before} days before onset`;
+      if (days === null) return `${none}, but ${few} of data there, so it doesn't vote.`;
+      if (days > 0) return `${plural(days, "day")} of heatwave at 1 m in the ${rules.before} days before onset, which votes surface.`;
       if (evidence.votes.surface_heatwave === "offshore") return `${none}, which votes offshore.`;
-      const before = evidence.stratification_before;
-      if (before !== null && before < rules.mixed)
-        return `${none}, but 1 m was less than ${formatSigned(rules.mixed)} warmer than ${depth} m, so it doesn't vote.`;
-      return `${none}, but too few days of data there to vote.`;
+      // 1 m had enough days. No heatwave there votes offshore only with 1 m warmer than this depth by the rules'
+      // margin, which takes enough days with data at both.
+      if (evidence.stratification_before === null)
+        return `${none}, but ${few} had data at both 1 m and ${depth} m to compare them, so it doesn't vote.`;
+      return `${none}, but 1 m was less than ${formatSigned(rules.mixed)} warmer than ${depth} m, so it doesn't vote.`;
     }
     case "stratification": {
       const { stratification_before: before, stratification_after: after } = evidence;
-      if (before === null || after === null) return `Needs data at both 1 m and ${depth} m around the onset.`;
+      const tooFew = (window: string) => `${capitalize(few)} had data at both 1 m and ${depth} m ${window}`;
+      const beforeOnset = `in the ${rules.before} days before onset`;
+      const afterOnset = `from onset to ${rules.after} days after`;
+      if (before === null && after === null) return `${tooFew(beforeOnset)}, and ${few} ${afterOnset}, so it doesn't vote.`;
+      if (before === null) return `${tooFew(beforeOnset)}, so it doesn't vote.`;
+      if (after === null) return `${tooFew(afterOnset)}, so it doesn't vote.`;
       const change = `1 m minus ${depth} m averaged ${formatSigned(before)} before onset and ${formatSigned(after)} after.`;
       if (before < rules.mixed) return `${change} It needs ${formatSigned(rules.mixed)} or more before onset to vote.`;
       return `${change} Falling below ${Math.round(rules.collapse * 100)}% of the value before votes surface; otherwise it votes offshore.`;
@@ -67,7 +75,8 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
     case "deep": {
       const days = evidence.deep_heatwave_days;
       const where = `M01 at ${rules.deep_depths[0]}–${rules.deep_depths.at(-1)} m`;
-      if (days === null) return `No data from ${where} in the ${rules.before} days before onset.`;
+      if (days === null)
+        return `${where} had no heatwave in the ${rules.before} days before onset, but no depth there had ${rules.min_days} days of data, so it doesn't vote.`;
       if (days > 0) return `${where} was in a heatwave on ${plural(days, "day")} of the ${rules.before} before onset, which votes offshore.`;
       return `${where} had no heatwave in the ${rules.before} days before onset, which votes surface.`;
     }
@@ -85,8 +94,19 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
               : `${west} first, by ${plural(-lag, "day")}`;
         return `Heatwaves began at ${east} on ${formatDate(offshore)} and at ${west} on ${formatDate(western)}: ${order}.`;
       }
-      if (offshore) return `A heatwave began at ${east} on ${formatDate(offshore)}, and none at ${west} in the ${rules.lookback} days before this one.`;
-      if (western) return `A heatwave began at ${west} on ${formatDate(western)}, and none at ${east} in the ${rules.lookback} days before this one.`;
+      // One side's heatwave alone votes only if the other side had the data to have had one too.
+      const unseen = (buoys: string[]) =>
+        `${buoys.join(" and ")} each had data on fewer than half the ${rules.lookback} days before this one, too few to vote.`;
+      if (offshore) {
+        const began = `A heatwave began at ${east} on ${formatDate(offshore)}`;
+        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.western_buoys)}`;
+        return `${began}, and none at ${west} in the ${rules.lookback} days before this one.`;
+      }
+      if (western) {
+        const began = `A heatwave began at ${west} on ${formatDate(western)}`;
+        if (evidence.votes.onset_order === null) return `${began}, but ${unseen(rules.offshore_buoys)}`;
+        return `${began}, and none at ${east} in the ${rules.lookback} days before this one.`;
+      }
       return `No heatwave began at ${east} or ${west} in the ${rules.lookback} days before this one.`;
     }
   }
