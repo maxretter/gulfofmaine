@@ -59,7 +59,12 @@ export function EventsPage() {
   if (events.isError) return <p className="note">Couldn't load the heatwaves.</p>;
 
   const matching = sortEvents(filterEvents(events.data, filters), sort);
-  const years = [...new Set(events.data.map((e) => Number(e.start_date.slice(0, 4))))].sort((a, b) => b - a);
+  // The year filter matches heatwaves that overlap the year, so every year one ran into is offered, not only those
+  // one began in; and the year filtered to, as a heatmap cell can choose a year without any.
+  const years = new Set(filters.year === null ? [] : [filters.year]);
+  for (const e of events.data) {
+    for (let year = Number(e.start_date.slice(0, 4)); year <= Number(e.end_date.slice(0, 4)); year++) years.add(year);
+  }
   const depths = [...new Set(events.data.map((e) => e.depth))].sort((a, b) => a - b);
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
   const buoyCount = new Set(events.data.map((e) => e.buoy_id)).size;
@@ -127,7 +132,7 @@ export function EventsPage() {
             onChange={(e) => setFilters({ year: e.target.value ? Number(e.target.value) : null })}
           >
             <option value="">All</option>
-            {years.map((y) => (
+            {[...years].sort((a, b) => b - a).map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>

@@ -20,7 +20,9 @@ export function NowPage() {
   const legacy = legacyExplorerPath(params);
   if (legacy) return <Navigate to={legacy} replace />;
 
-  const pathFor = (buoy: string) => buoyPath(buoy, { depth: view.depth });
+  // The page offers the depths every buoy has. Any other in the URL, such as /?depth=100, shows the first.
+  const depth = DEPTHS.find((d) => d === view.depth) ?? DEPTHS[0];
+  const pathFor = (buoy: string) => buoyPath(buoy, { depth });
 
   return (
     <>
@@ -43,7 +45,7 @@ export function NowPage() {
       ) : (
         <section className="now">
           <figure className="card map-card">
-            <BuoyMap buoys={buoys.data} depth={view.depth} onSelect={(id) => navigate(pathFor(id))} />
+            <BuoyMap buoys={buoys.data} depth={depth} onSelect={(id) => navigate(pathFor(id))} />
             <figcaption>
               <StateLegend />
             </figcaption>
@@ -53,18 +55,18 @@ export function NowPage() {
               Latest daily mean at{" "}
               <InlineSelect
                 label="Depth"
-                value={view.depth}
+                value={depth}
                 options={DEPTHS.map((depth) => ({ value: depth, label: `${depth} m` }))}
                 onChange={(depth) => update({ depth })}
               />
             </h2>
             <p className="summary" aria-live="polite">
               {heatwaveSummary(
-                buoys.data.flatMap((b) => b.series.filter((s) => s.depth === view.depth)),
-                view.depth,
+                buoys.data.flatMap((b) => b.series.filter((s) => s.depth === depth)),
+                depth,
               )}
             </p>
-            <ConditionsTable buoys={buoys.data} depth={view.depth} pathFor={pathFor} />
+            <ConditionsTable buoys={buoys.data} depth={depth} pathFor={pathFor} />
           </div>
         </section>
       )}
