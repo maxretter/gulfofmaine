@@ -15,6 +15,7 @@ from urllib.parse import quote
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from heatwaves import products
 
@@ -49,20 +50,20 @@ def test_every_variable_in_the_files_is_served():
 
 
 def test_daily_values_match_the_files():
-    for path in sorted((SAMPLE / "daily").glob("*.csv")):
+    # ERDDAP serves the NetCDF files, which keep every digit; the CSVs round to the API's 0.001.
+    # Read as stored, a _FillValue being missing as ERDDAP takes it.
+    for path in sorted((SAMPLE / "daily").glob("*.nc")):
         buoy, _, depth = path.stem.split("_")
         served = tabledap("gom_heatwaves_daily", f'&series_id="{buoy}_{depth}"')
-        written = pd.read_csv(path, float_precision="round_trip")
-
-        assert list(served["time"].str[:10]) == list(written["date"])
-        assert (served["time"].str[10:] == "T12:00:00Z").all()
-        written["heatwave_origin"] = written["heatwave_origin"].map(
-            products.ORIGIN_FLAGS.index, na_action="ignore"
-        )
-        for name in products.DAILY_VARIABLES:
-            assert np.array_equal(
-                served[name].to_numpy(float), written[name].to_numpy(float), equal_nan=True
-            ), name
+        with xr.open_dataset(path, mask_and_scale=False) as written:
+            times = np.datetime_as_string(written["time"].to_numpy(), unit="s")
+            assert list(served["time"]) == [f"{time}Z" for time in times]
+            for name in products.DAILY_VARIABLES:
+                values = written[name].to_numpy().astype(float)
+                fill = written[name].attrs.get("_FillValue")
+                if fill is not None:
+                    values[values == fill] = np.nan
+                assert np.array_equal(served[name].to_numpy(float), values, equal_nan=True), name
 
 
 def test_events_match_the_file():
