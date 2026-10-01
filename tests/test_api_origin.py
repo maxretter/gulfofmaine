@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from heatwaves import origin
+from heatwaves import origin, queries
 from heatwaves.sync import update_heatwaves, update_origins
 from tests.conftest import add_series, api_client, fresh_database, seasonal_temperatures
 
@@ -22,7 +22,7 @@ def warmed(offset: float, seed: int, heatwave: slice | None = None) -> pd.Series
 
 
 @pytest.fixture(scope="module")
-def client():
+def region():
     """At A01 50 m, a heatwave from Apr 14 to 28, 2021, with every signal pointing offshore.
 
     Salty water at 50 m; 1 m six degrees warmer, and staying 3.5 degrees warmer
@@ -43,8 +43,13 @@ def client():
         update_heatwaves(session, add_series(session, salinity, "A01", 50, variable="salinity"))
         update_origins(session)
         session.commit()
-        with api_client(session_factory) as client:
-            yield client
+        yield session_factory
+
+
+@pytest.fixture(scope="module")
+def client(region):
+    with api_client(region) as client:
+        yield client
 
 
 def test_events_carry_their_origin_at_the_depths_that_get_one(client):
@@ -94,6 +99,16 @@ def test_signals_are_read_by_column_name(client, monkeypatch):
     monkeypatch.setattr(origin, "signals", lambda *args: signals(*args).iloc[:, ::-1])  # columns reversed
 
     assert client.get(path).json()["signals"] == expected
+
+
+@pytest.mark.parametrize("path", ["/api/events/A01/50/2021-04-14", "/api/events/M01/50/2021-02-13"])
+def test_an_event_page_reads_only_what_it_shows(monkeypatch, client, path):
+    # M01's page has no need of A01 at 1 m, A01's salinity, or M01's heatwave at 100 m, after its window.
+    page = client.get(path).json()
+    whole = queries.origin_record
+    monkeypatch.setattr(queries, "origin_record", lambda session, *args, **kwargs: whole(session))
+
+    assert client.get(path).json() == page
 
 
 def test_an_event_without_an_origin_has_no_evidence(client):

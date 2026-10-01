@@ -775,6 +775,39 @@ def test_a_window_of_the_origin_record_holds_the_days_the_whole_record_does(sess
             assert part.temperature[key].equals(frame.loc[pd.Timestamp(first) : pd.Timestamp(last)]), key
 
 
+def test_an_origin_record_around_a_heatwave_holds_every_onset_at_its_depth(session):
+    days = pd.date_range("2021-01-01", "2021-06-30")
+    heatwaves = {
+        "A01": ("2021-04-14", "2021-04-28"),
+        "E01": ("2021-03-01", "2021-03-10"),
+        "I01": ("2021-01-05", "2021-01-14"),
+    }
+    for buoy_id, (start, end) in heatwaves.items():
+        series = add_series(session, pd.Series(10.0, index=days), buoy_id, 50)
+        session.add(
+            Event(
+                series_id=series.id,
+                start_date=dt.date.fromisoformat(start),
+                end_date=dt.date.fromisoformat(end),
+                peak_date=dt.date.fromisoformat(start),
+                max_intensity=2.0,
+                mean_intensity=1.0,
+                category=1,
+            )
+        )
+    session.commit()
+    onset = dt.date(2021, 4, 14)
+    first, last = onset - dt.timedelta(days=origin.LOOKBACK), onset + dt.timedelta(days=origin.AFTER)
+
+    # As the event's page reads it: E01 isn't among what judging A01 reads, but its onset is listed.
+    record = queries.origin_record(session, first, last, around=[("A01", 50)])
+    whole = queries.origin_record(session)
+    expected = [("E01", dt.date(2021, 3, 1)), ("A01", onset)]
+    assert origin.recent_onsets(record, 50, onset) == origin.recent_onsets(whole, 50, onset) == expected
+    # I01's heatwave ends on the first day read, and comes whole, so that day isn't taken for an onset.
+    assert record.heatwave_days["I01", 50].index[0] == pd.Timestamp("2021-01-05")
+
+
 def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_factory, session):
     temperatures = seasonal_temperatures("2003-01-01", "2026-09-27")
     temperatures.iloc[-8:] += 2.5

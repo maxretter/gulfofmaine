@@ -523,7 +523,10 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
         return detail
 
     record = queries.origin_record(
-        session, start - dt.timedelta(days=origin.LOOKBACK), start + dt.timedelta(days=origin.AFTER)
+        session,
+        start - dt.timedelta(days=origin.LOOKBACK),
+        start + dt.timedelta(days=origin.AFTER),
+        around=[(event.series.buoy_id, depth)],
     )
     signals = origin.signals(record, event.series.buoy_id, depth, start)
     groups: dict[str, Group] = {buoy: "offshore" for buoy in origin.OFFSHORE_BUOYS} | {

@@ -74,19 +74,25 @@ def daily(
     return frame
 
 
-def heatwave_days(session: Session, series_ids: Collection[int]) -> dict[int, pd.Series]:
+def heatwave_days(
+    session: Session, series_ids: Collection[int], start: dt.date | None = None, end: dt.date | None = None
+) -> dict[int, pd.Series]:
     """Each series' heatwave days: the category of the heatwave on each, indexed by day.
 
     Every day of every event counts, including the short gaps inside one
-    that detection filled in.
+    that detection filled in. With `start` or `end`, only the events with a
+    day between them, each whole, so each onset between them is its own.
     """
+    query = select(Event.series_id, Event.start_date, Event.end_date, Event.category).where(
+        Event.series_id.in_(series_ids)
+    )
+    if start is not None:
+        query = query.where(Event.end_date >= start)
+    if end is not None:
+        query = query.where(Event.start_date <= end)
     spans: dict[int, list[pd.Series]] = defaultdict(list)
-    for series_id, start, end, category in session.execute(
-        select(Event.series_id, Event.start_date, Event.end_date, Event.category).where(
-            Event.series_id.in_(series_ids)
-        )
-    ):
-        spans[series_id].append(pd.Series(category, index=pd.date_range(start, end, name="date")))
+    for series_id, first, last, category in session.execute(query):
+        spans[series_id].append(pd.Series(category, index=pd.date_range(first, last, name="date")))
     return {
         series_id: pd.concat(spans[series_id]).sort_index() if spans[series_id] else _NO_DAYS
         for series_id in series_ids
@@ -139,20 +145,37 @@ def extents(session: Session, series_ids: Collection[int]) -> dict[int, tuple[dt
 
 
 def origin_record(
-    session: Session, start: dt.date | None = None, end: dt.date | None = None
+    session: Session,
+    start: dt.date | None = None,
+    end: dt.date | None = None,
+    around: Collection[tuple[str, int]] | None = None,
 ) -> origin.Record:
-    """Every buoy series the origins of heatwaves are judged from, from `start` to `end`.
+    """The buoy series the origins of heatwaves are judged from, from `start` to `end`.
 
-    The whole record by default. Either way each series' frame begins and ends
-    where its data do, so a window within `start` to `end` holds the same days
-    as in the whole record, and a mean over it comes to the same bits.
-    Heatwave days are always complete.
+    The whole record by default. With `around`, the buoys and depths of the
+    heatwaves to judge or show, only what judging them reads (origin.inputs),
+    and the heatwave days of every buoy at their depths, whose onsets an
+    event's page lists. Either way each series' frame begins and ends where
+    its data do, so a window within `start` to `end` holds the same days as
+    in the whole record, and a mean over it comes to the same bits; heatwave
+    days come whole for each heatwave with a day between them.
     """
     series = session.scalars(select(Series).where(Series.source == "buoy")).all()
-    spans = extents(session, [each.id for each in series])
-    frames = {each.id: _within(daily(session, each.id, start, end), spans.get(each.id)) for each in series}
     temperatures = [each for each in series if each.variable == "temperature"]
-    days = heatwave_days(session, [each.id for each in temperatures])
+    salinities = [each for each in series if each.variable == "salinity"]
+    with_days = temperatures
+    if around is not None:
+        reads = set().union(*(origin.inputs(buoy, depth) for buoy, depth in around))
+        depths = {depth for _, depth in around}
+        with_days = [
+            each for each in temperatures if (each.buoy_id, each.depth) in reads or each.depth in depths
+        ]
+        temperatures = [each for each in temperatures if (each.buoy_id, each.depth) in reads]
+        salinities = [each for each in salinities if (each.buoy_id, each.depth) in around]
+    loaded = [*temperatures, *salinities]
+    spans = extents(session, [each.id for each in loaded])
+    frames = {each.id: _within(daily(session, each.id, start, end), spans.get(each.id)) for each in loaded}
+    days = heatwave_days(session, [each.id for each in with_days], start, end)
     return origin.Record(
         temperature={
             (each.buoy_id, each.depth): frame
@@ -160,11 +183,9 @@ def origin_record(
             if (frame := frames[each.id]) is not None
         },
         salinity={
-            (each.buoy_id, each.depth): frame
-            for each in series
-            if each.variable == "salinity" and (frame := frames[each.id]) is not None
+            (each.buoy_id, each.depth): frame for each in salinities if (frame := frames[each.id]) is not None
         },
-        heatwave_days={(each.buoy_id, each.depth): days[each.id] for each in temperatures},
+        heatwave_days={(each.buoy_id, each.depth): days[each.id] for each in with_days},
     )
 
 

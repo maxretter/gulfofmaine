@@ -369,7 +369,10 @@ def update_origins(session: Session, changed: Collection[Change] | None = None) 
         return
     windows = [origin.window(event.start_date) for event in events]
     record = queries.origin_record(
-        session, min(first for first, _ in windows), max(last for _, last in windows)
+        session,
+        min(first for first, _ in windows),
+        max(last for _, last in windows),
+        around={(event.buoy_id, event.depth) for event in events},
     )
     judged = [
         (event.id, origin.judge(record, event.buoy_id, event.depth, event.start_date)) for event in events
