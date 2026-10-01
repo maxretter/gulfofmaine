@@ -50,6 +50,14 @@ export function isNotFound(error: Error | null): boolean {
   return error instanceof HttpError && error.status === 404;
 }
 
+/**
+ * Every query's retry rule: up to three tries more, as TanStack Query's default, for a network error or a 5xx, but
+ * none for a 4xx. A missing heatwave or a series without a normal stays that way however often it's asked for.
+ */
+export function retry(failures: number, error: Error): boolean {
+  return !(error instanceof HttpError && error.status >= 400 && error.status < 500) && failures < 3;
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new HttpError(path, response.status);
@@ -127,8 +135,9 @@ function dailyQuery(buoy: string, depth: number, start: string, end: string, var
     },
     // Keep showing the previous range while a new one loads.
     placeholderData: keepPreviousData,
-    // A 404 is a series without a normal: asking again won't change that.
-    retry: (failures: number, error: Error) => !isNotFound(error) && failures < 3,
+    // A 404 is a series without a normal: asking again won't change that. main.tsx gives every query this rule, but
+    // the charts rely on it, so the query carries it too.
+    retry,
   };
 }
 
