@@ -73,6 +73,15 @@ class TabledapSource:
     data with post-recovery data, the new stamps pull the reprocessed days in
     automatically. The first sync reads each dataset's full history, about
     25 years.
+
+    By design, it misses three kinds of change. Rows deleted upstream leave
+    their days as stored, unless something else in those days is stamped.
+    A row that reaches ERDDAP after rows stamped later is read only if it
+    was stamped and observed within OVERLAP of the newest stamp already
+    read. And when nothing new has been stamped, a fetch stops after one
+    request, so late rows of a buoy that has gone quiet, even ones sharing
+    its final stamp, wait until it stamps something new: for a retired
+    buoy, until it's reprocessed.
     """
 
     # Rows can reach ERDDAP after rows with later time_modified stamps:
@@ -100,8 +109,8 @@ class TabledapSource:
             return None
         modified_through = parse_time(newest[0]["time_modified"])
         if modified_through == seen:
-            # Nothing stamped since the last sync. Re-reading the overlap
-            # anyway would re-fetch a retired buoy's last reprocessing every hour.
+            # Nothing stamped since the last sync, as in most rounds: rather
+            # than re-read the overlap every time, late rows wait for a new stamp.
             return None
         stamped = [*since, f"time_modified<={format_time(modified_through)}"]
         if seen is None or modified_through < seen:

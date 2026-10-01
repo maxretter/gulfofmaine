@@ -65,7 +65,14 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   about 90 requests an hour when nothing has changed. Once an hour it checks
   everything else too: the satellite, and the retired buoys, whose data only
   changes when it's reprocessed. Rows revised at the source come in the same
-  way, as long as their `time_modified` stamp changes.
+  way, as long as their `time_modified` stamp changes. Rows can reach ERDDAP
+  after rows stamped later, so the span also takes in the rows stamped and
+  observed in the two days before the newest stamp already read. By design,
+  the sync misses rows deleted at the source when nothing else in their days
+  is stamped (those days stay as stored), a late row stamped or observed
+  before those two days, and late rows from a buoy that then stamps nothing
+  new, since a round stops after one request while the newest stamp is
+  unchanged.
 - **Live updates** ([`heatwaves/live.py`](heatwaves/live.py)). The sync
   sends a Postgres `NOTIFY` with each new reading and each change of heatwave
   state, in the transaction that stores them, so nothing is announced before
