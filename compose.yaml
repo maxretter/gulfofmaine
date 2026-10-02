@@ -43,10 +43,13 @@ services:
       interval: 5s
       retries: 10
 
+  # On a database newer code has migrated, as after a rollback, newer-database=leave logs that and
+  # leaves it as it is, so the API and sync job still start (migrations/env.py). An image from before
+  # that option ignores it, and fails there as it always did.
   migrate:
     <<: *backend
     restart: "no"
-    command: ["alembic", "upgrade", "head"]
+    command: ["alembic", "-x", "newer-database=leave", "upgrade", "head"]
     depends_on:
       db: { condition: service_healthy }
 

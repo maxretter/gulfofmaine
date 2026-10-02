@@ -117,7 +117,7 @@ jobs:
         if: matrix.context == '.'
         run: |
           mkdir -m 777 db # the image's user writes the database, and SQLite its journal, here
-          docker run --rm -v "$PWD/db:/db" -e DATABASE_URL=sqlite:////db/ci.db ci-image alembic upgrade head
+          docker run --rm -v "$PWD/db:/db" -e DATABASE_URL=sqlite:////db/ci.db ci-image alembic -x newer-database=leave upgrade head
           docker run -d --name api -p 8000:8000 -v "$PWD/db:/db" -e DATABASE_URL=sqlite:////db/ci.db ci-image
           for attempt in $(seq 30); do
             status=$(curl -s -o healthz.json -w '%{http_code}' http://localhost:8000/healthz) && break

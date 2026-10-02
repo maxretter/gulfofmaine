@@ -323,6 +323,21 @@ next round, within about 10 minutes, starts the rebuild, or
 goes. Once it's done, `docker compose exec db rm -rf /var/lib/postgresql/18`
 frees the old version's space.
 
+Compose's `migrate` runs `alembic -x newer-database=leave upgrade head`. On a
+database that newer code has migrated, at a revision none of this code's
+migrations is, as after going back to an earlier version, its code or its
+image, plain `alembic upgrade head` stops with "Can't locate revision", and
+the API and sync job, which wait for `migrate` to succeed, never start. With
+that option, [`migrations/env.py`](migrations/env.py) logs the revision
+instead, leaves the database as it is and succeeds, so they start on the
+newer schema.
+That relies on each migration adding only what older code can ignore: tables,
+indexes, and columns that are nullable or have a default. One that removes or
+renames anything older code uses, or tightens a constraint its writes would
+break, rules out going back past it without restoring the database too. And
+only a version that has the option does this: going back to one from before
+it still stops at `migrate`, and its API and sync job don't start.
+
 For development, run the backend with [uv](https://docs.astral.sh/uv/) and
 SQLite, and the frontend with Vite, which forwards API requests to uvicorn:
 
