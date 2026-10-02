@@ -40,7 +40,13 @@
 		reverse_proxy {$API_UPSTREAM:gom-heatwaves-api:8000}
 	}
 
-	# Only with Compose's erddap profile; a 502 without it.
+	# Only with Compose's erddap profile; a 502 without it. ERDDAP shares the site's origin, a risk
+	# accepted rather than ruled out: a script that got into one of its pages, through a flaw in
+	# ERDDAP, would run as the site, and its JSONP responses (JavaScript calling a function named in
+	# the URL) count as the site's own scripts under the app's policy above. The site keeps no
+	# accounts, cookies or browser storage, so that reaches only public data, though it could change
+	# what a visitor sees at the site's address. A subdomain of its own would set it apart (README,
+	# "Decisions and limitations").
 	handle /erddap* {
 		# ERDDAP's pages run inline scripts and event handlers, so this rules out only framing.
 		header Content-Security-Policy "frame-ancestors 'none'"

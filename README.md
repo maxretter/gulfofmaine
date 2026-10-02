@@ -497,6 +497,20 @@ tests/           backend tests; frontend tests sit beside their code
   status can change on part of a day, and again once it's complete.
 - **No accounts, admin or writes.** The site is read-only, which keeps the
   attack surface to a GET-only API and a WebSocket that only sends.
+- **ERDDAP on the site's own origin.** With the erddap profile, Caddy serves
+  ERDDAP at `/erddap`, so browsers treat its pages as the site's. Its pages
+  run inline scripts and event handlers, so the only policy they get is
+  against framing, and its JSONP responses (JavaScript that calls a function
+  named in the URL) count as the site's own scripts under the app's content
+  security policy. A flaw in ERDDAP that let a script into one of its pages,
+  or an injection into the app that loaded such a response, would therefore
+  run as the site. That's accepted because the site keeps no accounts,
+  cookies or browser storage: such a script could read only public data,
+  though it could change what a visitor sees at the site's address, or hold
+  live-feed places from their browser. The alternative is an origin of its
+  own, a subdomain: a DNS record for it, a site with its certificate in the
+  TLS proxy in front, `ERDDAP_BASE_URL` set to it, and Caddy routing that
+  host to ERDDAP, with `/erddap` redirecting there to keep links working.
 
 Possible next steps: marine cold spells.
 

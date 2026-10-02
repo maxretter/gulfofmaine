@@ -10,8 +10,10 @@ writes as two ERDDAP datasets:
 
 `docker compose --profile erddap up -d --build` runs it beside the site at
 <http://localhost:8000/erddap>, reading the same products volume the API
-serves downloads from. To add the datasets to another ERDDAP, copy the two
-`<dataset>` elements and point each `fileDir` at the files.
+serves downloads from. It shares the site's origin there; the main README's
+"Decisions and limitations" says what that exposes and why it's accepted. To
+add the datasets to another ERDDAP, copy the two `<dataset>` elements and
+point each `fileDir` at the files.
 
 ## How it was made
 
