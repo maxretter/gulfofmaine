@@ -6,11 +6,13 @@ heatwaves.sync and rewritten whenever they change.
 """
 
 import datetime as dt
+from enum import StrEnum
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, TypeDecorator, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from heatwaves.hobday import CATEGORIES
+from heatwaves.stations import SourceName, Variable
 
 
 class UTCDateTime(TypeDecorator):
@@ -24,6 +26,26 @@ class UTCDateTime(TypeDecorator):
         if value is None:
             return None
         return value.replace(tzinfo=dt.UTC) if value.tzinfo is None else value.astimezone(dt.UTC)
+
+
+class EnumValue(TypeDecorator):
+    """A StrEnum's member in a plain string column: stored as its value, read back as the member.
+
+    SQLAlchemy's own Enum type would store each member's name.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def __init__(self, enum: type[StrEnum]) -> None:
+        super().__init__()
+        self.enum = enum
+
+    def process_bind_param(self, value: str | None, dialect) -> str | None:
+        return None if value is None else self.enum(value).value
+
+    def process_result_value(self, value: str | None, dialect) -> StrEnum | None:
+        return None if value is None else self.enum(value)
 
 
 class Base(DeclarativeBase):
@@ -54,8 +76,8 @@ class Series(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     buoy_id: Mapped[str] = mapped_column(ForeignKey("buoy.id"))
     depth: Mapped[int]  # meters
-    variable: Mapped[str]  # e.g. temperature
-    source: Mapped[str]  # e.g. buoy
+    variable: Mapped[Variable] = mapped_column(EnumValue(Variable))
+    source: Mapped[SourceName] = mapped_column(EnumValue(SourceName))
     dataset_id: Mapped[str]
     # Where a satellite series is sampled: the center of the grid cell nearest
     # the buoy that has data, and its distance from the buoy.

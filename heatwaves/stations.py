@@ -13,6 +13,7 @@ Northeast Channel, in October 2021.
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 BUOYS = {
     "A01": "Massachusetts Bay",
@@ -35,8 +36,23 @@ DEPTHS = {
     "N01": (1, 20, 50),
 }
 
-# Measured at every depth. Only temperature is searched for heatwaves.
-VARIABLES = ("temperature", "salinity")
+
+class Variable(StrEnum):
+    """What a series measures, as named in its dataset.
+
+    The buoys measure each at every depth; only temperature is searched for heatwaves.
+    """
+
+    TEMPERATURE = "temperature"
+    SALINITY = "salinity"
+
+
+class SourceName(StrEnum):
+    """What fetches a series (heatwaves.sources): its buoy's own dataset, or the satellite's grid."""
+
+    BUOY = "buoy"
+    SATELLITE = "satellite"
+
 
 # Climatology baseline: 20 years where Hobday et al. recommend 30, as the
 # longest records begin in 2001. Not every record covers all of it (N01's
@@ -50,8 +66,8 @@ BASELINE = (2003, 2022)
 class SeriesSpec:
     buoy: str
     depth: int  # meters
-    variable: str  # as named in the dataset, e.g. temperature
-    source: str  # what fetches it (heatwaves.sources): "buoy" or "satellite"
+    variable: Variable
+    source: SourceName
     dataset_id: str
 
 
@@ -61,14 +77,14 @@ OISST = "ncdcOisst21Agg_LonPM180"
 OISST_PRELIMINARY = "ncdcOisst21NrtAgg_LonPM180"
 
 
-def buoy_series(buoy: str, depth: int, variable: str = "temperature") -> SeriesSpec:
+def buoy_series(buoy: str, depth: int, variable: Variable = Variable.TEMPERATURE) -> SeriesSpec:
     """A variable from a buoy's fixed-depth ERDDAP dataset, e.g. A01_ocean_020m."""
-    return SeriesSpec(buoy, depth, variable, "buoy", f"{buoy}_ocean_{depth:03d}m")
+    return SeriesSpec(buoy, depth, variable, SourceName.BUOY, f"{buoy}_ocean_{depth:03d}m")
 
 
 def satellite_series(buoy: str) -> SeriesSpec:
     """Satellite sea surface temperature at a buoy, recorded as depth 0."""
-    return SeriesSpec(buoy, 0, "temperature", "satellite", OISST)
+    return SeriesSpec(buoy, 0, Variable.TEMPERATURE, SourceName.SATELLITE, OISST)
 
 
 SERIES = [
@@ -76,7 +92,7 @@ SERIES = [
         buoy_series(buoy, depth, variable)
         for buoy, depths in DEPTHS.items()
         for depth in depths
-        for variable in VARIABLES
+        for variable in Variable
     ),
     # N01 is here only as evidence for heatwaves.origin, so it has no satellite series.
     *(satellite_series(buoy) for buoy in BUOYS if buoy != "N01"),

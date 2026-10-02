@@ -25,7 +25,7 @@ from heatwaves import api, db, sync
 from heatwaves.erddap import Erddap
 from heatwaves.main import app
 from heatwaves.models import Base, Buoy, DailyMean, Series
-from heatwaves.stations import buoy_series, satellite_series
+from heatwaves.stations import SourceName, Variable, buoy_series, satellite_series
 
 DATA = Path(__file__).parent / "data"
 
@@ -152,13 +152,15 @@ def add_series(
     values: pd.Series,
     buoy_id: str = "A01",
     depth: int = 1,
-    variable: str = "temperature",
-    source: str = "buoy",
+    variable: Variable = Variable.TEMPERATURE,
+    source: SourceName = SourceName.BUOY,
 ) -> Series:
     """A buoy and series holding `values` as its daily means."""
     if session.get(Buoy, buoy_id) is None:
         session.add(Buoy(id=buoy_id, name="Test Buoy", latitude=42.5, longitude=-70.5))
-    spec = satellite_series(buoy_id) if source == "satellite" else buoy_series(buoy_id, depth, variable)
+    spec = (
+        satellite_series(buoy_id) if source == SourceName.SATELLITE else buoy_series(buoy_id, depth, variable)
+    )
     series = Series(
         buoy_id=buoy_id,
         depth=spec.depth,

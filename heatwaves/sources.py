@@ -20,7 +20,7 @@ from heatwaves import qc
 from heatwaves.config import settings
 from heatwaves.erddap import Axis, Erddap, format_time, parse_time
 from heatwaves.models import Series
-from heatwaves.stations import OISST, OISST_PRELIMINARY
+from heatwaves.stations import OISST, OISST_PRELIMINARY, SourceName
 
 _EMPTY = pd.DataFrame({"value": pd.Series(dtype=float), "hours": pd.Series(dtype=float)})
 
@@ -55,11 +55,13 @@ class Source(Protocol):
         ...
 
 
-def connect(client: httpx.Client) -> dict[str, Source]:
+def connect(client: httpx.Client) -> dict[SourceName, Source]:
     """Every source, by the name series use for it, reading through `client`."""
     return {
-        "buoy": TabledapSource(Erddap(settings.erddap_url, client)),
-        "satellite": GriddapSource(Erddap(settings.coastwatch_url, client), OISST, OISST_PRELIMINARY),
+        SourceName.BUOY: TabledapSource(Erddap(settings.erddap_url, client)),
+        SourceName.SATELLITE: GriddapSource(
+            Erddap(settings.coastwatch_url, client), OISST, OISST_PRELIMINARY
+        ),
     }
 
 

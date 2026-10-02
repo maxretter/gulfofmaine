@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import os
+from typing import get_args
 
 import anyio
 import httpx
@@ -12,9 +13,10 @@ from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import db
+from heatwaves import api, db
 from heatwaves.main import app, revalidate_api_responses
 from heatwaves.models import Base, Buoy, Event, Series, UTCDateTime
+from heatwaves.stations import SourceName, Variable
 from heatwaves.sync import update_heatwaves
 from tests.conftest import NOW, TODAY, add_series, api_client, seasonal_temperatures
 
@@ -100,14 +102,20 @@ def test_a_heatwave_is_ongoing_or_paused_as_its_series_is(client, session, stopp
 
 def test_buoys_give_each_series_its_own_first_day(client, session, stopped_clock):
     for depth, first, source in (
-        (1, "2003-01-01", "buoy"),
-        (20, "2005-06-01", "buoy"),
-        (0, "2001-01-01", "satellite"),
+        (1, "2003-01-01", SourceName.BUOY),
+        (20, "2005-06-01", SourceName.BUOY),
+        (0, "2001-01-01", SourceName.SATELLITE),
     ):
         add_series(session, seasonal_temperatures(first, TODAY), "A01", depth, source=source)
     # A series the sync has created but found no data for yet.
     session.add(
-        Series(buoy_id="A01", depth=50, variable="temperature", source="buoy", dataset_id="A01_ocean_050m")
+        Series(
+            buoy_id="A01",
+            depth=50,
+            variable=Variable.TEMPERATURE,
+            source=SourceName.BUOY,
+            dataset_id="A01_ocean_050m",
+        )
     )
     session.commit()
 
@@ -172,6 +180,21 @@ def test_times_come_back_in_utc_whatever_the_database_zone():
 
     assert stored == eastern
     assert stored is not None and stored.tzinfo == dt.UTC
+
+
+def test_a_series_stores_its_source_and_variable_as_their_values(session):
+    add_series(session, seasonal_temperatures("2026-09-01", "2026-09-27"), source=SourceName.SATELLITE)
+    session.expire_all()
+
+    # The values, as before the enums: SQLAlchemy's own Enum type would write the members' names.
+    stored = session.execute(text("SELECT variable, source FROM series")).one()
+    assert tuple(stored) == ("temperature", "satellite")
+    series = session.scalars(select(Series).where(Series.source == "satellite")).one()
+    assert (type(series.variable), type(series.source)) == (Variable, SourceName)
+
+
+def test_the_api_takes_each_variable_a_series_can_measure():
+    assert get_args(api.Variable) == tuple(Variable)
 
 
 def test_daily_series_keeps_gaps_as_nulls(client, heatwave_now):

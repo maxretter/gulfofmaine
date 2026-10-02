@@ -63,7 +63,7 @@ from heatwaves.metadata import (
     coverage,
 )
 from heatwaves.models import Buoy, DailyMean, Event, Series
-from heatwaves.stations import BASELINE, OISST, OISST_PRELIMINARY
+from heatwaves.stations import BASELINE, OISST, OISST_PRELIMINARY, SourceName, Variable
 
 log = logging.getLogger(__name__)
 
@@ -149,12 +149,12 @@ def daily_table(session: Session, buoy: Buoy, depth: int) -> pd.DataFrame | None
         for each in session.scalars(
             select(Series).where(
                 Series.buoy_id == buoy.id,
-                (Series.depth == depth) | (Series.source == "satellite"),
-                Series.variable.in_(["temperature", "salinity"]),
+                (Series.depth == depth) | (Series.source == SourceName.SATELLITE),
+                Series.variable.in_([Variable.TEMPERATURE, Variable.SALINITY]),
             )
         )
     }
-    at_depth = [each.id for key, each in series.items() if key[1] == "buoy"]
+    at_depth = [each.id for key, each in series.items() if key[1] == SourceName.BUOY]
     first, last = session.execute(
         select(func.min(DailyMean.date), func.max(DailyMean.date)).where(DailyMean.series_id.in_(at_depth))
     ).one()
@@ -162,9 +162,9 @@ def daily_table(session: Session, buoy: Buoy, depth: int) -> pd.DataFrame | None
         return None
     days = pd.date_range(first, last, name="date")
 
-    temperature = series.get(("temperature", "buoy"))
-    salinity = series.get(("salinity", "buoy"))
-    satellite = series.get(("temperature", "satellite"))
+    temperature = series.get((Variable.TEMPERATURE, SourceName.BUOY))
+    salinity = series.get((Variable.SALINITY, SourceName.BUOY))
+    satellite = series.get((Variable.TEMPERATURE, SourceName.SATELLITE))
     table = pd.DataFrame(index=days)
     for each, names, hours in (
         (temperature, TEMPERATURE_COLUMNS, "temperature_hours"),
@@ -335,7 +335,7 @@ def events_table(session: Session) -> pd.DataFrame:
         )
         .join(Series, Event.series_id == Series.id)
         .join(Buoy, Series.buoy_id == Buoy.id)
-        .where(Series.source == "buoy", Series.variable == "temperature")
+        .where(queries.AT_BUOY)
         .order_by(Event.start_date, Series.buoy_id, Series.depth)
     ).all()
     table = pd.DataFrame(
@@ -484,12 +484,10 @@ def write(session: Session, directory: Path, depths: Collection[tuple[str, int]]
     while there are no heatwaves: any left from before are removed.
     """
     (directory / DAILY).mkdir(parents=True, exist_ok=True)
-    satellites = {
-        each.buoy_id: each for each in session.scalars(select(Series).where(Series.source == "satellite"))
-    }
+    satellites = {each.buoy_id: each for each in session.scalars(select(Series).where(queries.SATELLITE))}
     every = session.execute(
         select(Series.buoy_id, Series.depth, Series.dataset_id)
-        .where(Series.source == "buoy", Series.variable == "temperature")
+        .where(queries.AT_BUOY)
         .order_by(Series.buoy_id, Series.depth)
     ).all()
     for buoy_id, depth, dataset_id in every:

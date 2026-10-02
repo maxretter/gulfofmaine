@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from heatwaves import products
 from heatwaves.models import Event, Series
+from heatwaves.stations import SourceName, Variable
 from heatwaves.sync import update_heatwaves
 from tests.conftest import add_series, fresh_database, seasonal_temperatures
 
@@ -45,16 +46,18 @@ def build(session: Session) -> None:
     salinity = pd.Series(32 + np.random.default_rng(3).normal(0, 0.1, len(days)), index=days)
 
     for values, depth, variable, source in (
-        (seasonal_temperatures("2003-01-01", END), 1, "temperature", "buoy"),
-        (at_50, 50, "temperature", "buoy"),
-        (salinity, 50, "salinity", "buoy"),
-        (satellite, 0, "temperature", "satellite"),
+        (seasonal_temperatures("2003-01-01", END), 1, Variable.TEMPERATURE, SourceName.BUOY),
+        (at_50, 50, Variable.TEMPERATURE, SourceName.BUOY),
+        (salinity, 50, Variable.SALINITY, SourceName.BUOY),
+        (satellite, 0, Variable.TEMPERATURE, SourceName.SATELLITE),
     ):
         update_heatwaves(session, add_series(session, values, "A01", depth, variable, source))
-    cell = session.scalars(select(Series).where(Series.source == "satellite")).one()
+    cell = session.scalars(select(Series).where(Series.source == SourceName.SATELLITE)).one()
     cell.latitude, cell.longitude, cell.distance_km = SATELLITE_CELL
     # heatwaves.origin needs more buoys than this to judge; each label is set as it might set it.
-    at_50_id = session.scalar(select(Series.id).where(Series.depth == 50, Series.variable == "temperature"))
+    at_50_id = session.scalar(
+        select(Series.id).where(Series.depth == 50, Series.variable == Variable.TEMPERATURE)
+    )
     for (first, last), label in HEATWAVES_AT_50.items():
         session.execute(
             update(Event)

@@ -23,7 +23,7 @@ import pandas as pd
 
 from heatwaves import hobday, qc
 from heatwaves.erddap import Erddap
-from heatwaves.stations import BASELINE
+from heatwaves.stations import BASELINE, Variable
 
 REFERENCE_URL = (
     "https://raw.githubusercontent.com/ecjoliver/marineHeatWaves/"
@@ -54,10 +54,10 @@ def load_reference(client: httpx.Client, directory: Path):
 
 
 def compare(erddap: Erddap, reference, dataset_id: str) -> bool:
-    raw = erddap.dataset(dataset_id, qc.columns(["temperature"]))
+    raw = erddap.dataset(dataset_id, qc.columns([Variable.TEMPERATURE]))
     if raw is None:
         raise ValueError(f"{dataset_id} has no data")
-    daily = qc.daily_means(qc.good_readings(raw, "temperature"))["value"]
+    daily = qc.daily_means(qc.good_readings(raw, Variable.TEMPERATURE))["value"]
 
     analysis = hobday.analyze(daily, BASELINE)
     ours = {(e.start, e.end, e.category) for e in analysis.events}

@@ -32,6 +32,7 @@ from heatwaves.live import (
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
 from heatwaves.state import SeriesState, state_of
+from heatwaves.stations import SourceName, Variable
 from heatwaves.sync import store, sync_series, update_heatwaves, update_origins
 from tests.conftest import A01_SYNC, NOW, TODAY, add_series, recorded_erddap, seasonal_temperatures
 
@@ -191,7 +192,7 @@ def test_a_sync_that_changes_no_day_announces_nothing(session, normal_until_yest
 
 def test_only_temperature_readings_and_states_go_on_the_feed(session):
     history = pd.Series(31.0, index=pd.date_range("2003-01-01", TODAY - dt.timedelta(days=1)))
-    salinity = add_series(session, history, variable="salinity")
+    salinity = add_series(session, history, variable=Variable.SALINITY)
     update_heatwaves(session, salinity)
     today = pd.Series([31.2], index=[pd.Timestamp(TODAY)])
 
@@ -209,7 +210,7 @@ def test_a_buoy_sync_publishes_its_newest_good_reading(monkeypatch, session):
     published: list[live.Message] = []
     monkeypatch.setattr(live, "publish", lambda session, messages: published.extend(messages))
 
-    sync_series(session, {"buoy": TabledapSource(recorded_erddap(A01_SYNC, []))}, series)
+    sync_series(session, {SourceName.BUOY: TabledapSource(recorded_erddap(A01_SYNC, []))}, series)
 
     # The recorded file's last row, at 16:30, has no temperature; the one before is good.
     [reading] = [message for message in published if message.type == "reading"]
@@ -253,7 +254,7 @@ def test_a_new_satellite_day_goes_out_at_each_buoy(session):
     # The satellite has no readings, and its states stay as they were.
     history = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=1))
     history.iloc[-12:] -= 2.0
-    cells = [add_series(session, history, buoy, source="satellite") for buoy in ("A01", "B01")]
+    cells = [add_series(session, history, buoy, source=SourceName.SATELLITE) for buoy in ("A01", "B01")]
     for cell in cells:
         update_heatwaves(session, cell)
     today = pd.DataFrame({"value": [11.0], "hours": [None]}, index=pd.DatetimeIndex([TODAY], name="date"))

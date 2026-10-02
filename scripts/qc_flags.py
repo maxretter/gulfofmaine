@@ -19,7 +19,7 @@ import httpx
 from heatwaves import qc
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap, same_origin
-from heatwaves.stations import SERIES, VARIABLES
+from heatwaves.stations import SERIES, SourceName, Variable
 
 SUSPECT = 3  # the QARTOD aggregate's flag for suspect; 4 is fail (qc.BAD_QARTOD_FLAGS)
 
@@ -70,11 +70,11 @@ def report(counts: dict[tuple[str, str], dict[Pair, int]]) -> list[str]:
 
 def flags_everywhere(erddap: Erddap) -> dict[tuple[str, str], dict[Pair, int]]:
     """flag_counts for every buoy dataset and variable the app reads."""
-    datasets = sorted({spec.dataset_id for spec in SERIES if spec.source == "buoy"})
+    datasets = sorted({spec.dataset_id for spec in SERIES if spec.source == SourceName.BUOY})
     return {
         (dataset_id, variable): flag_counts(erddap, dataset_id, variable)
         for dataset_id in datasets
-        for variable in VARIABLES
+        for variable in Variable
     }
 
 

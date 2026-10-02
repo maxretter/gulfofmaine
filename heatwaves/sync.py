@@ -41,7 +41,7 @@ from heatwaves.erddap import Erddap, same_origin
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, Source, connect
 from heatwaves.state import SeriesState
-from heatwaves.stations import BASELINE, BUOYS, SERIES
+from heatwaves.stations import BASELINE, BUOYS, SERIES, SourceName, Variable
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def ensure_catalog(session: Session, erddap: Erddap) -> bool:
     # Each buoy's position comes from its shallowest dataset.
     surface: dict[str, str] = {}  # dataset ID: buoy
     for spec in sorted(SERIES, key=lambda spec: spec.depth):
-        if spec.source == "buoy" and spec.buoy not in surface.values():
+        if spec.source == SourceName.BUOY and spec.buoy not in surface.values():
             surface[spec.dataset_id] = spec.buoy
     try:
         positions = {
@@ -113,7 +113,7 @@ def ensure_catalog(session: Session, erddap: Erddap) -> bool:
     return positions is not None
 
 
-def sync_series(session: Session, sources: Mapping[str, Source], series: Series) -> bool:
+def sync_series(session: Session, sources: Mapping[SourceName, Source], series: Series) -> bool:
     """Fetch what changed in a series and the rest of its dataset, and store it.
 
     True if anything was read.
@@ -198,17 +198,17 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             each.latest_reading_at = reading.time if reading else None
             each.latest_reading = reading.value if reading else None
             # Only a newer reading goes out on the live feed, which pages take as the latest.
-            if newer and each.variable == "temperature":
+            if newer and each.variable == Variable.TEMPERATURE:
                 messages.append(live.reading_message(each))
         updated = update_heatwaves(session, each, new_normal)
-        if each.variable == "temperature" and updated.after != updated.before:
+        if each.variable == Variable.TEMPERATURE and updated.after != updated.before:
             messages.append(live.status_message(each, updated.before, updated.after))
         changed += [
             (each.buoy_id, each.depth, first, last)
             for first, last in [(download.first_day, download.last_day), *updated.changed]
         ]
         revised += [(each.buoy_id, each.depth, first, last) for first, last in [*means, *updated.changed]]
-        if each.variable == "temperature" and updated.changed:
+        if each.variable == Variable.TEMPERATURE and updated.changed:
             heatwaves.add((each.buoy_id, each.depth))
         log.info(
             "%s: re-read %s to %s (%d days)",
@@ -327,7 +327,9 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
             changed.append((rows[0].date, rows[-1].date))
 
     frame = hobday.align(daily, normal) if normal is not None else None
-    events = hobday.detect_events(frame) if frame is not None and series.variable == "temperature" else []
+    events: list[hobday.Event] = []
+    if frame is not None and series.variable == Variable.TEMPERATURE:
+        events = hobday.detect_events(frame)
     changed += _replace_events(session, series, events)
     if frame is None:
         # The newest day still says whether the series is reporting, which
@@ -430,7 +432,7 @@ def update_origins(session: Session, changed: Collection[Change] | None = None) 
             Series.depth,
         )
         .join(Series)
-        .where(Series.source == "buoy", Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
+        .where(queries.AT_BUOY, Series.depth.in_(origin.DEPTHS))
     ).all()
     if changed is not None:
         events = [event for event in events if event.origin is None or _rests_on(event, changed)]
@@ -467,7 +469,7 @@ def _rests_on(event: Row, changed: Collection[Change]) -> bool:
     )
 
 
-def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], series_id: int) -> Outcome:
+def sync_one(session_factory: sessionmaker, sources: Mapping[SourceName, Source], series_id: int) -> Outcome:
     """Sync one series, and the others fetched with it, in a session of its own."""
     with session_factory() as session:
         series = session.get_one(Series, series_id)
@@ -526,7 +528,7 @@ def publish(
 def sync_all(
     session_factory: sessionmaker,
     erddap: Erddap,
-    sources: Mapping[str, Source],
+    sources: Mapping[SourceName, Source],
     everything: bool = True,
     products_dir: Path | None = None,
 ) -> int:
@@ -564,7 +566,7 @@ def sync_all(
             )
             if not everything:
                 reporting_since = now().date() - state.OFFLINE_AFTER
-                query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
+                query = query.where(Series.source == SourceName.BUOY, Series.latest_date >= reporting_since)
             series_ids = session.scalars(query).all()
         outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
         if products_dir is None:
@@ -606,7 +608,9 @@ def _changed_files(
             )
         ):
             changed |= {
-                key for key in after if key[0] == buoy_id and (source == "satellite" or key[1] == depth)
+                key
+                for key in after
+                if key[0] == buoy_id and (source == SourceName.SATELLITE or key[1] == depth)
             }
     return changed
 

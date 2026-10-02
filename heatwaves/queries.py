@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from heatwaves import origin
 from heatwaves.hobday import day_of_year
 from heatwaves.models import ClimatologyDay, DailyMean, Event, Series
+from heatwaves.stations import SourceName, Variable
 
 # Temperature at a buoy depth: the series every heatwave the API lists comes
 # from. The satellite's are at depth 0 over each buoy (heatwaves.stations),
 # and appear only where named.
-AT_BUOY = (Series.source == "buoy") & (Series.variable == "temperature")
-SATELLITE = (Series.source == "satellite") & (Series.variable == "temperature")
+AT_BUOY = (Series.source == SourceName.BUOY) & (Series.variable == Variable.TEMPERATURE)
+SATELLITE = (Series.source == SourceName.SATELLITE) & (Series.variable == Variable.TEMPERATURE)
 
 # Daily values go out to 0.001, from the API and in the daily CSV
 # (heatwaves.products), of a degree C or on the salinity scale, finer than any
@@ -178,9 +179,9 @@ def origin_record(
     in the whole record, and a mean over it comes to the same bits; heatwave
     days come whole for each heatwave with a day between them.
     """
-    series = session.scalars(select(Series).where(Series.source == "buoy")).all()
-    temperatures = [each for each in series if each.variable == "temperature"]
-    salinities = [each for each in series if each.variable == "salinity"]
+    series = session.scalars(select(Series).where(Series.source == SourceName.BUOY)).all()
+    temperatures = [each for each in series if each.variable == Variable.TEMPERATURE]
+    salinities = [each for each in series if each.variable == Variable.SALINITY]
     with_days = temperatures
     if around is not None:
         reads = set().union(*(origin.inputs(buoy, depth) for buoy, depth in around))

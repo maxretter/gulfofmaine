@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from heatwaves.models import Event, Series
+from heatwaves.stations import SourceName
 from tests.conftest import add_series, api_client, fresh_database
 
 
@@ -44,7 +45,9 @@ def client():
         )
         a01_20 = add_series(session, observed(("2020-07-01", "2021-01-31")), "A01", 20)
         b01_1 = add_series(session, observed(("2021-01-01", "2021-12-31")), "B01", 1)
-        over_a01 = add_series(session, observed(("2021-01-01", "2021-12-31")), "A01", source="satellite")
+        over_a01 = add_series(
+            session, observed(("2021-01-01", "2021-12-31")), "A01", source=SourceName.SATELLITE
+        )
         session.add_all(
             [
                 heatwave(a01_1, "2020-12-25", "2021-01-05"),

@@ -12,6 +12,8 @@ from collections.abc import Iterable
 import pandas as pd
 import xarray as xr
 
+from heatwaves.stations import Variable
+
 # Hourly bins a day needs for its mean to count. The current UTC day has
 # them once its 18th hour (17:00-18:00) has a reading, so it's stored from
 # about 18:00 UTC on the hours so far, and re-read as the rest arrive.
@@ -42,7 +44,7 @@ def flags(variable: str) -> tuple[str, str]:
     return f"{variable}_qc", f"{variable}_qc_agg"
 
 
-def good_readings(ds: xr.Dataset, variable: str = "temperature") -> pd.Series:
+def good_readings(ds: xr.Dataset, variable: str = Variable.TEMPERATURE) -> pd.Series:
     """One variable's readings from a raw ERDDAP tabledap response, less those either flag marks as bad.
 
     `ds` has a single `row` dimension holding `time`, the variable and its

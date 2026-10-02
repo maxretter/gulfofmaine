@@ -13,7 +13,7 @@ from sqlalchemy import insert, select
 from heatwaves.erddap import Axis, Erddap
 from heatwaves.models import DailyMean, Series
 from heatwaves.sources import GriddapSource, nearest_cell, years
-from heatwaves.stations import OISST, OISST_PRELIMINARY
+from heatwaves.stations import OISST, OISST_PRELIMINARY, SourceName
 from heatwaves.sync import ensure_catalog, sync_series
 from tests.conftest import CATALOG, COASTWATCH, OISST_SYNC, recorded_erddap
 
@@ -33,12 +33,14 @@ NEWEST = dt.datetime(2026, 9, 27, 12, tzinfo=dt.UTC)  # in oisst_preliminary_las
 def satellites(session) -> list[Series]:
     """Every buoy's satellite series, as the catalog creates them: no cell or data yet."""
     ensure_catalog(session, recorded_erddap(CATALOG, []))
-    return list(session.scalars(select(Series).where(Series.source == "satellite").order_by(Series.buoy_id)))
+    return list(
+        session.scalars(select(Series).where(Series.source == SourceName.SATELLITE).order_by(Series.buoy_id))
+    )
 
 
 def coastwatch(requests: list[str], start: dt.date = dt.date(2001, 1, 1)):
     erddap = recorded_erddap(OISST_SYNC, requests, COASTWATCH)
-    return {"satellite": GriddapSource(erddap, OISST, OISST_PRELIMINARY, start=start)}
+    return {SourceName.SATELLITE: GriddapSource(erddap, OISST, OISST_PRELIMINARY, start=start)}
 
 
 def days_of(session, series: Series) -> dict[dt.date, float]:
@@ -153,7 +155,7 @@ def test_a_day_erddap_snaps_to_is_stored_once(session, satellites):
     source = GriddapSource(SnappingErddap(), OISST, OISST_PRELIMINARY, start=dt.date(2025, 12, 30))
 
     # 2025 ends on the missing Dec 31, so ERDDAP answers with Jan 1, which 2026's request also returns.
-    assert sync_series(session, {"satellite": source}, a01)
+    assert sync_series(session, {SourceName.SATELLITE: source}, a01)
 
     days = sorted(days_of(session, a01))
     assert days == [dt.date(2025, 12, 30), dt.date(2026, 1, 1), dt.date(2026, 1, 2), dt.date(2026, 1, 3)]
@@ -187,7 +189,9 @@ def test_preliminary_days_are_replaced_however_far_the_final_product_falls_behin
     for series in satellites:
         series.latitude, series.longitude, series.distance_km = CELLS["A01"]
     erddap = TwoProducts(final=dt.date(2026, 6, 30), preliminary=dt.date(2026, 7, 14))
-    sources = {"satellite": GriddapSource(erddap, OISST, OISST_PRELIMINARY, start=dt.date(2026, 6, 1))}
+    sources = {
+        SourceName.SATELLITE: GriddapSource(erddap, OISST, OISST_PRELIMINARY, start=dt.date(2026, 6, 1))
+    }
     assert sync_series(session, sources, a01)
     assert a01.preliminary_from == dt.date(2026, 7, 1)
 

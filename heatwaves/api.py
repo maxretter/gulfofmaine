@@ -81,6 +81,8 @@ class BuoyOut(BaseModel):
     satellite: SatelliteCondition | None
 
 
+# stations.Variable's values, as the API takes them: a Literal of its members would have the schema
+# the same, but error messages show each member's repr (tests/test_api.py holds the two together).
 Variable = Literal["temperature", "salinity"]
 
 

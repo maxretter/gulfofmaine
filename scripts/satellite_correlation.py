@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from heatwaves import queries
 from heatwaves.models import Series
+from heatwaves.stations import SourceName
 
 DEPTH = 1  # meters: the buoys' depth nearest the surface
 
@@ -29,10 +30,7 @@ def paired_days(session: Session, depth: int = DEPTH) -> dict[str, pd.DataFrame]
     Buoys without both series, or without a normal for either, are left out.
     """
     series = session.scalars(
-        select(Series).where(
-            Series.variable == "temperature",
-            ((Series.source == "buoy") & (Series.depth == depth)) | (Series.source == "satellite"),
-        )
+        select(Series).where((queries.AT_BUOY & (Series.depth == depth)) | queries.SATELLITE)
     ).all()
     frames: dict[str, dict[str, pd.DataFrame]] = {}
     for each in series:
@@ -41,8 +39,8 @@ def paired_days(session: Session, depth: int = DEPTH) -> dict[str, pd.DataFrame]
             frames.setdefault(each.buoy_id, {})[each.source] = frame
     pairs = {}
     for buoy_id, by_source in sorted(frames.items()):
-        if "buoy" in by_source and "satellite" in by_source:
-            buoy, satellite = by_source["buoy"], by_source["satellite"]
+        if SourceName.BUOY in by_source and SourceName.SATELLITE in by_source:
+            buoy, satellite = by_source[SourceName.BUOY], by_source[SourceName.SATELLITE]
             pairs[buoy_id] = pd.DataFrame(
                 {
                     "buoy": buoy["value"],

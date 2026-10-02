@@ -5,7 +5,7 @@ import datetime as dt
 import pytest
 
 from heatwaves.models import Buoy, Series
-from heatwaves.stations import buoy_series, satellite_series
+from heatwaves.stations import SourceName, Variable, buoy_series, satellite_series
 from tests.conftest import NOW, TODAY
 
 # The API judges each sync against its clock, stopped at NOW, as are the sync times here.
@@ -19,14 +19,16 @@ def add(
     hours_since_sync: float | None,
     buoy_id: str = "A01",
     depth: int = 1,
-    variable: str = "temperature",
-    source: str = "buoy",
+    variable: Variable = Variable.TEMPERATURE,
+    source: SourceName = SourceName.BUOY,
     latest: dt.date | None = TODAY,
 ) -> None:
     """A series whose newest day is `latest`, last synced `hours_since_sync` ago (None: never)."""
     if session.get(Buoy, buoy_id) is None:
         session.add(Buoy(id=buoy_id, name="Test Buoy"))
-    spec = satellite_series(buoy_id) if source == "satellite" else buoy_series(buoy_id, depth, variable)
+    spec = (
+        satellite_series(buoy_id) if source == SourceName.SATELLITE else buoy_series(buoy_id, depth, variable)
+    )
     synced_at = None
     if hours_since_sync is not None:
         synced_at = NOW - dt.timedelta(hours=hours_since_sync)
@@ -57,7 +59,7 @@ def test_a_retired_buoy_behind_is_listed_without_failing(client, session):
 
 def test_the_satellite_behind_is_listed_without_failing(client, session):
     add(session, 0.1)
-    add(session, 6, source="satellite", latest=TODAY - dt.timedelta(days=1))  # CoastWatch down
+    add(session, 6, source=SourceName.SATELLITE, latest=TODAY - dt.timedelta(days=1))  # CoastWatch down
 
     response = client.get("/healthz")
 
@@ -80,7 +82,7 @@ def test_fails_once_no_buoy_still_reporting_has_synced(client, session):
     add(session, 5, "B01", 20)
     # Syncing the others doesn't make up for it.
     add(session, 0.1, "M01", 100, latest=RETIRED)
-    add(session, 0.1, source="satellite")
+    add(session, 0.1, source=SourceName.SATELLITE)
 
     response = client.get("/healthz")
 
@@ -107,7 +109,7 @@ def test_buoys_no_longer_reporting_dont_count(client, session):
 
 def test_series_never_synced_are_listed(client, session):
     add(session, None, latest=None)
-    add(session, None, variable="salinity", latest=None)
+    add(session, None, variable=Variable.SALINITY, latest=None)
 
     before = client.get("/healthz")
 
@@ -116,7 +118,7 @@ def test_series_never_synced_are_listed(client, session):
     assert before.json()["never_synced"] == ["A01 1 m salinity (buoy)", "A01 1 m temperature (buoy)"]
 
     add(session, 0.1, "B01", 1)
-    add(session, None, source="satellite", latest=None)
+    add(session, None, source=SourceName.SATELLITE, latest=None)
 
     after = client.get("/healthz")
 

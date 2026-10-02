@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from heatwaves.stations import SourceName, Variable
 from heatwaves.sync import update_heatwaves
 from scripts import satellite_correlation
 from tests.conftest import add_series, seasonal_temperatures
@@ -21,15 +22,15 @@ def test_temperatures_correlate_through_the_seasons_and_anomalies_only_when_shar
     a01 = a01.drop(a01["2010-03-01":"2010-03-31"].index)
     a01_satellite = a01_satellite.drop(a01_satellite["2015-06-01":"2015-06-30"].index)
     for values, buoy, depth, source in (
-        (a01, "A01", 1, "buoy"),
-        (a01_satellite, "A01", 0, "satellite"),
-        (seasonal_temperatures(START, END, seed=3), "B01", 1, "buoy"),
-        (seasonal_temperatures(START, END, seed=4), "B01", 0, "satellite"),
+        (a01, "A01", 1, SourceName.BUOY),
+        (a01_satellite, "A01", 0, SourceName.SATELLITE),
+        (seasonal_temperatures(START, END, seed=3), "B01", 1, SourceName.BUOY),
+        (seasonal_temperatures(START, END, seed=4), "B01", 0, SourceName.SATELLITE),
         # Not compared: no satellite series, and a depth other than 1 m.
-        (seasonal_temperatures(START, END, seed=5), "N01", 1, "buoy"),
-        (seasonal_temperatures(START, END, seed=6), "B01", 50, "buoy"),
+        (seasonal_temperatures(START, END, seed=5), "N01", 1, SourceName.BUOY),
+        (seasonal_temperatures(START, END, seed=6), "B01", 50, SourceName.BUOY),
     ):
-        update_heatwaves(session, add_series(session, values, buoy, depth, "temperature", source))
+        update_heatwaves(session, add_series(session, values, buoy, depth, Variable.TEMPERATURE, source))
 
     pairs = satellite_correlation.paired_days(session)
     assert list(pairs) == ["A01", "B01"]

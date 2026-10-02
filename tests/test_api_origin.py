@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from heatwaves import origin, queries
+from heatwaves.stations import Variable
 from heatwaves.sync import update_heatwaves, update_origins
 from tests.conftest import add_series, api_client, fresh_database, seasonal_temperatures
 
@@ -42,7 +43,7 @@ def region():
             (warmed(-3, 3, slice("2021-03-20", "2021-04-05")), "M01", 100),
         ):
             update_heatwaves(session, add_series(session, values, buoy_id, depth))
-        update_heatwaves(session, add_series(session, salinity, "A01", 50, variable="salinity"))
+        update_heatwaves(session, add_series(session, salinity, "A01", 50, variable=Variable.SALINITY))
         update_origins(session)
         session.commit()
         yield session_factory

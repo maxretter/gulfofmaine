@@ -8,6 +8,7 @@ import pytest
 
 from heatwaves import queries
 from heatwaves.models import Series
+from heatwaves.stations import SourceName, Variable
 from heatwaves.sync import update_heatwaves
 from tests.conftest import (
     TODAY,
@@ -50,12 +51,16 @@ def client():
             (offline, "B01", 1),
         ):
             update_heatwaves(session, add_series(session, values, buoy_id, depth))
-        over_b01 = add_series(session, satellite, "B01", source="satellite")
+        over_b01 = add_series(session, satellite, "B01", source=SourceName.SATELLITE)
         over_b01.latitude, over_b01.longitude, over_b01.distance_km = 43.125, -70.375, 7.5
         update_heatwaves(session, over_b01)
         # A series the sync has created but found no data for yet.
         empty = Series(
-            buoy_id="B01", depth=20, variable="temperature", source="buoy", dataset_id="B01_ocean_020m"
+            buoy_id="B01",
+            depth=20,
+            variable=Variable.TEMPERATURE,
+            source=SourceName.BUOY,
+            dataset_id="B01_ocean_020m",
         )
         session.add(empty)
         update_heatwaves(session, empty)

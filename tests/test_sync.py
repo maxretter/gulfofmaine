@@ -32,7 +32,7 @@ from heatwaves.erddap import Erddap, format_time, parse_time
 from heatwaves.main import app
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, GriddapSource, TabledapSource
-from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
+from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES, SourceName, Variable
 from heatwaves.sync import ensure_catalog, publish, sync_all, sync_one, sync_series
 from tests.conftest import (
     A01_SYNC,
@@ -54,7 +54,7 @@ postgres_only = pytest.mark.skipif(
 
 
 def buoy_sources(erddap):
-    return {"buoy": TabledapSource(erddap)}
+    return {SourceName.BUOY: TabledapSource(erddap)}
 
 
 @pytest.fixture
@@ -109,7 +109,7 @@ def test_sync_stops_after_one_request_when_nothing_changed(session, series):
 
 def test_sync_fetches_every_variable_of_a_dataset_at_once(session, series):
     salinity = add_series(
-        session, pd.Series(31.0, index=pd.date_range("2026-09-01", "2026-09-27")), variable="salinity"
+        session, pd.Series(31.0, index=pd.date_range("2026-09-01", "2026-09-27")), variable=Variable.SALINITY
     )
     salinity.modified_through = series.modified_through
     session.commit()
@@ -231,7 +231,7 @@ class StampedErddap(Erddap):
 def test_a_reprocessing_is_downloaded_once():
     mark = dt.datetime(2026, 9, 1, tzinfo=dt.UTC)
     erddap = StampedErddap(dt.datetime(2026, 6, 1, tzinfo=dt.UTC), mark - dt.timedelta(minutes=30))
-    series = Series(id=1, dataset_id="A01_ocean_001m", variable="temperature", modified_through=mark)
+    series = Series(id=1, dataset_id="A01_ocean_001m", variable=Variable.TEMPERATURE, modified_through=mark)
     source = TabledapSource(erddap)
     # UMaine replaces June and July with post-recovery data.
     for time in erddap.stamps:
@@ -255,7 +255,7 @@ def test_a_reprocessing_is_downloaded_once():
 def test_a_row_that_reaches_erddap_late_is_still_read():
     mark = dt.datetime(2026, 9, 1, tzinfo=dt.UTC)
     erddap = StampedErddap(dt.datetime(2026, 8, 1, tzinfo=dt.UTC), mark - dt.timedelta(minutes=30))
-    series = Series(id=1, dataset_id="A01_ocean_001m", variable="temperature", modified_through=mark)
+    series = Series(id=1, dataset_id="A01_ocean_001m", variable=Variable.TEMPERATURE, modified_through=mark)
     # The buoy was quiet from Aug 30 to midday on Aug 31, but for one reading: stamped before the
     # sync read up to the mark, it reaches ERDDAP after.
     quiet = (dt.datetime(2026, 8, 30, tzinfo=dt.UTC), dt.datetime(2026, 8, 31, 12, tzinfo=dt.UTC))
@@ -352,10 +352,10 @@ def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, s
     days = pd.date_range("2025-01-01", "2025-06-30")
     with session_factory() as session:
         for buoy_id, depth, source in (
-            ("A01", 1, "buoy"),
-            ("A01", 50, "buoy"),
-            ("B01", 20, "buoy"),
-            ("A01", 0, "satellite"),
+            ("A01", 1, SourceName.BUOY),
+            ("A01", 50, SourceName.BUOY),
+            ("B01", 20, SourceName.BUOY),
+            ("A01", 0, SourceName.SATELLITE),
         ):
             add_series(session, pd.Series(10.0, index=days), buoy_id, depth, source=source)
         # A heatwave at B01 20 m, whose origin nothing at A01 bears on.
@@ -382,7 +382,12 @@ def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, s
         """The files a round rewrites, in which these datasets have new days."""
         source.new = new
         written = {path.name: path.stat().st_mtime_ns for path in tmp_path.rglob("*.*")}
-        sync_all(session_factory, erddap, {"buoy": source, "satellite": source}, products_dir=tmp_path)
+        sync_all(
+            session_factory,
+            erddap,
+            {SourceName.BUOY: source, SourceName.SATELLITE: source},
+            products_dir=tmp_path,
+        )
         return {
             path.name for path in tmp_path.rglob("*.*") if written.get(path.name) != path.stat().st_mtime_ns
         }
@@ -483,7 +488,12 @@ def test_a_buoy_depth_whose_data_are_all_deleted_upstream_loses_its_files(sessio
     def round_in_which(*gone: str) -> list[str]:
         """The products the API lists after a round in which these datasets lose every row."""
         source = Emptied(*gone)
-        sync_all(session_factory, erddap, {"buoy": source, "satellite": source}, products_dir=tmp_path)
+        sync_all(
+            session_factory,
+            erddap,
+            {SourceName.BUOY: source, SourceName.SATELLITE: source},
+            products_dir=tmp_path,
+        )
         assert not list(tmp_path.rglob("*.partial"))
         return [product["name"] for product in client.get("/api/data").json()["products"]]
 
@@ -613,14 +623,14 @@ def test_a_failed_catalog_doesnt_stop_the_round(session_factory):
     erddap = Erddap("https://data.neracoos.org/erddap", httpx.Client(transport=httpx.MockTransport(neracoos)))
     coastwatch = recorded_erddap(OISST_SYNC, [], COASTWATCH)
     sources = {
-        "buoy": TabledapSource(erddap),
-        "satellite": GriddapSource(coastwatch, OISST, OISST_PRELIMINARY, start=dt.date(2026, 8, 27)),
+        SourceName.BUOY: TabledapSource(erddap),
+        SourceName.SATELLITE: GriddapSource(coastwatch, OISST, OISST_PRELIMINARY, start=dt.date(2026, 8, 27)),
     }
 
     assert sync_all(session_factory, erddap, sources) == 1  # the catalog
 
     with session_factory() as session:
-        satellites = session.scalars(select(Series).where(Series.source == "satellite")).all()
+        satellites = session.scalars(select(Series).where(Series.source == SourceName.SATELLITE)).all()
         assert {each.modified_through for each in satellites} == {dt.datetime(2026, 9, 27, 12, tzinfo=dt.UTC)}
         assert session.get_one(Buoy, "A01").latitude == 42.5183  # as stored
 
@@ -673,9 +683,13 @@ def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_
     today = stopped_clock.date()
     with session_factory() as session:
         reporting = add_series(session, pd.Series([15.0], index=[pd.Timestamp(today)]))
-        salinity = add_series(session, pd.Series([31.0], index=[pd.Timestamp(today)]), variable="salinity")
+        salinity = add_series(
+            session, pd.Series([31.0], index=[pd.Timestamp(today)]), variable=Variable.SALINITY
+        )
         retired = add_series(session, pd.Series([9.0], index=[pd.Timestamp("2025-09-17")]), "M01", 100)
-        satellite = add_series(session, pd.Series([15.5], index=[pd.Timestamp(today)]), source="satellite")
+        satellite = add_series(
+            session, pd.Series([15.5], index=[pd.Timestamp(today)]), source=SourceName.SATELLITE
+        )
         for each in (reporting, salinity, satellite):
             each.latest_date = today
         retired.latest_date = dt.date(2025, 9, 17)
@@ -703,7 +717,7 @@ def test_a_round_checks_everything_while_the_database_has_no_series(session_fact
     with session_factory() as session:
         assert len(session.scalars(select(Series)).all()) == len(SERIES)
     # The catalog, then each buoy dataset.
-    assert len(requests) == 1 + len({spec.dataset_id for spec in SERIES if spec.source == "buoy"})
+    assert len(requests) == 1 + len({spec.dataset_id for spec in SERIES if spec.source == SourceName.BUOY})
 
 
 def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_factory, stopped_clock):
@@ -908,25 +922,27 @@ def test_a_store_judges_again_only_the_origins_its_days_bear_on(monkeypatch, ses
     salinity = pd.Series(32 + np.random.default_rng(9).normal(0, 0.1, len(days)), index=days)
     salinity[calm] = 32.3
     region = {
-        ("A01", 50, "temperature"): warmed(0, 0, slice("2025-04-14", "2025-04-28")),
-        ("A01", 1, "temperature"): warmed(6, 1),
-        ("M01", 50, "temperature"): warmed(0, 2, slice("2025-02-13", "2025-02-22")),
-        ("M01", 100, "temperature"): warmed(-3, 3, slice("2025-03-20", "2025-04-05")),
-        ("A01", 50, "salinity"): salinity,
+        ("A01", 50, Variable.TEMPERATURE): warmed(0, 0, slice("2025-04-14", "2025-04-28")),
+        ("A01", 1, Variable.TEMPERATURE): warmed(6, 1),
+        ("M01", 50, Variable.TEMPERATURE): warmed(0, 2, slice("2025-02-13", "2025-02-22")),
+        ("M01", 100, Variable.TEMPERATURE): warmed(-3, 3, slice("2025-03-20", "2025-04-05")),
+        ("A01", 50, Variable.SALINITY): salinity,
     }
     series = {key: add_series(session, values, *key) for key, values in region.items()}
     for each in series.values():
         sync.update_heatwaves(session, each)
     sync.update_origins(session)
     onset = dt.date(2025, 4, 14)
-    april = session.scalars(select(Event).where(Event.series_id == series["A01", 50, "temperature"].id)).one()
+    april = session.scalars(
+        select(Event).where(Event.series_id == series["A01", 50, Variable.TEMPERATURE].id)
+    ).one()
     judged: list[tuple[str, int, dt.date]] = []
     judge = sync.origin.judge
     monkeypatch.setattr(
         sync.origin, "judge", lambda record, *event: judged.append(event) or judge(record, *event)
     )
 
-    def store(key: tuple[str, int, str], days: slice, change: float) -> list[tuple[str, int, dt.date]]:
+    def store(key: tuple[str, int, Variable], days: slice, change: float) -> list[tuple[str, int, dt.date]]:
         """The heatwaves whose origin storing these days of a series, changed by `change`, judges again."""
         judged.clear()
         sync.store(session, [series[key]], download(series[key], region[key][days] + change))
@@ -938,7 +954,7 @@ def test_a_store_judges_again_only_the_origins_its_days_bear_on(monkeypatch, ses
         events = session.execute(
             select(Event.origin, Event.evidence, Event.start_date, Series.buoy_id, Series.depth)
             .join(Series)
-            .where(Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
+            .where(Series.variable == Variable.TEMPERATURE, Series.depth.in_(origin.DEPTHS))
         ).all()
         return all(
             event.evidence == judge(record, event.buoy_id, event.depth, event.start_date).to_json()
@@ -949,9 +965,9 @@ def test_a_store_judges_again_only_the_origins_its_days_bear_on(monkeypatch, ses
     assert judged_afresh()
     evidence = [april.evidence]
     for key, days, change in [
-        (("A01", 1, "temperature"), slice("2025-03-20", "2025-04-10"), -3.0),  # stratification
-        (("M01", 100, "temperature"), slice("2025-03-20", "2025-04-05"), -2.5),  # no heatwave at depth
-        (("A01", 50, "salinity"), slice("2025-04-01", "2025-04-20"), -0.3),  # fresher
+        (("A01", 1, Variable.TEMPERATURE), slice("2025-03-20", "2025-04-10"), -3.0),  # stratification
+        (("M01", 100, Variable.TEMPERATURE), slice("2025-03-20", "2025-04-05"), -2.5),  # no heatwave at depth
+        (("A01", 50, Variable.SALINITY), slice("2025-04-01", "2025-04-20"), -0.3),  # fresher
     ]:
         assert store(key, days, change) == [("A01", 50, onset)]
         session.refresh(april)
@@ -962,15 +978,15 @@ def test_a_store_judges_again_only_the_origins_its_days_bear_on(monkeypatch, ses
     # A new heatwave at A01 50 m gets its origin, though its window runs past the record's
     # end; the April one, unchanged, keeps its row.
     june = ("A01", 50, dt.date(2025, 6, 20))
-    assert store(("A01", 50, "temperature"), slice("2025-06-20", None), 2.5) == [june]
+    assert store(("A01", 50, Variable.TEMPERATURE), slice("2025-06-20", None), 2.5) == [june]
     assert judged_afresh()
     assert session.get_one(Event, april.id).evidence == evidence[-1]
 
     # The first day the April heatwave's origin reads, and the day before.
     first = pd.Timestamp(origin.window(onset)[0])
-    assert store(("A01", 1, "temperature"), slice(first, first), 0.1) == [("A01", 50, onset)]
+    assert store(("A01", 1, Variable.TEMPERATURE), slice(first, first), 0.1) == [("A01", 50, onset)]
     before = first - pd.Timedelta(days=1)
-    assert store(("A01", 1, "temperature"), slice(before, before), 0.1) == []
+    assert store(("A01", 1, Variable.TEMPERATURE), slice(before, before), 0.1) == []
     assert judged_afresh()
 
 
@@ -1110,9 +1126,9 @@ def test_a_second_sync_waits_for_the_first_to_commit(session_factory, series):
 
     with ThreadPoolExecutor(2) as pool:
         try:
-            syncing = pool.submit(sync_one, session_factory, {"buoy": first}, series.id)
+            syncing = pool.submit(sync_one, session_factory, {SourceName.BUOY: first}, series.id)
             assert first.asked.wait(10)  # the first has the lock, and is partway through its download
-            waiting = pool.submit(sync_one, session_factory, {"buoy": second}, series.id)
+            waiting = pool.submit(sync_one, session_factory, {SourceName.BUOY: second}, series.id)
 
             assert waits_for_the_sync_lock(session_factory, waiting)
             assert second.started_from == []
@@ -1144,7 +1160,7 @@ def test_a_recompute_or_the_catalog_waits_for_a_sync_in_progress(
 
     with ThreadPoolExecutor(2) as pool:
         try:
-            syncing = pool.submit(sync_one, session_factory, {"buoy": held}, series.id)
+            syncing = pool.submit(sync_one, session_factory, {SourceName.BUOY: held}, series.id)
             assert held.asked.wait(10)
             waiting = pool.submit(other, session_factory)
 

@@ -351,6 +351,7 @@ import datetime as dt, runpy, sys, time
 import xarray as xr
 from heatwaves import db
 from heatwaves.models import Base, Buoy, DailyMean, Series
+from heatwaves.stations import SourceName, Variable
 
 def forever(ds, path, **kwargs):
     path.write_bytes(b"started")
@@ -360,7 +361,9 @@ xr.Dataset.to_netcdf = forever
 Base.metadata.create_all(db.engine)
 with db.SessionLocal() as session:
     session.add(Buoy(id="A01", name="Massachusetts Bay", latitude=42.5, longitude=-70.6))
-    series = Series(buoy_id="A01", depth=1, variable="temperature", source="buoy", dataset_id="A01")
+    series = Series(
+        buoy_id="A01", depth=1, variable=Variable.TEMPERATURE, source=SourceName.BUOY, dataset_id="A01"
+    )
     session.add(series)
     session.flush()
     session.add(DailyMean(series_id=series.id, date=dt.date(2025, 1, 1), value=10.0, hours=24))
