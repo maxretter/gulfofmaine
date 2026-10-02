@@ -108,10 +108,12 @@ describe("router", () => {
     expect(screen.getByText("Loading…")).toBeTruthy();
     expect(screen.queryByText("Live from the buoys")).toBeNull();
 
-    expect(await screen.findByText("Western Maine Shelf")).toBeTruthy();
+    // The page's code, Leaflet's with it, is compiled on its first import here, which on a busy machine has taken
+    // nearly 3 s: longer than findByText waits by default.
+    expect(await screen.findByText("Western Maine Shelf", {}, { timeout: 10_000 })).toBeTruthy();
     expect(document.querySelector(".map.leaflet-container")).toBeTruthy();
     expect(screen.queryByText("Something went wrong")).toBeNull();
-  });
+  }, 15_000);
 
   it("dims the page it leaves while the next one's code is on its way", async () => {
     renderAt("/nowhere");
