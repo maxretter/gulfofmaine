@@ -1,8 +1,9 @@
+import { usePrefetchQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { Link, NavLink, Outlet, ScrollRestoration, useNavigation } from "react-router";
 
 import { alertId, enteredHeatwave, LiveContext, useLiveFeed } from "../api/live";
-import { useBuoys } from "../api/queries";
+import { methodQuery, originRulesQuery, useBuoys } from "../api/queries";
 import type { StatusMessage } from "../api/types";
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
 import { LiveIndicator } from "../components/LiveIndicator";
@@ -12,6 +13,10 @@ import { latest } from "../lib/dates";
 import { formatDate } from "../lib/format";
 
 export function Layout() {
+  // Small, fixed and wanted by most pages, and the satellite page's comparisons wait on the method's depths, so both
+  // are asked for at once, while a page's own code is still on its way.
+  usePrefetchQuery(methodQuery);
+  usePrefetchQuery(originRulesQuery);
   const [alerts, setAlerts] = useState<StatusMessage[]>([]);
   // Each heatwave is announced once: today's mean is recomputed as readings arrive, and one near the threshold can
   // tip in and out of a heatwave more than once in an evening.

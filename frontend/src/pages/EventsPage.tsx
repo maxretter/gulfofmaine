@@ -1,7 +1,8 @@
+import { usePrefetchQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { useBuoys, useEvents } from "../api/queries";
+import { annualQuery, useBuoys, useEvents } from "../api/queries";
 import type { Origin } from "../api/types";
 import { AnnualHeatmap } from "../components/AnnualHeatmap";
 import { CategoryLabel, OriginLabel } from "../components/Label";
@@ -26,6 +27,8 @@ export function EventsPage() {
   const { filters, sort } = parseEventParams(params);
   const events = useEvents();
   const buoys = useBuoys();
+  // The heatmap's, asked for here, before the returns below, so it loads alongside the heatwaves, not after them.
+  usePrefetchQuery(annualQuery(filters.depth, filters.minCategory, filters.origin));
   const navigate = useNavigate();
   const [shown, setShown] = useState(PAGE);
 

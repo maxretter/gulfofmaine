@@ -1,4 +1,4 @@
-import { keepPreviousData, useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
 import type {
@@ -88,16 +88,20 @@ export function useEvents() {
  * Heatwave days and observed days per buoy and year, at `depth` or, if null, at any depth, where a day counts once
  * however many depths were in a heatwave. Only heatwaves of at least `minCategory`, and of `origin` if given, count.
  */
-export function useAnnual(depth: number | null, minCategory: number, origin: Origin | null) {
+export function annualQuery(depth: number | null, minCategory: number, origin: Origin | null) {
   const params = new URLSearchParams();
   if (depth !== null) params.set("depth", String(depth));
   if (minCategory > 1) params.set("min_category", String(minCategory));
   if (origin !== null) params.set("origin", origin);
-  return useQuery({
+  return queryOptions({
     queryKey: [...keys.annual, depth, minCategory, origin],
     queryFn: () => getJSON<YearSummary[]>(`/api/annual?${params}`),
     placeholderData: keepPreviousData,
   });
+}
+
+export function useAnnual(depth: number | null, minCategory: number, origin: Origin | null) {
+  return useQuery(annualQuery(depth, minCategory, origin));
 }
 
 /** Each buoy's heatwave days against the satellite's, per year, at several depths. */
@@ -207,19 +211,24 @@ export function useDataCatalog() {
   return useQuery({ queryKey: ["data"], queryFn: () => getJSON<DataCatalog>("/api/data") });
 }
 
+/** The rules that label a heatwave's origin: fixed in the code, so fetched once. */
+export const originRulesQuery = queryOptions({
+  queryKey: keys.originRules,
+  queryFn: () => getJSON<OriginRules>("/api/origin/rules"),
+  staleTime: Infinity,
+});
+
 export function useOriginRules() {
-  return useQuery({
-    queryKey: keys.originRules,
-    queryFn: () => getJSON<OriginRules>("/api/origin/rules"),
-    staleTime: Infinity,
-  });
+  return useQuery(originRulesQuery);
 }
 
 /** The method's parameters, and the depths the map shows: fixed in the code, so fetched once. */
+export const methodQuery = queryOptions({
+  queryKey: keys.method,
+  queryFn: () => getJSON<Method>("/api/method"),
+  staleTime: Infinity,
+});
+
 export function useMethod() {
-  return useQuery({
-    queryKey: keys.method,
-    queryFn: () => getJSON<Method>("/api/method"),
-    staleTime: Infinity,
-  });
+  return useQuery(methodQuery);
 }
