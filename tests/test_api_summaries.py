@@ -94,7 +94,7 @@ def resampled(anomalies: list[pd.Series], min_days: int = 15) -> pd.DataFrame:
         means.append(months.mean()[months.count() >= min_days])
     if not means:
         return pd.DataFrame({"anomaly": [], "series": []}, index=pd.DatetimeIndex([], name="month"))
-    table = pd.concat(means, axis=1)
+    table = pd.concat(means, axis=1, sort=True)
     frame = pd.DataFrame({"anomaly": table.mean(axis=1), "series": table.count(axis=1)})
     frame.index.name = "month"
     return frame[frame["series"] > 0].sort_index()

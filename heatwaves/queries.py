@@ -187,7 +187,7 @@ def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.Da
         means.append(pd.Series(enough.to_numpy(), index=first_days))
     if not means:
         return pd.DataFrame({"anomaly": [], "series": []}, index=pd.DatetimeIndex([], name="month"))
-    table = pd.concat(means, axis=1)
+    table = pd.concat(means, axis=1, sort=True)  # the months in order, as pandas 4 won't by default
     frame = pd.DataFrame({"anomaly": table.mean(axis=1), "series": table.count(axis=1)})
     frame.index.name = "month"
     return frame[frame["series"] > 0].sort_index()
