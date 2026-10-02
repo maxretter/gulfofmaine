@@ -61,12 +61,14 @@ export function EventsPage() {
 
   const matching = sortEvents(filterEvents(events.data, filters), sort);
   // The year filter matches heatwaves that overlap the year, so every year one ran into is offered, not only those
-  // one began in; and the year filtered to, as a heatmap cell can choose a year without any.
+  // one began in. Each menu offers the value filtered to as well, so none reads "All" over a filtered list: a heatmap
+  // cell can choose a year without heatwaves, and a link can name a depth or buoy without any.
   const years = new Set(filters.year === null ? [] : [filters.year]);
+  const depths = new Set(filters.depth === null ? [] : [filters.depth]);
   for (const e of events.data) {
     for (let year = Number(e.start_date.slice(0, 4)); year <= Number(e.end_date.slice(0, 4)); year++) years.add(year);
+    depths.add(e.depth);
   }
-  const depths = [...new Set(events.data.map((e) => e.depth))].sort((a, b) => a - b);
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
   const buoyCount = new Set(events.data.map((e) => e.buoy_id)).size;
   const filteredBuoy = buoys.data?.find((b) => b.id === filters.buoy);
@@ -108,6 +110,7 @@ export function EventsPage() {
                 {b.id} {b.name}
               </option>
             ))}
+            {filters.buoy && !filteredBuoy && <option value={filters.buoy}>{filters.buoy}</option>}
           </select>
         </label>
         <label>
@@ -118,7 +121,7 @@ export function EventsPage() {
             onChange={(e) => setFilters({ depth: e.target.value ? Number(e.target.value) : null })}
           >
             <option value="">All</option>
-            {depths.map((d) => (
+            {[...depths].sort((a, b) => a - b).map((d) => (
               <option key={d} value={d}>
                 {d} m
               </option>

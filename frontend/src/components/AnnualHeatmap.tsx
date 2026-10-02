@@ -53,6 +53,7 @@ export function AnnualHeatmap({ buoys, depth, minCategory, origin, selected, onS
       className="chart clickable"
       loading={annual.isPlaceholderData}
       error={annual.isError && "Couldn't load the yearly summary."}
+      empty={annual.data?.length === 0 && `No buoy has data${depth === null ? "" : ` at ${depth} m`}.`}
       minHeight={44 + buoys.length * 30}
       legend={
         <div className="legend">

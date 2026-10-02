@@ -40,8 +40,13 @@ function renderAt(path: string, heatwaves: HeatwaveEvent[] = events) {
   );
 }
 
-const yearSelect = () => screen.getByText("Year").closest("label")!.querySelector("select")!;
-const offered = () => within(yearSelect()).getAllByRole("option").map((o) => o.textContent);
+const select = (label: string) =>
+  [...document.querySelectorAll(".filter-label")]
+    .find((l) => l.textContent === label)!
+    .closest("label")!
+    .querySelector("select")!;
+const yearSelect = () => select("Year");
+const offered = (label = "Year") => within(select(label)).getAllByRole("option").map((o) => o.textContent);
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response("[]")));
@@ -84,5 +89,15 @@ describe("EventsPage", () => {
 
     expect(offered()).toEqual(["All", "2015", "2014", "2013", "2012"]);
     expect(yearSelect().value).toBe("2014");
+  });
+
+  it("offers a depth or buoy filtered to that no heatwave has, rather than reading All over an empty list", () => {
+    renderAt("/events?depth=7&buoy=zzz");
+
+    expect(offered("Depth")).toEqual(["All", "7 m", "20 m"]);
+    expect(select("Depth").selectedOptions[0].textContent).toBe("7 m");
+    expect(offered("Buoy")).toEqual(["All", "ZZZ"]);
+    expect(select("Buoy").selectedOptions[0].textContent).toBe("ZZZ");
+    expect(screen.getByText("0 heatwaves, 0 days in all.")).toBeTruthy();
   });
 });

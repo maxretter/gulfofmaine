@@ -58,6 +58,24 @@ afterEach(() => {
 });
 
 describe("AnnualHeatmap", () => {
+  it("says so when no buoy has data at the depth, rather than drawing nothing", () => {
+    client.setQueryData([...keys.annual, 7, 1, null], []);
+    const { getByText } = render(
+      <QueryClientProvider client={client}>
+        <AnnualHeatmap
+          buoys={buoys}
+          depth={7}
+          minCategory={1}
+          origin={null}
+          selected={{ buoy: null, year: null }}
+          onSelect={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(getByText("No buoy has data at 7 m.")).toBeTruthy();
+  });
+
   it("starts at the recent years, and stays where the reader scrolled when a cell is selected", () => {
     const { container, rerender } = render(heatmap({ buoy: null, year: null }));
     const frame = container.querySelector<HTMLElement>(".chart")!;
