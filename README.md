@@ -144,7 +144,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   threshold, anomaly and heatwave category, each heatwave's origin, salinity,
   and the satellite's record at each buoy but N01) and an events table, each
   also as CSV. After a sync round that stores new data, the job rewrites the
-  files of each buoy and depth whose data changed, and the events table. They
+  files of each buoy and depth whose data changed, and the events table, and
+  removes the files of one whose data were all deleted upstream. They
   follow the CF conventions 1.11 as discrete sampling geometries, one time
   series per file, with ACDD 1.3 metadata, and are built from the same reads
   as the JSON API. The daily CSV gives each value to the API's 0.001, the

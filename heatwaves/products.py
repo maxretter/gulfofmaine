@@ -23,7 +23,8 @@ Values come from the same reads as the JSON API (heatwaves.queries), so the
 files and the API can't disagree; the daily CSV gives them to DECIMALS
 places as the API does, and the NetCDF keeps every digit. The sync job
 rewrites a buoy depth's files when its data change, and the events each
-time, replacing each file whole, so a reader never sees half of one.
+time, replacing each file whole, so a reader never sees half of one; a
+buoy depth whose data are all gone, deleted upstream, loses its files.
 """
 
 import argparse
@@ -477,7 +478,9 @@ def write(session: Session, directory: Path, depths: Collection[tuple[str, int]]
     """Write the products to `directory`, replacing each file whole.
 
     Every daily file, or those of `depths`, by buoy and depth, and any
-    missing; the events each time.
+    missing; the events each time. A buoy depth with no data, as when every
+    daily mean was deleted upstream, has no files, and the events have none
+    while there are no heatwaves: any left from before are removed.
     """
     (directory / DAILY).mkdir(parents=True, exist_ok=True)
     satellites = {
@@ -495,15 +498,21 @@ def write(session: Session, directory: Path, depths: Collection[tuple[str, int]]
         buoy = session.get_one(Buoy, buoy_id)
         table = daily_table(session, buoy, depth)
         if table is None:
+            _remove(nc)
+            _remove(csv)
             continue
         ds = daily_dataset(table, buoy, depth, dataset_id, satellites.get(buoy_id))
         _replace(nc, partial(_write_netcdf, ds))
         _replace(csv, daily_csv(table).to_csv)
 
     events = events_table(session)
-    if not events.empty:
-        _replace(events_path(directory, "nc"), partial(_write_netcdf, events_dataset(events)))
-        _replace(events_path(directory, "csv"), partial(events_csv(events).to_csv, index=False))
+    nc, csv = (events_path(directory, format) for format in FORMATS)
+    if events.empty:
+        _remove(nc)
+        _remove(csv)
+    else:
+        _replace(nc, partial(_write_netcdf, events_dataset(events)))
+        _replace(csv, partial(events_csv(events).to_csv, index=False))
 
 
 def _replace(path: Path, write: Callable[[Path], object]) -> None:
@@ -525,6 +534,15 @@ def _replace(path: Path, write: Callable[[Path], object]) -> None:
         os.replace(partial, path)
     finally:
         partial.unlink(missing_ok=True)  # still there only if the write failed
+
+
+def _remove(path: Path) -> None:
+    """Remove a file whose data are gone, if it's there.
+
+    At once, as `_replace` moves one into place: readers see the old file
+    or none, and one that has it open reads it to the end.
+    """
+    path.unlink(missing_ok=True)
 
 
 def _new_file_mode() -> int:

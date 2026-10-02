@@ -1,6 +1,7 @@
 """The sync against recorded ERDDAP responses (see tests/conftest.py)."""
 
 import datetime as dt
+import io
 import json
 import operator
 import os
@@ -23,9 +24,10 @@ from sqlalchemy import delete, event, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-from heatwaves import hobday, live, origin, queries, sync
+from heatwaves import api, hobday, live, origin, queries, sync
 from heatwaves.config import settings
 from heatwaves.erddap import Erddap, format_time, parse_time
+from heatwaves.main import app
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, GriddapSource, TabledapSource
 from heatwaves.stations import OISST, OISST_PRELIMINARY, SERIES
@@ -434,6 +436,64 @@ def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, s
         with pytest.raises(OSError):
             round_of(A01_ocean_001m=june + 2)
     assert round_of() == files(a01_1, a01_50, b01_20)
+
+
+class Emptied:
+    """A source that finds every row of the datasets in `gone` deleted upstream, and nothing else new."""
+
+    def __init__(self, *gone: str) -> None:
+        self.gone = set(gone)
+
+    def fetch(self, series: Sequence[Series]) -> Download | None:
+        if series[0].dataset_id not in self.gone:
+            return None
+        self.gone.remove(series[0].dataset_id)
+        nothing = pd.DataFrame({"value": [], "hours": []}, index=pd.DatetimeIndex([], name="date"))
+        stamp = dt.datetime(2026, 9, 28, tzinfo=dt.UTC)
+        return Download(dt.date(2000, 1, 1), stamp.date(), {each.id: nothing for each in series}, stamp)
+
+    def page_url(self, series: Series) -> str:
+        return ""
+
+
+def test_a_buoy_depth_whose_data_are_all_deleted_upstream_loses_its_files(session_factory, client, tmp_path):
+    days = pd.date_range("2025-01-01", "2025-06-30")
+    with session_factory() as session:
+        for depth in (1, 50):
+            series = add_series(session, pd.Series(10.0, index=days), depth=depth)
+            start, end = days[10].date(), days[20].date()
+            session.add(
+                Event(
+                    series_id=series.id,
+                    start_date=start,
+                    end_date=end,
+                    peak_date=start,
+                    max_intensity=2.0,
+                    mean_intensity=1.0,
+                    category=1,
+                    origin="offshore",
+                )
+            )
+        session.commit()
+    erddap = recorded_erddap(CATALOG, [])
+    app.dependency_overrides[api.products_dir] = lambda: tmp_path
+
+    def round_in_which(*gone: str) -> list[str]:
+        """The products the API lists after a round in which these datasets lose every row."""
+        source = Emptied(*gone)
+        sync_all(session_factory, erddap, {"buoy": source, "satellite": source}, products_dir=tmp_path)
+        assert not list(tmp_path.rglob("*.partial"))
+        return [product["name"] for product in client.get("/api/data").json()["products"]]
+
+    assert round_in_which() == ["A01_heatwaves_001m", "A01_heatwaves_050m", "gom_heatwaves_events"]
+    assert round_in_which("A01_ocean_001m") == ["A01_heatwaves_050m", "gom_heatwaves_events"]
+    assert client.get("/api/data/A01/1.nc").status_code == 404
+    events = pd.read_csv(io.BytesIO(client.get("/api/data/events.csv").content))
+    assert list(events["depth"]) == [50]
+    # With no heatwaves left anywhere, the events go too.
+    assert round_in_which("A01_ocean_050m") == []
+    assert [path.name for path in tmp_path.rglob("*")] == ["daily"]
+    assert client.get("/api/data/events.nc").status_code == 404
 
 
 def test_a_failed_write_leaves_the_sync_alone(session_factory, series, tmp_path, caplog):
