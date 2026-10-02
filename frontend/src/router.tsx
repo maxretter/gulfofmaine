@@ -3,7 +3,8 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import { ErrorPage, Layout, NotFound } from "./pages/Layout";
 
 // Each page is loaded when it's first visited, so a route downloads only the code it draws with: Leaflet for the
-// front page's map, Plot for the charts. A link to a page not loaded yet keeps the current one up until it has.
+// front page's map, Plot for the charts. A link to a page not loaded yet keeps the current one up, dimmed (Layout),
+// until it has.
 export const routes: RouteObject[] = [
   {
     element: <Layout />,

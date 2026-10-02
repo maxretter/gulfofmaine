@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Link, NavLink, Outlet, ScrollRestoration } from "react-router";
+import { Link, NavLink, Outlet, ScrollRestoration, useNavigation } from "react-router";
 
 import { alertId, enteredHeatwave, LiveContext, useLiveFeed } from "../api/live";
 import { useBuoys } from "../api/queries";
@@ -22,6 +22,9 @@ export function Layout() {
     setAlerts((shown) => [...shown, message]);
   });
   const dismiss = useCallback((id: string) => setAlerts((shown) => shown.filter((a) => alertId(a) !== id)), []);
+  // A page not loaded yet keeps the current one up until it has (router.tsx), dimmed meanwhile, so a click on a slow
+  // connection shows it was taken.
+  const loading = useNavigation().state === "loading";
 
   return (
     <LiveContext value={live}>
@@ -51,7 +54,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
-      <main className="wrap">
+      <main className="wrap" aria-busy={loading}>
         <Outlet />
       </main>
       <Footer />

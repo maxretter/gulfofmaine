@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,17 @@ vi.mock("./pages/SatellitePage", () => ({
     throw new Error("Couldn't draw the page");
   },
 }));
+
+// The Origins page's code arrives when the test lets it, as over a slow connection.
+const arrival = vi.hoisted(() => {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve: () => resolve() };
+});
+vi.mock("./pages/OriginsPage", async () => {
+  await arrival.promise;
+  return { OriginsPage: () => <h1>Origins page</h1> };
+});
 
 /** A buoy the sync hasn't placed yet, as on a fresh database. */
 const unplaced: Buoy = {
@@ -100,6 +111,24 @@ describe("router", () => {
     expect(await screen.findByText("Western Maine Shelf")).toBeTruthy();
     expect(document.querySelector(".map.leaflet-container")).toBeTruthy();
     expect(screen.queryByText("Something went wrong")).toBeNull();
+  });
+
+  it("dims the page it leaves while the next one's code is on its way", async () => {
+    renderAt("/nowhere");
+    const main = screen.getByRole("main");
+    expect(await screen.findByText("Page not found")).toBeTruthy();
+    expect(main.getAttribute("aria-busy")).toBe("false");
+
+    fireEvent.click(screen.getByRole("link", { name: "Origins" }));
+    // The page it leaves stays up, dimmed, under the link taken.
+    await vi.waitFor(() => expect(main.getAttribute("aria-busy")).toBe("true"));
+    expect(screen.getByText("Page not found")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Origins" }).className).toBe("pending");
+
+    await act(async () => arrival.resolve());
+    expect(await screen.findByText("Origins page")).toBeTruthy();
+    expect(main.getAttribute("aria-busy")).toBe("false");
+    expect(screen.getByRole("link", { name: "Origins" }).className).toBe("active");
   });
 
   it("says so under the site's header when a page fails", async () => {
