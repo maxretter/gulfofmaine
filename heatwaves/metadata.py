@@ -166,9 +166,13 @@ DAILY_VARIABLES: dict[str, dict] = {
 
 EVENT_VARIABLES: dict[str, dict] = {
     "end_time": {
-        "long_name": "Last day of the heatwave",
+        "long_name": "Last day of the heatwave, or its latest so far",
         "units_metadata": "leap_seconds: none",
         "coverage_content_type": "referenceInformation",
+        "comment": (
+            "Its latest day so far for a heatwave still going on when the file was written, or paused then "
+            "by a dip below the threshold that it could still come back from."
+        ),
     },
     "peak_time": {
         "long_name": "Day furthest above normal",

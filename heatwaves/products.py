@@ -400,7 +400,9 @@ def events_dataset(table: pd.DataFrame) -> xr.Dataset:
         "summary": (
             "Every marine heatwave at 1 to 250 m on the University of Maine's buoys in the Gulf of "
             f"Maine: its dates, intensity and category (Hobday et al. 2016, 2018) against the {BASELINE[0]}-"
-            f"{BASELINE[1]} normal, and at {' and '.join(map(str, origin.DEPTHS))} m its origin label."
+            f"{BASELINE[1]} normal, and at {' and '.join(map(str, origin.DEPTHS))} m its origin label. "
+            "A heatwave still going on when the file was written is as it stood then: its last day, peak, "
+            "duration, intensity and category are of its days so far."
         ),
         "id": EVENTS,
         **GLOBAL,
