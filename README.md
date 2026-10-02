@@ -292,6 +292,20 @@ and `gom_heatwaves_events` (see [`erddap/`](erddap)):
 docker compose --profile erddap up -d --build
 ```
 
+Caddy serves plain HTTP; TLS is left to a proxy in front, which reaches it
+over a Docker network the two share or through the published port. Caddy
+passes that proxy's `X-Forwarded-For` and `X-Forwarded-Proto` on to the API,
+so it sees each visitor's address and https, and replaces anyone else's. Who
+counts as that proxy is `TRUSTED_PROXIES` in `.env`: by default any private
+address, which takes in every other container on a network the proxy shares.
+Set it to the proxy's own address on that network (several are separated by
+spaces), and pin that address in the proxy's Compose file with
+`ipv4_address`: Docker otherwise gives a recreated container a new one, and
+every visitor would then appear to be the proxy. The API in turn takes the
+headers from Caddy, at whatever private address Docker gives it (uvicorn's
+`FORWARDED_ALLOW_IPS`, set in the [`Dockerfile`](Dockerfile)), since only the
+stack's own containers reach it.
+
 The database isn't backed up, since everything in it comes from NERACOOS and
 CoastWatch: if the `db` volume is lost, the sync job's next round finds no
 series and rebuilds it, as on a first start, in a few minutes (as long as

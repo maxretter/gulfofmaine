@@ -5,9 +5,14 @@
 	auto_https off
 	# The proxy in front, which does the TLS, reaches this from a private address (a Docker network or
 	# the host's port mapping): its X-Forwarded-For and -Proto pass through, so the API sees each
-	# visitor's address and https, not the proxy's. Anyone else's are replaced, as before.
+	# visitor's address and https, not the proxy's. Anyone else's are replaced. TRUSTED_PROXIES
+	# narrows who counts as that proxy: by default any private address, which takes in every other
+	# container on a network shared with it; set to the proxy's own address, it alone (README).
+	# Strict: Caddy's own idea of the client, for logs and matchers, is then the last address in
+	# X-Forwarded-For that isn't a trusted proxy's, not the first, which a client can write itself.
 	servers {
-		trusted_proxies static private_ranges
+		trusted_proxies static {$TRUSTED_PROXIES:private_ranges}
+		trusted_proxies_strict
 	}
 }
 

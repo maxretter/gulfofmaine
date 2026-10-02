@@ -97,6 +97,9 @@ services:
     image: gom-heatwaves-frontend
     restart: unless-stopped
     logging: *logging
+    environment:
+      # Whose X-Forwarded-For and -Proto Caddy passes on to the API (frontend/Caddyfile).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-private_ranges}
     ports:
       - "${WEB_PORT:-8000}:80"
     depends_on:

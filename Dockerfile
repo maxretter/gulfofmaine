@@ -15,12 +15,15 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY heatwaves ./heatwaves
 # Compose mounts the products volume here; an empty volume takes this directory's owner.
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PRODUCTS_DIR=/data/products
+# uvicorn takes forwarded headers only from FORWARDED_ALLOW_IPS: the private ranges Docker's networks
+# use, since Caddy's address on Compose's network is whatever Docker gives it, and the client is the
+# last address in X-Forwarded-For outside them, not the first, which a client can write itself. Only
+# the stack's own containers reach the API, and Caddy replaces the headers of anyone it doesn't
+# trust (TRUSTED_PROXIES in frontend/Caddyfile). Set it to change who uvicorn trusts.
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PRODUCTS_DIR=/data/products \
+    FORWARDED_ALLOW_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 USER app
 EXPOSE 8000
 # The live feed reads nothing from browsers, so a message from one may be 1 KiB, not uvicorn's 16 MiB.
-# Forwarded headers are taken only from the private ranges Docker's networks use, Caddy's among them,
-# and the client is the last address in X-Forwarded-For outside them, not the first, which a client
-# can write itself.
 CMD ["uvicorn", "heatwaves.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "1024", \
-     "--proxy-headers", "--forwarded-allow-ips", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"]
+     "--proxy-headers"]
