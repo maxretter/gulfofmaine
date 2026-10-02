@@ -282,7 +282,11 @@ job, and the frontend: Caddy serving the built app on
 <http://localhost:8000> and forwarding `/api`, `/docs` and `/healthz` to the
 API, so the browser sees a single origin. Buoy data appears after the first
 sync, about a minute later, and the satellite's a few minutes after that; the
-NetCDF and CSV files follow at the end of that first round.
+NetCDF and CSV files follow at the end of that first round. The port
+(`WEB_PORT`) is published on 127.0.0.1 alone, so only this machine reaches
+it. To serve others directly, publish it on another address in a
+`compose.override.yaml`, under `ports: !override`, since Compose otherwise
+adds the override's ports to this one.
 
 To serve the files from ERDDAP too, as NERACOOS would, add its profile; it
 runs at <http://localhost:8000/erddap> with the datasets `gom_heatwaves_daily`
@@ -383,22 +387,27 @@ synthetic series with known answers.
 Configuration is by environment variable: `DATABASE_URL`, `ERDDAP_URL`,
 `COASTWATCH_URL`, `ERDDAP_TIMEOUT`, `ERDDAP_USER_AGENT`,
 `SYNC_STALE_AFTER_HOURS`, `LIVE_MAX_CLIENTS`, `LIVE_MAX_PER_ADDRESS`,
-`LIVE_ORIGINS` and `PRODUCTS_DIR`, where the files go (see
+`LIVE_ORIGINS`, `LIVE_HOSTS` and `PRODUCTS_DIR`, where the files go (see
 [`heatwaves/config.py`](heatwaves/config.py)).
 The live feed needs Postgres, for `NOTIFY`; on SQLite its WebSocket only
-pings. It serves up to `LIVE_MAX_CLIENTS` connections at once (200), and up
-to `LIVE_MAX_PER_ADDRESS` (20) from any one address, an IPv6 /64 counting as
-one, so that a single client can't take every place. That relies on the
-proxies in front passing each visitor's address on (`TRUSTED_PROXIES`,
-above): behind one that doesn't, every visitor shares its address, and those
-20 places. Of browsers, it serves only pages whose `Origin` matches the request's
-`Host`, so a proxy in front has to pass `Host` on unchanged, as Caddy and
-Vite do, or the origins listed in `LIVE_ORIGINS` (comma-separated). After
-changing the method, run `python -m heatwaves.sync --recompute` to rebuild
-every series from stored data and its files, since a sync computes a normal
-again only when data in its baseline years change, and judges an origin
-again only when the days it rests on do; `python -m heatwaves.products`
-rewrites just the files.
+pings. It serves up to `LIVE_MAX_CLIENTS` connections at once (200), and up to
+`LIVE_MAX_PER_ADDRESS` (20) from any one address, an IPv6 /64 counting as one,
+so that a single client can't take every place. That relies on the proxies in
+front passing each visitor's address on (`TRUSTED_PROXIES`, above): behind one
+that doesn't, every visitor shares its address, and those 20 places. Of
+browsers, it serves only pages whose `Origin` matches the request's `Host`, so
+a proxy in front has to pass `Host` on unchanged, as Caddy and Vite do, or the
+origins listed in `LIVE_ORIGINS` (comma-separated). A page at another site's
+name that DNS rebinding points at this server would match its own `Host` too,
+so `LIVE_HOSTS` (comma-separated `Host` headers, with any port, such as
+`example.org,localhost:8000`) can name the site's own: pages anywhere else are
+then turned away. Unset, as by default, a page at any name counts. In Compose,
+the `LIVE_` settings go in the `api` service's `environment`, in a
+`compose.override.yaml`. After changing the method, run
+`python -m heatwaves.sync --recompute` to rebuild every series from stored
+data and its files, since a sync computes a normal again only when data in its
+baseline years change, and judges an origin again only when the days it rests
+on do; `python -m heatwaves.products` rewrites just the files.
 
 ## Layout
 

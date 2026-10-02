@@ -218,7 +218,7 @@ async def relay(url: str, hub: Hub, retry: float = 5.0) -> None:
         await asyncio.sleep(retry)
 
 
-def allowed_origin(websocket: WebSocket, others: Collection[str]) -> bool:
+def allowed_origin(websocket: WebSocket, others: Collection[str], hosts: Collection[str] = ()) -> bool:
     """Whether the connection is from a page on the site itself or on one of `others`, or not from a browser.
 
     A browser opens a WebSocket from any site's page, to any server, and
@@ -227,18 +227,25 @@ def allowed_origin(websocket: WebSocket, others: Collection[str]) -> bool:
     aren't browsers send no Origin, or any they like, so it doesn't limit them.
     Behind a proxy, the Host header has to be the one the browser sent, as
     Caddy and Vite's dev server pass it on.
+
+    With DNS rebinding, another site's name can point at this server, and a
+    page at it then has an Origin matching its Host. If `hosts` are given, the
+    site's own pages are those at one of them alone.
     """
     origin = websocket.headers.get("origin")
     if origin is None or origin.lower() in others:
         return True
-    return urlsplit(origin).netloc.lower() == websocket.headers.get("host", "").lower()
+    host = websocket.headers.get("host", "").lower()
+    if hosts and host not in hosts:
+        return False
+    return urlsplit(origin).netloc.lower() == host
 
 
 async def serve(websocket: WebSocket, hub: Hub) -> None:
     """Send one browser every message from the hub, and a ping whenever it's been quiet for PING_EVERY."""
-    if not allowed_origin(websocket, settings.live_origins):
+    if not allowed_origin(websocket, settings.live_origins, settings.live_hosts):
         log.warning(
-            "Refused a live feed connection from a page at %s (Host %s); LIVE_ORIGINS can allow it",
+            "Refused a live feed connection from a page at %s (Host %s); see LIVE_ORIGINS and LIVE_HOSTS",
             websocket.headers.get("origin"),
             websocket.headers.get("host"),
         )

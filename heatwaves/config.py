@@ -24,6 +24,9 @@ class Settings:
     live_max_per_address: int
     # Origins besides the site's own whose pages may open the live feed, such as https://example.org.
     live_origins: frozenset[str]
+    # The Host headers the site is reached by, with any port, such as example.org or localhost:8000.
+    # If set, only pages there count as the site's own on the live feed; by default, a page at any.
+    live_hosts: frozenset[str]
     # Where the sync job writes the NetCDF and CSV products (heatwaves.products) and the API reads them.
     products_dir: Path
 
@@ -46,6 +49,9 @@ class Settings:
                 origin.strip().rstrip("/").lower()
                 for origin in env("LIVE_ORIGINS", "").split(",")
                 if origin.strip()
+            ),
+            live_hosts=frozenset(
+                host.strip().lower() for host in env("LIVE_HOSTS", "").split(",") if host.strip()
             ),
             products_dir=Path(env("PRODUCTS_DIR", "products")),
         )

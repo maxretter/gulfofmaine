@@ -333,10 +333,50 @@ def test_the_feed_turns_away_pages_on_other_sites(origin):
         assert not live.hub.clients  # it took no place on the feed
 
 
-def test_live_origins_is_a_comma_separated_list(monkeypatch):
-    monkeypatch.setenv("LIVE_ORIGINS", " https://Partner.example/, http://localhost:5173,")
+@pytest.mark.parametrize(
+    ("headers", "refused"),
+    [
+        # DNS rebinding: another site's name, pointed at this server, so its page's Origin matches its Host.
+        ({"origin": "http://rebound.example:8000", "host": "rebound.example:8000"}, True),
+        ({"origin": "http://testserver"}, True),
+        ({"origin": "https://GulfOfMaine.example", "host": "gulfofmaine.example"}, False),
+        ({"origin": "http://localhost:8000", "host": "localhost:8000"}, False),
+        ({"origin": "https://partner.example"}, False),  # in LIVE_ORIGINS
+        ({}, False),  # not a browser
+    ],
+)
+def test_with_live_hosts_the_sites_own_pages_are_those_at_them(monkeypatch, headers, refused):
+    monkeypatch.setattr(
+        live,
+        "settings",
+        dataclasses.replace(
+            live.settings,
+            live_origins=frozenset({"https://partner.example"}),
+            live_hosts=frozenset({"gulfofmaine.example", "localhost:8000"}),
+        ),
+    )
+    monkeypatch.setattr(live, "PING_EVERY", 0.1)
 
-    assert Settings.from_env().live_origins == {"https://partner.example", "http://localhost:5173"}
+    with TestClient(main.app) as client:
+        if refused:
+            with (
+                pytest.raises(WebSocketDisconnect) as closed,
+                client.websocket_connect("/api/live", headers=headers),
+            ):
+                pass
+            assert closed.value.code == 1008
+        else:
+            with client.websocket_connect("/api/live", headers=headers) as browser:
+                assert browser.receive_json()["type"] == "ping"
+
+
+def test_live_origins_and_hosts_are_comma_separated_lists(monkeypatch):
+    monkeypatch.setenv("LIVE_ORIGINS", " https://Partner.example/, http://localhost:5173,")
+    monkeypatch.setenv("LIVE_HOSTS", "GulfOfMaine.example, localhost:8000,")
+
+    settings = Settings.from_env()
+    assert settings.live_origins == {"https://partner.example", "http://localhost:5173"}
+    assert settings.live_hosts == {"gulfofmaine.example", "localhost:8000"}
 
 
 def test_a_browser_that_falls_behind_is_disconnected_to_refetch():
