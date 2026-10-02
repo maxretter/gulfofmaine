@@ -52,43 +52,51 @@ export function AnnualHeatmap({ buoys, depth, minCategory, origin, selected, onS
   );
 
   return (
-    <Chart
-      className="chart clickable"
-      loading={annual.isPlaceholderData}
-      error={annual.isError && "Couldn't load the yearly summary."}
-      empty={annual.data?.length === 0 && `No buoy has data${depth === null ? "" : ` at ${depth} m`}.`}
-      minHeight={44 + buoys.length * 30}
-      legend={
-        <div className="legend">
-          {heatDayBins.map((bin) => (
-            <span className="state" key={bin.label}>
-              <Swatch color={bin.color} variant="square" />
-              {bin.min === 0 ? "0 days" : bin.label}
+    <>
+      {/* Only over cells to click, not over a note that there are none or that they couldn't be loaded. */}
+      {cells.length > 0 && !annual.isError && (
+        <p className="caption">
+          {depth === null && "A day with heatwaves at several depths counts once. "}Click a cell to list its heatwaves.
+        </p>
+      )}
+      <Chart
+        className="chart clickable"
+        loading={annual.isPlaceholderData}
+        error={annual.isError && "Couldn't load the yearly summary."}
+        empty={annual.data?.length === 0 && `No buoy has data${depth === null ? "" : ` at ${depth} m`}.`}
+        minHeight={44 + buoys.length * 30}
+        legend={
+          <div className="legend">
+            {heatDayBins.map((bin) => (
+              <span className="state" key={bin.label}>
+                <Swatch color={bin.color} variant="square" />
+                {bin.min === 0 ? "0 days" : bin.label}
+              </span>
+            ))}
+            <span className="state">
+              <Swatch color={colors.axis} variant="hollow" />
+              Too little data
             </span>
-          ))}
-          <span className="state">
-            <Swatch color={colors.axis} variant="hollow" />
-            Too little data
-          </span>
-        </div>
-      }
-      table={{
-        columns: [
-          { label: "Buoy" },
-          { label: "Year", numeric: true },
-          { label: "Heatwave days", numeric: true },
-          { label: "Days observed", numeric: true },
-        ],
-        rows: () =>
-          cells.map((d) => [`${d.buoy_id} ${names.get(d.buoy_id)}`, d.year, d.enough ? d.heatwave_days : "–", d.observed_days]),
-      }}
-    >
-      {(width) =>
-        cells.length > 0 && (
-          <Heatmap cells={cells} width={width} names={names} selected={selected} onSelect={onSelect} />
-        )
-      }
-    </Chart>
+          </div>
+        }
+        table={{
+          columns: [
+            { label: "Buoy" },
+            { label: "Year", numeric: true },
+            { label: "Heatwave days", numeric: true },
+            { label: "Days observed", numeric: true },
+          ],
+          rows: () =>
+            cells.map((d) => [`${d.buoy_id} ${names.get(d.buoy_id)}`, d.year, d.enough ? d.heatwave_days : "–", d.observed_days]),
+        }}
+      >
+        {(width) =>
+          cells.length > 0 && (
+            <Heatmap cells={cells} width={width} names={names} selected={selected} onSelect={onSelect} />
+          )
+        }
+      </Chart>
+    </>
   );
 }
 

@@ -189,10 +189,6 @@ export function EventsPage() {
       {buoys.data && (
         <section className="card">
           <h2>Heatwave days per year {filters.depth === null ? "at any depth" : `at ${filters.depth} m`}</h2>
-          <p className="caption">
-            {filters.depth === null && "A day with heatwaves at several depths counts once. "}Click a cell to list its
-            heatwaves.
-          </p>
           <AnnualHeatmap
             buoys={buoys.data}
             depth={filters.depth}

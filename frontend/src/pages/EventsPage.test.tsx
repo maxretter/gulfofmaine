@@ -164,6 +164,21 @@ describe("EventsPage", () => {
     await waitFor(() => expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn + 1));
   });
 
+  it("asks for a click on the heatmap only when it has cells to click", async () => {
+    // At 7 m, where no buoy has data, the yearly counts come back empty, as the stubbed fetch has them.
+    renderAt("/events?depth=7");
+    expect(await screen.findByText("No buoy has data at 7 m.")).toBeTruthy();
+    expect(screen.queryByText(/Click a cell/)).toBeNull();
+    cleanup();
+
+    const annual: YearSummary[] = [{ buoy_id: "B01", depth: null, year: 2012, heatwave_days: 7, observed_days: 366 }];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(annual))));
+    renderAt("/events");
+    expect(
+      await screen.findByText("A day with heatwaves at several depths counts once. Click a cell to list its heatwaves."),
+    ).toBeTruthy();
+  });
+
   it("offers a depth or buoy filtered to that no heatwave has, rather than reading All over an empty list", () => {
     renderAt("/events?depth=7&buoy=zzz");
 
