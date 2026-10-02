@@ -92,7 +92,7 @@ export interface Evidence {
   stratification_before: number | null; // 1 m minus the event's depth, °C, 30 days before
   stratification_after: number | null; // the same, onset to 14 days after
   deep_heatwave_days: number | null; // days M01 was in a heatwave at 100–250 m, 30 days before
-  offshore_onset: string | null; // first onset at N01 or M01 at this depth, 90 days before
+  offshore_onset: string | null; // first onset at N01 or M01 at this depth, onset day and 90 days before
   western_onset: string | null; // the same at A01 or B01; neither counts the event's own buoy
   votes: Record<Signal, Vote>;
 }

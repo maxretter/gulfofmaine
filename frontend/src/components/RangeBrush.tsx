@@ -33,7 +33,7 @@ interface Brush {
 /**
  * The whole record at one depth, with heatwaves shaded. Dragging across it
  * picks the period the detailed charts show; the brush also follows range
- * changes made elsewhere (the heatmap, presets, events).
+ * changes made elsewhere (the presets, the year and dates, the heatwave list).
  */
 export function RangeBrush({ buoy, depth, ...brush }: Props) {
   const record = useDailyValues(buoy, depth, brush.firstDate, brush.lastDate);

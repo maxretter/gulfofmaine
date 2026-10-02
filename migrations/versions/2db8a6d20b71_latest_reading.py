@@ -1,7 +1,8 @@
 """latest reading
 
-Each series keeps its newest hourly reading, so the live feed and the API
-can show more than the daily mean.
+Each series keeps its newest reading that passed quality control (a
+buoy's raw reading, not an hourly mean), so the live feed and the API can
+show more than the daily mean.
 
 Revision ID: 2db8a6d20b71
 Revises: b0447420d174

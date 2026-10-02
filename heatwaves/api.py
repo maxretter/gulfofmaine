@@ -127,7 +127,7 @@ class Evidence(BaseModel):
     stratification_before: float | None  # 1 m minus the event's depth, degrees C, 30 days before
     stratification_after: float | None  # the same, onset to 14 days after
     deep_heatwave_days: int | None  # days M01 was in a heatwave at any of 100-250 m, 30 days before
-    offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, 90 days before
+    offshore_onset: dt.date | None  # first onset at N01 or M01 at this depth, onset day and 90 days before
     western_onset: dt.date | None  # the same at A01 or B01; neither counts the event's own buoy
     votes: dict[str, Vote]  # by signal: salinity, surface_heatwave, stratification, deep, onset_order
 
