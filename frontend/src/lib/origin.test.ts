@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Buoy, Evidence, HeatwaveEvent, OriginRules, Reason, Reasons, Signal } from "../api/types";
 import { anomalyColor } from "./colors";
 import { countVotes, eastToWest, originsByYear, reading, verdict } from "./origin";
+import { typeErrors } from "./typeErrors";
 
 const rules: OriginRules = {
   depths: [20, 50],
@@ -230,5 +231,19 @@ describe("anomalyColor", () => {
     expect(anomalyColor(0)).toBe("rgb(240, 239, 236)");
     expect(anomalyColor(9)).toBe(anomalyColor(3));
     expect(anomalyColor(null)).toBeNull();
+  });
+});
+
+// types.ts names the signals the API sends (heatwaves.origin.SIGNALS), so a signal the API adds is added there.
+describe("a signal added to the API", () => {
+  it("fails the type check in each switch over the signals until it's given its chart and reading", { timeout: 60_000 }, () => {
+    const files = ["components/OriginCard.tsx", "lib/origin.ts"];
+    expect(typeErrors(files)).toEqual({ "components/OriginCard.tsx": [], "lib/origin.ts": [] });
+    // Whether it has data, and its reading, return from every case; its chart ended in a default, which drew it empty.
+    const noReturn = "Function lacks ending return statement and return type does not include 'undefined'.";
+    expect(typeErrors(files, { type: "Signal", value: "wind" })).toEqual({
+      "components/OriginCard.tsx": [noReturn, `Type '"wind"' is not assignable to type 'never'.`],
+      "lib/origin.ts": [noReturn],
+    });
   });
 });

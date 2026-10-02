@@ -1,9 +1,9 @@
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import type { Condition, State } from "../api/types";
 import { categories } from "./colors";
 import { buoyStatus, heatwaveSummary, stateLook } from "./state";
+import { typeErrors } from "./typeErrors";
 
 const states = (...list: State[]) => list.map((state) => ({ state }));
 
@@ -127,38 +127,7 @@ describe("a buoy's status in the list of buoys", () => {
   });
 });
 
-/**
- * The type check's errors in each of `files`, with `added` put in State as the API adding a state would put it there
- * (contract.ts holds State to the API's).
- */
-function typeErrors(files: string[], added?: string): Record<string, string[]> {
-  const root = decodeURI(new URL(import.meta.url).pathname).replace(/src\/lib\/[^/]+$/, "");
-  const options = ts.getParsedCommandLineOfConfigFile(`${root}tsconfig.app.json`, {}, {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: () => {},
-  })!.options;
-  const host = ts.createCompilerHost(options);
-  const read = host.getSourceFile;
-  const types = `${root}src/api/types.ts`;
-  host.getSourceFile = (name, language, ...rest) => {
-    if (name !== types || added === undefined) return read(name, language, ...rest);
-    const before = ts.sys.readFile(name)!;
-    const after = before.replace("export type State = ", `export type State = "${added}" | `);
-    expect(after).not.toBe(before);
-    return ts.createSourceFile(name, after, language);
-  };
-  const paths = files.map((file) => `${root}src/${file}`);
-  const program = ts.createProgram(paths, options, host);
-  return Object.fromEntries(
-    files.map((file, i) => [
-      file,
-      program
-        .getSemanticDiagnostics(program.getSourceFile(paths[i]))
-        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, " ")),
-    ]),
-  );
-}
-
+// contract.ts holds State to the API's, so a state the API adds is added there.
 describe("a state added to the API", () => {
   const switches = ["lib/state.ts", "components/StateBadge.tsx"];
 
@@ -166,6 +135,9 @@ describe("a state added to the API", () => {
     expect(typeErrors(switches)).toEqual({ "lib/state.ts": [], "components/StateBadge.tsx": [] });
     // Rather than being drawn and labeled as no data, as it was when "paused" was added.
     const error = `Type '"cooling"' is not assignable to type 'never'.`;
-    expect(typeErrors(switches, "cooling")).toEqual({ "lib/state.ts": [error], "components/StateBadge.tsx": [error] });
+    expect(typeErrors(switches, { type: "State", value: "cooling" })).toEqual({
+      "lib/state.ts": [error],
+      "components/StateBadge.tsx": [error],
+    });
   });
 });

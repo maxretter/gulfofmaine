@@ -92,7 +92,12 @@ function hasData(signal: Signal, evidence: Evidence): boolean {
 // Small charts share a frame: dates as "Apr 14", and a right margin for labeling reference lines.
 const frame = { marginTop: 22, marginRight: 64, tickFormat: "%b %-d" };
 
-function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalChartProps, "buoys"> & { width: number }) {
+interface WindowChartProps extends Omit<SignalChartProps, "signal" | "buoys"> {
+  signal: Exclude<Signal, "onset_order">; // which has a chart of its own
+  width: number;
+}
+
+function WindowChart({ signal, days, onset, detail, rules, width }: WindowChartProps) {
   const options = useMemo((): Plot.PlotOptions => {
     const first = days[0].date;
     const last = nextDay(days[days.length - 1].date);
@@ -194,8 +199,11 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
         };
       case "deep":
         return heatwavesThere("deep_anomaly", "deep_heatwave");
-      default:
-        return base;
+      default: {
+        // Every signal drawn here is listed above, so a new one fails the type check here until it's given a chart.
+        const unreachable: never = signal;
+        throw new Error(`No chart for the signal ${unreachable}`);
+      }
     }
   }, [signal, days, onset, detail, rules, width]);
 
