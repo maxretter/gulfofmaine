@@ -205,7 +205,11 @@ TIME = {
     "long_name": "Time",
     "axis": "T",
     "units_metadata": "leap_seconds: none",
-    "comment": "The middle of the UTC day. Daily values are means over the whole day.",
+    "comment": (
+        "The middle of the UTC day. A buoy's daily value is the mean of the day's hours with data, at least "
+        f"{qc.MIN_HOURS} of them (see the *_hours variables), and while the day is under way, of the hours "
+        "so far; the satellite's is OISST's daily analysis."
+    ),
 }
 REFERENCE = {"coverage_content_type": "referenceInformation"}
 LATITUDE = {"standard_name": "latitude", "long_name": "Latitude", "units": "degrees_north", "axis": "Y"}

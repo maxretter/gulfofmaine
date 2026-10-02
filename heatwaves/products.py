@@ -9,8 +9,9 @@ Two products, each as NetCDF and as CSV:
   of the heatwave each day belongs to, and at 20 and 50 m where that
   heatwave's heat came from; salinity with its normal and anomaly; and the
   satellite's sea surface temperature at the buoy, treated like the buoy's
-  temperature. Each file is one CF time series (featureType timeSeries), so
-  ERDDAP's EDDTableFromNcCFFiles serves them all as one dataset (erddap/).
+  temperature, at each buoy with a satellite series. Each file is one CF
+  time series (featureType timeSeries), so ERDDAP's EDDTableFromNcCFFiles
+  serves them all as one dataset (erddap/).
 - Events, every heatwave at the buoys (gom_heatwaves_events.nc): one CF
   point per heatwave, at its buoy and depth on its first day. The CSV has
   the columns of /api/events but its status, which is of the day the API
@@ -260,21 +261,23 @@ def daily_dataset(
     )
     ds = ds.set_coords(["series_id", "latitude", "longitude", "depth"])
 
+    # A buoy without a satellite series (N01) has the satellite's variables, empty, but neither claims it.
+    contents = [
+        f"Daily temperature and salinity at {depth} m on University of Maine buoy {buoy.id} ({buoy.name}) "
+        f"in the Gulf of Maine, with the {BASELINE[0]}-{BASELINE[1]} normal, the marine heatwave threshold "
+        "and anomalies, and the category of each day's heatwave (Hobday et al. 2016, 2018)",
+        f"each heatwave's origin label, at {' and '.join(map(str, origin.DEPTHS))} m",
+    ]
+    sources = [f"Moored buoy: {settings.erddap_url}/tabledap/{dataset_id}.html."]
+    if satellite:
+        contents.append("NOAA OISST sea surface temperature at the buoy, treated the same way")
+        sources.append(f"Satellite: {settings.coastwatch_url}/griddap/{OISST}.html and {OISST_PRELIMINARY}.")
     ds.attrs = {
         "title": f"Marine heatwaves at {buoy.id} ({buoy.name}), {depth} m",
-        "summary": (
-            f"Daily temperature and salinity at {depth} m on University of Maine buoy {buoy.id} "
-            f"({buoy.name}) in the Gulf of Maine, with the {BASELINE[0]}-{BASELINE[1]} normal, the marine "
-            "heatwave threshold and anomalies, and the category of each day's heatwave (Hobday et al. 2016, "
-            f"2018); each heatwave's origin label, at {' and '.join(map(str, origin.DEPTHS))} m; and NOAA "
-            "OISST sea surface temperature at the buoy, treated the same way."
-        ),
+        "summary": "; ".join([*contents[:-1], f"and {contents[-1]}."]),
         "id": f"gom_heatwaves_{series_id}",
         **GLOBAL,
-        "source": (
-            f"Moored buoy: {settings.erddap_url}/tabledap/{dataset_id}.html. "
-            f"Satellite: {settings.coastwatch_url}/griddap/{OISST}.html and {OISST_PRELIMINARY}."
-        ),
+        "source": " ".join(sources),
         "featureType": "timeSeries",
         "cdm_data_type": "TimeSeries",
         "platform_id": buoy.id,

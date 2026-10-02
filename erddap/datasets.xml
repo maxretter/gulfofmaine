@@ -26,7 +26,7 @@ fileDir is where the products volume is mounted in compose.yaml's erddap service
         <att name="subsetVariables">series_id, station, station_name, latitude, longitude, depth</att>
         <att name="id">gom_heatwaves_daily</att>
         <att name="title">Marine heatwaves at Gulf of Maine buoys, daily</att>
-        <att name="summary">Daily temperature and salinity at 1 to 250 m on the University of Maine&#39;s buoys in the Gulf of Maine, with the 2003-2022 normal, the marine heatwave threshold and anomalies, and the category of each day&#39;s heatwave (Hobday et al. 2016, 2018); at 20 and 50 m, each heatwave&#39;s origin label; and NOAA OISST sea surface temperature at each buoy, treated the same way. One time series per buoy and depth.</att>
+        <att name="summary">Daily temperature and salinity at 1 to 250 m on the University of Maine&#39;s buoys in the Gulf of Maine, with the 2003-2022 normal, the marine heatwave threshold and anomalies, and the category of each day&#39;s heatwave (Hobday et al. 2016, 2018); at 20 and 50 m, each heatwave&#39;s origin label; and NOAA OISST sea surface temperature at each buoy but N01, treated the same way. One time series per buoy and depth.</att>
         <att name="source">Moored buoys: the {buoy}_ocean_{depth} datasets on https://data.neracoos.org/erddap. Satellite: https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.html and ncdcOisst21NrtAgg_LonPM180.</att>
         <att name="institution">Max Retter (independent)</att>
         <att name="infoUrl">https://github.com/maxretter/gulfofmaine</att>

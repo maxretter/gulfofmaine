@@ -12,7 +12,9 @@ from compliance_checker.runner import CheckSuite
 from fastapi.responses import FileResponse
 
 from heatwaves import api, products
+from heatwaves.config import settings
 from heatwaves.main import app
+from heatwaves.models import Buoy
 from tests import sample
 from tests.conftest import api_client, fresh_database
 from tests.sample import GAP, SATELLITE_CELL
@@ -126,6 +128,25 @@ def test_origin_is_missing_at_depths_it_isnt_judged(client, tmp_path):
     assert (ds.heatwave_category.fillna(0) >= 0).all()
     assert ds.series_id.item() == "A01_001m"
     assert ds.attrs["title"] == "Marine heatwaves at A01 (Test Buoy), 1 m"
+
+
+def test_only_a_buoy_with_a_satellite_series_claims_oisst(client, sample_database, tmp_path):
+    written = open_netcdf(client.get("/api/data/A01/50.nc").content, tmp_path)
+    # A01 at 50 m again, as if it had no satellite series, as N01 hasn't.
+    with sample_database() as session:
+        buoy = session.get_one(Buoy, "A01")
+        table = products.daily_table(session, buoy, 50)
+        assert table is not None
+        without = products.daily_dataset(table, buoy, 50, "A01_ocean_050m", None)
+
+    assert written.attrs["summary"].endswith(
+        "; and NOAA OISST sea surface temperature at the buoy, treated the same way."
+    )
+    assert "Satellite: " in written.attrs["source"]
+    assert without.attrs["summary"].endswith(
+        "(Hobday et al. 2016, 2018); and each heatwave's origin label, at 20 and 50 m."
+    )
+    assert without.attrs["source"] == f"Moored buoy: {settings.erddap_url}/tabledap/A01_ocean_050m.html."
 
 
 def test_events_match_the_json_api_exactly(client, tmp_path):
