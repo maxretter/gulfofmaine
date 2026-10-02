@@ -751,13 +751,13 @@ def annual(
     )
     if origin_ is not None:
         heatwaves = heatwaves.where(Event.origin == origin_)
-    # Every day of a heatwave, the short gaps detection filled in included.
-    days = {
-        (buoy_id, day)
-        for buoy_id, start, end in session.execute(heatwaves)
-        for day in pd.date_range(start, end).date
-    }
-    heatwave_days = Counter((buoy_id, day.year) for buoy_id, day in days)
+    spans: dict[str, list[tuple[dt.date, dt.date]]] = defaultdict(list)
+    for buoy_id, start, end in session.execute(heatwaves):
+        spans[buoy_id].append((start, end))
+    # Every day of a heatwave, the short gaps detection filled in included, and each once at a buoy.
+    heatwave_days: Counter[tuple[str, int]] = Counter()
+    for buoy_id, each in spans.items():
+        heatwave_days.update((buoy_id, year) for year in queries.every_day(each).unique().year.tolist())
 
     return [
         YearSummary(

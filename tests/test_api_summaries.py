@@ -6,7 +6,7 @@ heatwave's days spelled out by pandas.
 """
 
 import datetime as dt
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import numpy as np
 import pandas as pd
@@ -252,3 +252,54 @@ def test_heatwave_days_are_every_day_of_each_heatwave(database, start, end):
     assert found.keys() == expected.keys()
     for series_id in ids:
         pd.testing.assert_series_equal(found[series_id], expected[series_id], check_freq=False)
+
+
+def test_every_day_spells_out_each_span_in_order():
+    spans = [
+        (dt.date(2021, 12, 30), dt.date(2022, 1, 2)),
+        (dt.date(2020, 2, 28), dt.date(2020, 3, 1)),
+        (dt.date(2021, 7, 1), dt.date(2021, 7, 1)),
+    ]
+
+    assert [day.isoformat() for day in queries.every_day(spans).date] == [
+        "2021-12-30",
+        "2021-12-31",
+        "2022-01-01",
+        "2022-01-02",
+        "2020-02-28",
+        "2020-02-29",
+        "2020-03-01",
+        "2021-07-01",
+    ]
+    assert queries.every_day([]).empty
+
+
+@pytest.mark.parametrize("depth, min_category", [(None, 1), (None, 2), (1, 1), (20, 1), (1, 2)])
+def test_annual_counts_each_buoys_days_once_a_year(client, database, depth, min_category):
+    observed_days: dict[str, set[pd.Timestamp]] = defaultdict(set)
+    heatwave_days: dict[str, set[pd.Timestamp]] = defaultdict(set)
+    with database() as session:
+        for each in queries.buoy_temperatures(session, depth):
+            observed_days[each.buoy_id].update(observed(session, each.id))
+            for event in session.scalars(
+                select(Event).where(Event.series_id == each.id, Event.category >= min_category)
+            ):
+                heatwave_days[each.buoy_id].update(pd.date_range(event.start_date, event.end_date))
+    expected = []
+    for buoy_id in sorted(observed_days):
+        years = Counter(day.year for day in observed_days[buoy_id])
+        heatwaves = Counter(day.year for day in heatwave_days[buoy_id])
+        expected += [
+            {
+                "buoy_id": buoy_id,
+                "depth": depth,
+                "year": year,
+                "heatwave_days": heatwaves[year],
+                "observed_days": count,
+            }
+            for year, count in sorted(years.items())
+        ]
+
+    query = f"min_category={min_category}" + ("" if depth is None else f"&depth={depth}")
+    assert client.get(f"/api/annual?{query}").json() == expected
+    assert sum(row["heatwave_days"] for row in expected) > 0

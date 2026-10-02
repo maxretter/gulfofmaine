@@ -146,21 +146,26 @@ def heatwave_days(
     spans: dict[int, list[tuple[dt.date, dt.date, int]]] = defaultdict(list)
     for series_id, first, last, category in session.execute(query):
         spans[series_id].append((first, last, category))
-    return {series_id: _every_day(spans[series_id]) for series_id in series_ids}
+    return {series_id: _categories(spans[series_id]) for series_id in series_ids}
 
 
-def _every_day(spans: list[tuple[dt.date, dt.date, int]]) -> pd.Series:
-    """Each span's category on every day of it, first and last included, indexed by day.
-
-    Spelled out in numpy: a pandas series of each span's days, put together,
-    took over ten times as long.
-    """
+def _categories(spans: list[tuple[dt.date, dt.date, int]]) -> pd.Series:
+    """Each span's category on every day of it, indexed by day."""
     if not spans:
         return _NO_DAYS
+    days = every_day([(first, last) for first, last, _ in spans])
+    lengths = [(last - first).days + 1 for first, last, _ in spans]
+    return pd.Series(np.repeat([category for _, _, category in spans], lengths), index=days).sort_index()
+
+
+def every_day(spans: Collection[tuple[dt.date, dt.date]]) -> pd.DatetimeIndex:
+    """Every day of each span, first and last included, in the spans' order.
+
+    Spelled out in numpy, where a pandas range for each span took about ten times as long.
+    """
     day = np.timedelta64(1, "D")
-    days = [np.arange(np.datetime64(first, "D"), np.datetime64(last, "D") + day) for first, last, _ in spans]
-    categories = np.repeat([category for _, _, category in spans], [len(each) for each in days])
-    return pd.Series(categories, index=pd.DatetimeIndex(np.concatenate(days), name="date")).sort_index()
+    days = [np.arange(np.datetime64(first, "D"), np.datetime64(last, "D") + day) for first, last in spans]
+    return pd.DatetimeIndex(np.concatenate(days) if days else np.array([], "datetime64[D]"), name="date")
 
 
 def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.DataFrame:
