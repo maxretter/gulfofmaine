@@ -105,10 +105,11 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
 - **Quality control and daily means** ([`heatwaves/qc.py`](heatwaves/qc.py)).
   Readings that UMaine's own flag doesn't mark good are dropped, and so are
   any the QARTOD aggregate flag marks suspect or failed. In every dataset read
-  here, as of September 2026, that flag marks no reading suspect and fails
-  only those UMaine's flag already marks, so UMaine's flag alone decides. The
-  rest are averaged into hourly bins, then into UTC days; a day needs 18 hours
-  of data.
+  here, as of 2026-10-01, neither flag drops a reading: every row with a value
+  is marked good by both, and the rows either flag marks have none
+  ([`scripts/qc_flags.py`](scripts/qc_flags.py) lists each dataset's flag
+  pairs). The readings are averaged into hourly bins, then into UTC days; a
+  day needs 18 hours of data.
 - **Heatwave detection** ([`heatwaves/hobday.py`](heatwaves/hobday.py)) follows
   Hobday et al. (2016) and (2018): a seasonal normal and 90th-percentile threshold
   from an 11-day window pooled over 2003–2022 and smoothed over 31 days;
@@ -350,6 +351,14 @@ fewest baseline years any normal draws on:
 
 ```sh
 PYTHONPATH=. uv run scripts/readme_figures.py
+```
+
+From NERACOOS's ERDDAP, each buoy dataset's pairs of UMaine's flag and the
+QARTOD flag, with the readings that have each, and what the quality control
+drops:
+
+```sh
+PYTHONPATH=. uv run scripts/qc_flags.py
 ```
 
 The sync tests replay real ERDDAP responses recorded in `tests/data` (listed

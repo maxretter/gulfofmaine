@@ -44,9 +44,9 @@ export function AboutPage() {
         Temperature and salinity come from the University of Maine buoys
         {buoys.data?.length ? ` ${sources(buoys.data)}` : ""}, through the{" "}
         <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a>, checked about every 10 minutes. A reading
-        is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed; in
-        September 2026 the QARTOD flag marked no reading suspect, and failed only readings UMaine's flag already
-        marks.{" "}
+        is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed; as
+        of October 2026, every reading the server has a value for passes both, so neither drops any (checked with the
+        repository's <a href={`${REPOSITORY}/blob/main/scripts/qc_flags.py`}>script</a>).{" "}
         {method.data && (
           <>
             Readings are averaged by hour, then by day, and a day needs {method.data.min_hours} hours with data, so the

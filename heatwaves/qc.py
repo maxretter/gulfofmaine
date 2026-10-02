@@ -18,12 +18,14 @@ import xarray as xr
 MIN_HOURS = 18
 
 # UMaine's flag uses 0 for quality_good. The QARTOD aggregate flag uses
-# 3 for suspect and 4 for fail. Asked for the distinct combinations of the
-# flags in every dataset (2026-09-30), ERDDAP had no reading marked suspect:
-# the aggregate is 1 (pass) wherever UMaine's flag is 0, and 4 (fail) or 2
-# (not evaluated) wherever it isn't, so for now UMaine's flag alone decides.
-# On the readings it marks good, the individual tests ({variable}_qc_tests)
-# that ran are gap, syntax, location and gross range; the rest weren't.
+# 3 for suspect and 4 for fail. Asked for the distinct pairs of the flags in
+# every dataset, with the readings of each (scripts/qc_flags.py, 2026-10-01),
+# ERDDAP had no row marked suspect: the aggregate is 1 (pass) wherever
+# UMaine's flag is 0, and 4 (fail) or 2 (not evaluated) wherever it is
+# another value; and only rows both mark good have a value, so for now
+# neither flag drops a reading. On the readings UMaine's flag marks good,
+# the individual tests ({variable}_qc_tests) that ran, asked 2026-09-30, are
+# gap, syntax, location and gross range; the rest weren't.
 GOOD_UMAINE_FLAG = 0
 BAD_QARTOD_FLAGS = [3, 4]
 

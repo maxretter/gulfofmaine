@@ -1,0 +1,15 @@
+{
+  "table": {
+    "columnNames": ["temperature", "temperature_qc", "temperature_qc_agg"],
+    "columnTypes": ["int", "byte", "byte"],
+    "columnUnits": ["count", null, null],
+    "rows": [
+      [371264, 0, 1],
+      [0, 1, 4],
+      [0, 40, 4],
+      [0, 99, 4],
+      [0, null, 9],
+      [0, null, null]
+    ]
+  }
+}

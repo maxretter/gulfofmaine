@@ -1,0 +1,17 @@
+{
+  "table": {
+    "columnNames": ["salinity", "salinity_qc", "salinity_qc_agg"],
+    "columnTypes": ["int", "byte", "byte"],
+    "columnUnits": ["count", null, null],
+    "rows": [
+      [329064, 0, 1],
+      [0, 1, 4],
+      [0, 2, 4],
+      [0, 3, 4],
+      [0, 4, 2],
+      [0, 40, 4],
+      [0, 99, 4],
+      [0, null, 9]
+    ]
+  }
+}
