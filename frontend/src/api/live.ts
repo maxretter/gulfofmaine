@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { partialMatchKey, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { keys } from "./queries";
@@ -20,6 +20,11 @@ export function useLive(): Live {
 
 /** The server pings every 30 seconds; a connection silent for longer than this is taken as dead. */
 export const SILENCE_MS = 75_000;
+/**
+ * How long the feed gathers what its messages make stale before refetching it. A sync round sends its messages, about
+ * 15, within a second or two, so the refetches they prompt go out together, each query's once.
+ */
+export const GATHER_MS = 3_000;
 const MAX_BACKOFF_MS = 60_000;
 
 /** Wait before reconnect attempt `failures` + 1: doubling from 1 s to a minute, jittered so clients spread out. */
@@ -70,26 +75,41 @@ export function alertId(alert: StatusMessage): string {
 }
 
 /**
- * Brings the cache up to date with one message. A reading is written straight into the latest conditions, so it
- * shows at once; they are refetched too, for what a reading can change but doesn't carry (the day's mean, its
- * anomaly), with that buoy's daily series and the stripes at its depth, which average those means by month. A status
- * message can mean a heatwave started, ended, grew a day or changed, so everything built from heatwaves is refetched
- * as well. Only queries on screen refetch now; the rest when next shown.
+ * Brings the cache up to date with one message, and returns the queries it makes stale. A reading is written straight
+ * into the latest conditions, so it shows at once; they are stale too, for what a reading can change but doesn't carry
+ * (the day's mean, its anomaly), with the daily series at that buoy and depth and the stripes at that depth, which
+ * average those means by month. A status message can mean a heatwave started, ended, grew a day or changed, so
+ * everything built from heatwaves is stale as well.
  */
-export function applyMessage(queryClient: QueryClient, message: LiveMessage) {
-  if (message.type === "ping") return;
+export function applyMessage(queryClient: QueryClient, message: LiveMessage): QueryKey[] {
+  if (message.type === "ping") return [];
   if (message.type === "reading") {
     queryClient.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, message));
   }
-  const stale: QueryKey[] = [keys.buoys, [...keys.daily, message.buoy], [...keys.stripes, message.depth]];
+  const stale: QueryKey[] = [
+    keys.buoys,
+    [...keys.daily, message.buoy, message.depth],
+    [...keys.stripes, message.depth],
+  ];
   if (message.type === "status") stale.push(keys.events, keys.event, keys.annual, keys.agreement, keys.onsets);
-  for (const queryKey of stale) void queryClient.invalidateQueries({ queryKey });
+  return stale;
 }
 
 /**
- * Keeps a WebSocket open to the live feed and writes its messages into the TanStack Query cache. Reconnects with
- * backoff when the connection drops or goes silent, and refetches everything on screen each time it connects, the
- * first time too, to cover whatever was missed before the feed was listening.
+ * Marks every query under any of `stale` as stale, each once however many it's under. Only those on screen refetch
+ * now; the rest when next shown.
+ */
+function invalidate(queryClient: QueryClient, stale: QueryKey[]) {
+  void queryClient.invalidateQueries({
+    predicate: (query) => stale.some((key) => partialMatchKey(query.queryKey, key)),
+  });
+}
+
+/**
+ * Keeps a WebSocket open to the live feed and writes its messages into the TanStack Query cache, refetching what they
+ * make stale GATHER_MS after the first of them. Reconnects with backoff when the connection drops or goes silent, and
+ * refetches everything on screen each time it connects, the first time too, to cover whatever was missed before the
+ * feed was listening.
  */
 export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
   const queryClient = useQueryClient();
@@ -105,13 +125,19 @@ export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
     let retry: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
+    let stale: QueryKey[] = []; // what messages have made stale since the last refetch
+    let refetch: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
       const current = new WebSocket(feedUrl());
       socket = current;
       current.onopen = () => {
         // Anything could have changed since the page loaded what it shows, or while there was no connection. A first
-        // load still on its way is left to finish rather than asked for again.
+        // load still on its way is left to finish rather than asked for again. Whatever was waiting to refetch is
+        // part of everything.
+        clearTimeout(refetch);
+        refetch = undefined;
+        stale = [];
         void queryClient.invalidateQueries();
         failures = 0;
         setStatus("live");
@@ -120,7 +146,8 @@ export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
       current.onmessage = (event: MessageEvent<string>) => {
         watch();
         const message = JSON.parse(event.data) as LiveMessage;
-        applyMessage(queryClient, message);
+        stale.push(...applyMessage(queryClient, message));
+        if (stale.length > 0) refetch ??= setTimeout(refetchStale, GATHER_MS);
         if (message.type === "reading") setPulses((before) => ({ ...before, [message.buoy]: Date.now() }));
         callback.current?.(message);
       };
@@ -145,10 +172,17 @@ export function useLiveFeed(onMessage?: (message: LiveMessage) => void): Live {
       watchdog = setTimeout(reconnect, SILENCE_MS);
     };
 
+    const refetchStale = () => {
+      invalidate(queryClient, stale);
+      stale = [];
+      refetch = undefined;
+    };
+
     connect();
     return () => {
       clearTimeout(retry);
       clearTimeout(watchdog);
+      clearTimeout(refetch);
       if (socket) {
         socket.onclose = null;
         socket.close();

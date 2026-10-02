@@ -1,11 +1,11 @@
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, type QueryKey } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
-import { enteredHeatwave, SILENCE_MS, useLiveFeed, withReading } from "./live";
+import { enteredHeatwave, GATHER_MS, SILENCE_MS, useLiveFeed, withReading } from "./live";
 import { keys } from "./queries";
 import type { Buoy, Condition, LiveMessage, ReadingMessage, StatusMessage } from "./types";
 
@@ -91,9 +91,38 @@ const entered: StatusMessage = {
   previous_category: null,
 };
 
+// Queries a page could have cached, besides the buoys.
+const cached: QueryKey[] = [
+  [...keys.daily, "B01", 1, "2026-01-01", "2026-09-29", "temperature"],
+  [...keys.daily, "B01", 50, "2026-01-01", "2026-09-29", "temperature"],
+  [...keys.daily, "B01", 50, "2001-07-10", "2026-09-29", "values"],
+  [...keys.stripes, 50],
+  keys.events,
+  [...keys.event, "B01", 50, "2026-09-24"],
+  [...keys.annual, null, 1, null],
+  [...keys.agreement, 50],
+  [...keys.onsets, 2026, 50],
+];
+
+/** The keys of the queries marked stale. */
+function invalidated(queryClient: QueryClient): QueryKey[] {
+  return queryClient
+    .getQueryCache()
+    .findAll()
+    .filter((query) => query.state.isInvalidated)
+    .map((query) => query.queryKey);
+}
+
+/** Opens the feed, then sets aside its refetch of everything, to see what messages refetch. */
+function openFeed(queryClient: QueryClient) {
+  act(() => latestSocket().open());
+  for (const query of queryClient.getQueryCache().findAll()) query.setState({ isInvalidated: false });
+}
+
 function setup(onMessage?: (message: LiveMessage) => void) {
   const queryClient = new QueryClient();
   queryClient.setQueryData(keys.buoys, buoys);
+  for (const queryKey of cached) queryClient.setQueryData(queryKey, []);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
@@ -123,7 +152,6 @@ describe("useLiveFeed", () => {
     expect(result.current.status).toBe("connecting");
 
     act(() => socket.open());
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     act(() => socket.deliver(reading));
 
     expect(result.current.status).toBe("live");
@@ -131,12 +159,51 @@ describe("useLiveFeed", () => {
     expect(b01.series.map((s) => s.reading)).toEqual([11.4, 11.9]);
     expect(b01.series[1].reading_at).toBe(reading.time);
     expect(result.current.pulses.B01).toBeTypeOf("number");
-    // What the day's mean feeds: the conditions, the buoy's days, and the month's stripe at that depth.
-    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
-      keys.buoys,
-      ["daily", "B01"],
-      ["stripes", 50],
-    ]);
+  });
+
+  it("refetches what a reading feeds, at its buoy and depth only, once the burst it came in has passed", () => {
+    const { queryClient } = setup();
+    openFeed(queryClient);
+
+    act(() => latestSocket().deliver(reading));
+    act(() => vi.advanceTimersByTime(GATHER_MS - 1));
+    expect(invalidated(queryClient)).toEqual([]);
+    act(() => vi.advanceTimersByTime(1));
+
+    // What the day's mean feeds: the conditions, the buoy's days at that depth, and the month's stripe there.
+    expect(invalidated(queryClient)).toEqual([keys.buoys, cached[1], cached[2], cached[3]]);
+  });
+
+  it("refetches each query a sync round's messages make stale once, together", async () => {
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const fetched: QueryKey[] = [];
+    const onScreen = [keys.buoys, cached[0], cached[1], cached[3]];
+    renderHook(
+      () => {
+        for (const queryKey of onScreen) {
+          useQuery({ queryKey, queryFn: async () => (fetched.push(queryKey), []), staleTime: Infinity });
+        }
+        return useLiveFeed();
+      },
+      { wrapper },
+    );
+    const socket = latestSocket();
+    await act(async () => socket.open());
+    fetched.length = 0;
+
+    // A round's readings, half a second apart: B01's at 50 m twice, and A01's.
+    const later = { ...reading, time: "2026-09-29T02:10:00Z" };
+    for (const message of [reading, { ...reading, buoy: "A01" }, { ...reading, buoy: "A01", depth: 1 }, later]) {
+      act(() => socket.deliver(message));
+      await act(async () => vi.advanceTimersByTime(500));
+    }
+    expect(fetched).toEqual([]);
+    await act(async () => vi.advanceTimersByTime(GATHER_MS));
+
+    expect(fetched).toEqual([keys.buoys, cached[1], cached[3]]);
   });
 
   it("refetches what loaded before the feed was listening, and lets a first load on its way finish", async () => {
@@ -167,16 +234,14 @@ describe("useLiveFeed", () => {
   it("refetches everything built from heatwaves when a status changes, and passes the message on", () => {
     const onMessage = vi.fn();
     const { queryClient } = setup(onMessage);
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
 
-    act(() => latestSocket().open());
+    openFeed(queryClient);
     act(() => latestSocket().deliver(entered));
-
-    const refetched = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
-    expect(refetched).toEqual(
-      expect.arrayContaining([keys.buoys, ["daily", "B01"], keys.events, keys.annual, keys.onsets]),
-    );
     expect(onMessage).toHaveBeenCalledWith(entered);
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    // All but B01's days at 1 m.
+    expect(invalidated(queryClient)).toEqual([keys.buoys, ...cached.slice(1)]);
   });
 
   it("reconnects with a growing backoff, then refetches what it may have missed", () => {

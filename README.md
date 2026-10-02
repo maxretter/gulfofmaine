@@ -212,12 +212,16 @@ works:
   and a temperature–salinity diagram of the water before and after the onset.
 - **Live.** The page keeps a WebSocket open to `/api/live` and writes each
   new reading into TanStack Query's cache, so the tiles show the latest
-  reading and the map marker pulses as it arrives; a status change refetches
-  what depends on heatwaves, and a buoy depth entering one gets a notice, but
-  not one whose paused heatwave goes on. The header says whether the feed is
-  connected. The connection reconnects with backoff, drops itself if the
-  server's 30-second pings stop, and refetches everything on screen each time
-  it connects, the first time too, to cover what it missed.
+  reading and the map marker pulses as it arrives. A reading refetches what
+  the day's mean feeds (the conditions, that buoy depth's days and the stripes
+  at its depth), and a status change what depends on heatwaves as well,
+  gathered for three seconds so that a sync round's messages refetch each
+  query once.
+  A buoy depth entering a heatwave gets a notice, but not one whose paused
+  heatwave goes on. The header says whether the feed is connected. The
+  connection reconnects with backoff, drops itself if the server's 30-second
+  pings stop, and refetches everything on screen each time it connects, the
+  first time too, to cover what it missed.
 - **About** (`/about`). How heatwaves are found, the origin rules signal by
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their

@@ -3,7 +3,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HttpError, keys, retry, useAnnual, useDaily, useDailyValues, useEvent } from "./queries";
+import { HttpError, keys, retry, useAnnual, useBuoys, useDaily, useDailyValues, useEvent } from "./queries";
 import type { Day, Origin } from "./types";
 
 /** Answers every request with `status`. */
@@ -82,8 +82,8 @@ describe("useDailyValues", () => {
       "/api/buoys/B01/1/daily?start=2021-06-01&end=2021-06-01&variable=temperature",
     ]);
 
-    // As the live feed does with a message from B01.
-    await act(() => client.invalidateQueries({ queryKey: [...keys.daily, "B01"] }));
+    // As the live feed does with a message from B01 at 1 m.
+    await act(() => client.invalidateQueries({ queryKey: [...keys.daily, "B01", 1] }));
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
@@ -103,5 +103,28 @@ describe("useAnnual", () => {
 
     expect(await asked(50, 1, null)).toBe("/api/annual?depth=50");
     expect(await asked(null, 2, "offshore")).toBe("/api/annual?min_category=2&origin=offshore");
+  });
+});
+
+describe("requests", () => {
+  it("abandons a refetch that a newer one replaces", async () => {
+    const signals: AbortSignal[] = [];
+    const fetch = vi.fn((_path: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      // The first load is answered; the refetches stay on their way.
+      return signals.length === 1 ? Promise.resolve(new Response("[]")) : new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetch);
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useBuoys(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(async () => void client.invalidateQueries({ queryKey: keys.buoys }));
+    await act(async () => void client.invalidateQueries({ queryKey: keys.buoys }));
+
+    expect(signals.map((signal) => signal.aborted)).toEqual([false, true, false]);
   });
 });

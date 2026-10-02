@@ -69,19 +69,23 @@ export function retry(failures: number, error: Error): boolean {
   return !(error instanceof HttpError && error.status >= 400 && error.status < 500) && failures < 3;
 }
 
-async function getJSON<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
+/**
+ * `signal` is the one TanStack Query gives each fetch, so a request no longer wanted is abandoned rather than read to
+ * the end: one a newer refetch replaces, or one for a page left before it loaded.
+ */
+async function getJSON<T>(path: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(path, { headers: { Accept: "application/json" }, signal });
   if (!response.ok) throw new HttpError(path, response.status);
   return response.json() as Promise<T>;
 }
 
 export function useBuoys() {
-  return useQuery({ queryKey: keys.buoys, queryFn: () => getJSON<Buoy[]>("/api/buoys") });
+  return useQuery({ queryKey: keys.buoys, queryFn: ({ signal }) => getJSON<Buoy[]>("/api/buoys", signal) });
 }
 
 /** Every heatwave at every buoy and depth: ~860 rows, fetched once and filtered locally. */
 export function useEvents() {
-  return useQuery({ queryKey: keys.events, queryFn: () => getJSON<HeatwaveEvent[]>("/api/events") });
+  return useQuery({ queryKey: keys.events, queryFn: ({ signal }) => getJSON<HeatwaveEvent[]>("/api/events", signal) });
 }
 
 /**
@@ -95,7 +99,7 @@ export function annualQuery(depth: number | null, minCategory: number, origin: O
   if (origin !== null) params.set("origin", origin);
   return queryOptions({
     queryKey: [...keys.annual, depth, minCategory, origin],
-    queryFn: () => getJSON<YearSummary[]>(`/api/annual?${params}`),
+    queryFn: ({ signal }) => getJSON<YearSummary[]>(`/api/annual?${params}`, signal),
     placeholderData: keepPreviousData,
   });
 }
@@ -125,7 +129,7 @@ export function useAgreements(depths: number[]): Agreements {
   return useQueries({
     queries: depths.map((depth) => ({
       queryKey: [...keys.agreement, depth],
-      queryFn: () => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`),
+      queryFn: ({ signal }) => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`, signal),
     })),
     combine: combineAgreements,
   });
@@ -135,7 +139,7 @@ export function useAgreements(depths: number[]): Agreements {
 export function useStripes(depth: number) {
   return useQuery({
     queryKey: [...keys.stripes, depth],
-    queryFn: () => getJSON<MonthAnomaly[]>(`/api/stripes?depth=${depth}`),
+    queryFn: ({ signal }) => getJSON<MonthAnomaly[]>(`/api/stripes?depth=${depth}`, signal),
   });
 }
 
@@ -143,9 +147,10 @@ export function useStripes(depth: number) {
 function dailyQuery(buoy: string, depth: number, start: string, end: string, variable: Variable = "temperature") {
   return {
     queryKey: [...keys.daily, buoy, depth, start, end, variable],
-    queryFn: async (): Promise<DayPoint[]> => {
+    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<DayPoint[]> => {
       const days = await getJSON<Day[]>(
         `/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}&variable=${variable}`,
+        signal,
       );
       return days.map((day) => ({ ...day, date: parseDay(day.date) }));
     },
@@ -177,11 +182,14 @@ export function useDailyByDepth(buoy: string, depths: number[], start: string, e
 /** A temperature series' daily means alone, without the normal: a whole record in a third of useDaily's bytes. */
 export function useDailyValues(buoy: string, depth: number, start: string, end: string) {
   return useQuery({
-    // Under keys.daily, so the live feed refreshes it with the buoy's other days, but never useDaily's key for the
-    // same days: the rows aren't the same shape.
+    // Under keys.daily, so the live feed refreshes it with the other days at its buoy and depth, but never useDaily's
+    // key for the same days: the rows aren't the same shape.
     queryKey: [...keys.daily, buoy, depth, start, end, "values"],
-    queryFn: async (): Promise<DayValuePoint[]> => {
-      const days = await getJSON<DayValue[]>(`/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`);
+    queryFn: async ({ signal }): Promise<DayValuePoint[]> => {
+      const days = await getJSON<DayValue[]>(
+        `/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`,
+        signal,
+      );
       return days.map((day) => ({ ...day, date: parseDay(day.date) }));
     },
     placeholderData: keepPreviousData,
@@ -193,7 +201,7 @@ export function useDailyValues(buoy: string, depth: number, start: string, end: 
 export function useEvent(buoy: string, depth: number, start: string) {
   return useQuery({
     queryKey: [...keys.event, buoy, depth, start],
-    queryFn: () => getJSON<EventDetail>(`/api/events/${buoy}/${depth}/${start}`),
+    queryFn: ({ signal }) => getJSON<EventDetail>(`/api/events/${buoy}/${depth}/${start}`, signal),
   });
 }
 
@@ -201,20 +209,20 @@ export function useEvent(buoy: string, depth: number, start: string) {
 export function useOnsets(year: number, depth: number) {
   return useQuery({
     queryKey: [...keys.onsets, year, depth],
-    queryFn: () => getJSON<Onsets>(`/api/onsets?year=${year}&depth=${depth}`),
+    queryFn: ({ signal }) => getJSON<Onsets>(`/api/onsets?year=${year}&depth=${depth}`, signal),
     placeholderData: keepPreviousData,
   });
 }
 
 /** The downloadable products and the variables of the daily files. */
 export function useDataCatalog() {
-  return useQuery({ queryKey: ["data"], queryFn: () => getJSON<DataCatalog>("/api/data") });
+  return useQuery({ queryKey: ["data"], queryFn: ({ signal }) => getJSON<DataCatalog>("/api/data", signal) });
 }
 
 /** The rules that label a heatwave's origin: fixed in the code, so fetched once. */
 export const originRulesQuery = queryOptions({
   queryKey: keys.originRules,
-  queryFn: () => getJSON<OriginRules>("/api/origin/rules"),
+  queryFn: ({ signal }) => getJSON<OriginRules>("/api/origin/rules", signal),
   staleTime: Infinity,
 });
 
@@ -225,7 +233,7 @@ export function useOriginRules() {
 /** The method's parameters, and the depths the map shows: fixed in the code, so fetched once. */
 export const methodQuery = queryOptions({
   queryKey: keys.method,
-  queryFn: () => getJSON<Method>("/api/method"),
+  queryFn: ({ signal }) => getJSON<Method>("/api/method", signal),
   staleTime: Infinity,
 });
 
