@@ -64,6 +64,12 @@ export type Origin = "offshore" | "surface" | "unclear";
 export type Vote = "offshore" | "surface" | null;
 export type Signal = "salinity" | "surface_heatwave" | "stratification" | "deep" | "onset_order";
 
+/**
+ * Whether a heatwave is over, by its series' state today (heatwaves/state.py): "ongoing" while the series is in it,
+ * "paused" while the series is paused on it, else "ended". Until it has ended, all but its start are so far.
+ */
+export type EventStatus = "ongoing" | "paused" | "ended";
+
 export interface HeatwaveEvent {
   buoy_id: string;
   depth: number;
@@ -76,6 +82,7 @@ export interface HeatwaveEvent {
   category: number;
   category_name: string;
   origin: Origin | null;
+  status: EventStatus;
 }
 
 /** The signals behind a heatwave's origin, and how each voted. Null where there was no data. */

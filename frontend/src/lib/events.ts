@@ -2,6 +2,7 @@ import type { DayPoint } from "../api/queries";
 import type { HeatwaveEvent, Origin } from "../api/types";
 import { ORIGINS } from "./colors";
 import { addDays, parseDay } from "./dates";
+import { formatDate } from "./format";
 
 export interface EventFilters {
   buoy: string | null;
@@ -43,6 +44,13 @@ export function sortEvents(events: HeatwaveEvent[], sort: Sort): HeatwaveEvent[]
 export function eventRange(event: Pick<HeatwaveEvent, "start_date" | "end_date" | "duration">) {
   const pad = Math.max(14, Math.round(event.duration / 2));
   return { from: addDays(event.start_date, -pad), to: addDays(event.end_date, pad) };
+}
+
+/** A heatwave's end for a table: its last day once it has ended, else that it's ongoing, or paused after its last day. */
+export function formatEnd(event: Pick<HeatwaveEvent, "end_date" | "status">): string {
+  if (event.status === "ongoing") return "Ongoing";
+  if (event.status === "paused") return `Paused after ${formatDate(event.end_date)}`;
+  return formatDate(event.end_date);
 }
 
 /** A heatwave's own page, addressed as the API addresses it: buoy, depth and start date. */

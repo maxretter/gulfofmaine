@@ -126,7 +126,8 @@ def test_origin_is_missing_at_depths_it_isnt_judged(client, tmp_path):
 
 
 def test_events_match_the_json_api_exactly(client, tmp_path):
-    expected = pd.DataFrame(client.get("/api/events").json())
+    # All but the status, which is of the day it's asked: the files are rewritten only as the record changes.
+    expected = pd.DataFrame(client.get("/api/events").json()).drop(columns="status")
     expected = expected.sort_values(["start_date", "buoy_id", "depth"], ignore_index=True)
     csv = read_csv(client.get("/api/data/events.csv").content)
 

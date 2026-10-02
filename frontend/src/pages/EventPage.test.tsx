@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Day, EventDetail, OriginRules } from "../api/types";
+import type { Day, EventDetail, HeatwaveEvent, OriginRules } from "../api/types";
 import { EventPage } from "./EventPage";
 
 const rules: OriginRules = {
@@ -38,6 +38,7 @@ const event: EventDetail = {
   category: 1,
   category_name: "Moderate",
   origin: "offshore",
+  status: "ended",
   evidence: {
     salinity_anomaly: null,
     surface_heatwave_days: 0,
@@ -65,13 +66,16 @@ function serve(statuses: { temperature?: number; salinity?: number; event?: numb
   vi.stubGlobal("fetch", fetch);
 }
 
-/** The heatwave's page, with the heatwave loaded unless `fetchEvent`, and the buoys, heatwaves and rules loaded. */
-function renderPage({ fetchEvent = false } = {}) {
+/**
+ * The heatwave's page, with the heatwave (`detail`) loaded unless `fetchEvent`, and the buoys, heatwaves (`events`)
+ * and rules loaded.
+ */
+function renderPage({ fetchEvent = false, detail = event, events = [] as HeatwaveEvent[] } = {}) {
   // Loaded data stays fresh, and a failure that's retried fails at once.
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retryDelay: 0 } } });
-  if (!fetchEvent) client.setQueryData([...keys.event, "B01", 50, "2021-06-10"], event);
+  if (!fetchEvent) client.setQueryData([...keys.event, "B01", 50, "2021-06-10"], detail);
   client.setQueryData(keys.buoys, []);
-  client.setQueryData(keys.events, []);
+  client.setQueryData(keys.events, events);
   client.setQueryData(keys.originRules, rules);
   render(
     <QueryClientProvider client={client}>
@@ -128,6 +132,34 @@ describe("EventPage", () => {
           "Onsets at B01, this heatwave's own buoy, don't count.",
       ),
     ).toBeTruthy();
+  });
+
+  it("gives a heatwave that has ended its length and ranks it among the buoy's others at its depth", () => {
+    serve({});
+    const longer = { ...event, start_date: "2019-07-01", end_date: "2019-07-30", duration: 30 };
+    renderPage({ events: [longer, event] });
+
+    expect(screen.getByText("11 days")).toBeTruthy();
+    expect(screen.getByText("Jun 10, 2021 to Jun 20, 2021")).toBeTruthy();
+    expect(screen.getByText("2nd longest of B01's 2 heatwaves at 50 m")).toBeTruthy();
+  });
+
+  it("says an ongoing or paused heatwave's length is so far, and ranks it as so far against those that ended", () => {
+    serve({});
+    const longer = { ...event, start_date: "2019-07-01", end_date: "2019-07-30", duration: 30 };
+    for (const [status, dates] of [
+      ["ongoing", "Jun 10, 2021 to Jun 20, 2021, and ongoing"],
+      ["paused", "Jun 10, 2021 to Jun 20, 2021, then paused"],
+    ] as const) {
+      const unfinished = { ...event, status };
+      renderPage({ detail: unfinished, events: [longer, unfinished] });
+
+      expect(screen.getByText("11 days so far")).toBeTruthy();
+      expect(screen.getByText(dates)).toBeTruthy();
+      expect(screen.getByText("So far 2nd longest of B01's 2 heatwaves at 50 m")).toBeTruthy();
+      expect(screen.getAllByText("So far the highest of B01's 2 heatwaves at 50 m")).toHaveLength(2);
+      cleanup();
+    }
   });
 
   it("says there's no such heatwave when the API has none", async () => {

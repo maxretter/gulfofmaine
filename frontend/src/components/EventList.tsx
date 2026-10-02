@@ -21,7 +21,8 @@ export function EventList({ events, onZoom }: Props) {
             <CategoryLabel category={event.category} />
             <span>{event.depth} m</span>
             <span>
-              {formatDate(event.start_date)} – {formatDate(event.end_date)}
+              {formatDate(event.start_date)} – {event.status === "ongoing" ? "ongoing" : formatDate(event.end_date)}
+              {event.status === "paused" && ", paused"}
             </span>
             <span className="num">{event.duration} days</span>
             <span className="num">peak {formatSigned(event.max_intensity)}</span>

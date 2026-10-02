@@ -166,6 +166,7 @@ function event(start_date: string, depth: number, origin: HeatwaveEvent["origin"
     category: 1,
     category_name: "Moderate",
     origin,
+    status: "ended",
   };
 }
 

@@ -13,7 +13,8 @@ Two products, each as NetCDF and as CSV:
   ERDDAP's EDDTableFromNcCFFiles serves them all as one dataset (erddap/).
 - Events, every heatwave at the buoys (gom_heatwaves_events.nc): one CF
   point per heatwave, at its buoy and depth on its first day. The CSV has
-  the columns of /api/events.
+  the columns of /api/events but its status, which is of the day the API
+  is asked, where these files are rewritten only when the record changes.
 
 Their CF and ACDD attribute tables are in heatwaves.metadata.
 
@@ -312,7 +313,7 @@ def daily_csv(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def events_table(session: Session) -> pd.DataFrame:
-    """Every heatwave at the buoys, with the fields of /api/events, oldest first."""
+    """Every heatwave at the buoys, with the fields of /api/events but `status`, oldest first."""
     rows = session.execute(
         select(
             Series.buoy_id,

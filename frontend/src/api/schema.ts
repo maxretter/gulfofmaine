@@ -100,6 +100,7 @@ export interface EventDetail {
   category: number;
   category_name: string;
   origin: "offshore" | "surface" | "unclear" | null;
+  status: "ongoing" | "paused" | "ended";
   evidence: Evidence | null;
   signals: SignalDay[];
   onsets: Onset[];
@@ -117,6 +118,7 @@ export interface EventOut {
   category: number;
   category_name: string;
   origin: "offshore" | "surface" | "unclear" | null;
+  status: "ongoing" | "paused" | "ended";
 }
 
 export interface Evidence {

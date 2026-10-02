@@ -10,6 +10,7 @@ import {
   type EventFilters,
   eventPath,
   filterEvents,
+  formatEnd,
   parseEventParams,
   type SortKey,
   sortEvents,
@@ -245,7 +246,7 @@ export function EventsPage() {
                     </td>
                     <td>{event.depth} m</td>
                     <td>{formatDate(event.start_date)}</td>
-                    <td>{formatDate(event.end_date)}</td>
+                    <td>{formatEnd(event)}</td>
                     <td className="num">{event.duration}</td>
                     <td className="num">{formatSigned(event.max_intensity)}</td>
                     <td className="num">{formatSigned(event.mean_intensity)}</td>

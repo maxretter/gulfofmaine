@@ -201,12 +201,12 @@ works:
   heatwave's page.
 - **A page per heatwave** (`/events/A01/50/2021-04-14`, addressed as the API
   addresses it). Its length, peak and mean, each ranked among the buoy's other
-  heatwaves at that depth, and what its category means; the temperature through
-  it at every depth; and every heatwave that overlapped it, at the buoy's other
-  depths and at the other buoys. At 20 and 50 m, its origin, with each of the
-  five signals as a small chart over the onset window, its vote and a sentence
-  on what it measured, and a temperature–salinity diagram of the water before
-  and after the onset.
+  heatwaves at that depth (so far, for one ongoing or paused), and what its
+  category means; the temperature through it at every depth; and every
+  heatwave that overlapped it, at the buoy's other depths and at the other
+  buoys. At 20 and 50 m, its origin, with each of the five signals as a small
+  chart over the onset window, its vote and a sentence on what it measured,
+  and a temperature–salinity diagram of the water before and after the onset.
 - **Live.** The page keeps a WebSocket open to `/api/live` and writes each
   new reading into TanStack Query's cache, so the tiles show the latest
   reading and the map marker pulses as it arrives; a status change refetches
@@ -248,7 +248,7 @@ every page as the site's mark.
 | `GET /api/buoys/{id}` | One buoy |
 | `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`, to 0.001; gaps are `null`; depth 0 is the satellite |
 | `GET /api/buoys/{id}/{depth}/daily/values?start=&end=&variable=` | The same days' means alone, without the normal, in about a third of the bytes |
-| `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin |
+| `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin and whether each has ended, is ongoing or is paused |
 | `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
 | `GET /api/onsets?year=&depth=` | Each buoy's heatwaves through a year, its daily anomaly, and the heatwave each day was part of |
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
@@ -259,7 +259,7 @@ every page as the site's mark.
 | `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering, pausing or leaving a heatwave, or the dates, category or intensity of its heatwave in progress or paused changing) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
-| `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` |
+| `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` but `status` |
 | `GET /healthz` | 200 while a buoy still reporting has synced within `SYNC_STALE_AFTER_HOURS` (3), 503 once none has; lists any series behind or never synced, the satellite's and retired buoys' included |
 
 Interactive documentation (OpenAPI) is served at `/docs`.

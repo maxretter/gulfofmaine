@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 
 import type { Buoy, HeatwaveEvent } from "../api/types";
 import { categories } from "../lib/colors";
-import { eventPath, overlapping, rankAmong } from "../lib/events";
+import { eventPath, formatEnd, overlapping, rankAmong } from "../lib/events";
 import { formatDate, formatOrdinal, formatSigned } from "../lib/format";
 import { CategoryLabel, OriginLabel } from "./Label";
 import { Swatch } from "./StateBadge";
@@ -12,13 +12,21 @@ type RankKey = Parameters<typeof rankAmong>[2];
 
 const SHOWN = 8; // overlapping heatwaves listed before "Show all"
 
-/** "The longest of B01's 57 heatwaves at 1 m", "3rd highest of …", or "B01's only heatwave at 150 m". */
+/**
+ * "The longest of B01's 57 heatwaves at 1 m", "3rd highest of …", or "B01's only heatwave at 150 m". One that hasn't
+ * ended is ranked on its figures so far, against heatwaves that have, and says so: "So far the longest of …".
+ */
 function rankLine(events: HeatwaveEvent[], event: HeatwaveEvent, key: RankKey, superlative: string): string {
   const { rank, of } = rankAmong(events, event, key);
   const among = `${event.buoy_id}'s ${of} heatwaves at ${event.depth} m`;
   if (of === 1) return `${event.buoy_id}'s only heatwave at ${event.depth} m`;
-  return rank === 1 ? `The ${superlative} of ${among}` : `${formatOrdinal(rank)} ${superlative} of ${among}`;
+  const place = rank === 1 ? "the" : formatOrdinal(rank);
+  if (event.status !== "ended") return `So far ${place} ${superlative} of ${among}`;
+  return rank === 1 ? `The ${superlative} of ${among}` : `${place} ${superlative} of ${among}`;
 }
+
+/** What follows a heatwave's dates until it has ended: that it's going on, or paused after its last day so far. */
+const UNTIL = { ongoing: ", and ongoing", paused: ", then paused", ended: "" } as const;
 
 /** The most multiples of the gap between normal and the threshold reached on any day: what sets the category. */
 function multiple(category: number): string {
@@ -33,9 +41,12 @@ export function EventFigures({ event, events }: { event: HeatwaveEvent; events: 
     <div className="tiles figures">
       <div className="tile">
         <p className="tile-label">Length</p>
-        <p className="tile-value">{event.duration} days</p>
+        <p className="tile-value">
+          {event.duration} days{event.status !== "ended" && " so far"}
+        </p>
         <p className="tile-line">
           {formatDate(event.start_date)} to {formatDate(event.end_date)}
+          {UNTIL[event.status]}
         </p>
         {rank("duration", "longest")}
       </div>
@@ -123,7 +134,7 @@ export function AtTheSameTime({ event, events, buoys }: { event: HeatwaveEvent; 
                       </th>
                       <td>{other.depth} m</td>
                       <td>{formatDate(other.start_date)}</td>
-                      <td>{formatDate(other.end_date)}</td>
+                      <td>{formatEnd(other)}</td>
                       <td className="num">{other.duration}</td>
                       <td className="num">{formatSigned(other.max_intensity)}</td>
                       <td>

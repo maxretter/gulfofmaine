@@ -5,6 +5,7 @@ import {
   eventPath,
   eventRange,
   filterEvents,
+  formatEnd,
   heatwaveBands,
   overlapping,
   parseEventParams,
@@ -26,6 +27,7 @@ function event(overrides: Partial<HeatwaveEvent>): HeatwaveEvent {
     category: 1,
     category_name: "Moderate",
     origin: null,
+    status: "ended",
     ...overrides,
   };
 }
@@ -106,6 +108,14 @@ describe("eventRange", () => {
       from: "2021-03-25",
       to: "2022-02-14",
     });
+  });
+});
+
+describe("formatEnd", () => {
+  it("gives a last day only to a heatwave that has ended", () => {
+    expect(formatEnd(event({ status: "ended" }))).toBe("Jul 10, 2021");
+    expect(formatEnd(event({ status: "ongoing" }))).toBe("Ongoing");
+    expect(formatEnd(event({ status: "paused" }))).toBe("Paused after Jul 10, 2021");
   });
 });
 

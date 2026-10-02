@@ -7,7 +7,7 @@ import type { Buoy, HeatwaveEvent, Onsets } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { anomalyColor, anomalyScale, colors, ORIGINS, origins } from "../lib/colors";
 import { maxDay, minDay, parseDay } from "../lib/dates";
-import { eventPath } from "../lib/events";
+import { eventPath, formatEnd } from "../lib/events";
 import { formatDate, formatSigned } from "../lib/format";
 import { eastToWest } from "../lib/origin";
 import { Chart } from "./Chart";
@@ -64,8 +64,8 @@ export function YearByBuoy({ year, depth, buoys }: Props) {
       table={{
         columns: [
           { label: "Buoy" },
-          { label: "Began" },
-          { label: "Ended" },
+          { label: "Start" },
+          { label: "End" },
           { label: "Days", numeric: true },
           { label: "Origin" },
         ],
@@ -73,7 +73,7 @@ export function YearByBuoy({ year, depth, buoys }: Props) {
           shown.map((e) => [
             e.buoy_id,
             formatDate(e.start_date),
-            formatDate(e.end_date),
+            formatEnd(e),
             e.duration,
             e.origin ? origins[e.origin].name : "–",
           ]),
@@ -122,7 +122,9 @@ function Rows({ data, rows, names, events, width }: RowsProps) {
         `${c.buoy} ${names.get(c.buoy)}, ${formatDate(c.date)}: ${c.anomaly === null ? "no data" : `${formatSigned(c.anomaly)} vs normal`}`,
         ...(c.event
           ? [
-              `Heatwave of ${c.event.duration} days from ${formatDate(c.event.start_date)}`,
+              c.event.status === "ended"
+                ? `Heatwave of ${c.event.duration} days from ${formatDate(c.event.start_date)}`
+                : `${c.event.status === "ongoing" ? "Ongoing" : "Paused"} heatwave of ${c.event.duration} days so far, from ${formatDate(c.event.start_date)}`,
               `Origin: ${c.event.origin ? origins[c.event.origin].name : "none"}. Click to open it`,
             ]
           : []),

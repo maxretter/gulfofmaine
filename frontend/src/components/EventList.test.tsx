@@ -20,6 +20,7 @@ function heatwave(depth: number, start_date: string, origin: HeatwaveEvent["orig
     category: 2,
     category_name: "Strong",
     origin,
+    status: "ended",
   };
 }
 
@@ -44,5 +45,23 @@ describe("EventList", () => {
 
     fireEvent.click(within(labelled).getByRole("button"));
     expect(onZoom).toHaveBeenCalledWith(expect.objectContaining({ start_date: "2021-06-10" }));
+  });
+
+  it("gives a last day only to a heatwave that has ended", () => {
+    const ended = { ...heatwave(20, "2021-06-10", null), end_date: "2021-06-21" };
+    render(
+      <MemoryRouter>
+        <EventList
+          events={[ended, { ...ended, status: "ongoing" }, { ...ended, status: "paused" }]}
+          onZoom={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole("button").map((button) => button.children[2].textContent)).toEqual([
+      "Jun 10, 2021 – Jun 21, 2021",
+      "Jun 10, 2021 – ongoing",
+      "Jun 10, 2021 – Jun 21, 2021, paused",
+    ]);
   });
 });

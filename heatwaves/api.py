@@ -24,6 +24,7 @@ from heatwaves.origin import Origin, Vote
 from heatwaves.queries import AT_BUOY, DECIMALS
 from heatwaves.sources import connect
 from heatwaves.state import OFFLINE_AFTER, State, latest_by_series, state_of
+from heatwaves.state import latest as latest_of
 
 router = APIRouter(prefix="/api", tags=["heatwaves"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -97,6 +98,11 @@ class DayValue(BaseModel):
     value: float | None  # null when the day has too little data
 
 
+# Whether a heatwave is over, by its series' state today (heatwaves.state): "ongoing" while the series is in
+# it, "paused" while the series is paused on it, else "ended".
+EventStatus = Literal["ongoing", "paused", "ended"]
+
+
 class EventOut(BaseModel):
     buoy_id: str
     depth: int
@@ -109,6 +115,7 @@ class EventOut(BaseModel):
     category: int
     category_name: str
     origin: Origin | None  # the origin label; only at the depths heatwaves.origin covers
+    status: EventStatus  # unless "ended", all but its start are so far
 
 
 class Evidence(BaseModel):
@@ -358,7 +365,8 @@ def get_series(session: Session, buoy_id: str, depth: int, variable: Variable = 
     return series
 
 
-def event_out(event: Event) -> EventOut:
+def event_out(event: Event, latest: Event | None, on: dt.date) -> EventOut:
+    """`latest` is the most recent heatwave of the event's series, if any."""
     return EventOut(
         buoy_id=event.series.buoy_id,
         depth=event.series.depth,
@@ -371,7 +379,23 @@ def event_out(event: Event) -> EventOut:
         category=event.category,
         category_name=event.category_name,
         origin=cast(Origin | None, event.origin),
+        status=event_status(event, latest, on),
     )
+
+
+def event_status(event: Event, latest: Event | None, on: dt.date) -> EventStatus:
+    """Whether a heatwave is over, as its series' state on `on` has it (heatwaves.state).
+
+    Only the series' most recent heatwave, `latest`, can be "ongoing",
+    while the series' state is "heatwave", or "paused", while it's
+    "paused". Every other is "ended", the last of a series gone offline
+    too: its record stops in it, and it ends there, as a heatwave does at
+    a long gap in the record.
+    """
+    if latest is None or latest.id != event.id:
+        return "ended"
+    state = state_of(event.series, latest, on).state
+    return "ongoing" if state == "heatwave" else "paused" if state == "paused" else "ended"
 
 
 @router.get("/buoys")
@@ -497,7 +521,11 @@ def list_events(
         query = query.where(Event.start_date <= dt.date(year, 12, 31), Event.end_date >= dt.date(year, 1, 1))
     if origin_ is not None:
         query = query.where(Event.origin == origin_)
-    return [event_out(event) for event in session.scalars(query.order_by(Event.start_date.desc()))]
+    latest, on = latest_by_series(session), today()
+    return [
+        event_out(event, latest.get(event.series_id), on)
+        for event in session.scalars(query.order_by(Event.start_date.desc()))
+    ]
 
 
 @router.get("/events/{buoy_id}/{depth}/{start}")
@@ -515,7 +543,8 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
     )
     if event is None:
         raise HTTPException(404, f"No heatwave at {buoy_id} {depth} m starting {start}")
-    detail = EventDetail(**event_out(event).model_dump(), evidence=None, signals=[], onsets=[])
+    out = event_out(event, latest_of(session, event.series), today())
+    detail = EventDetail(**out.model_dump(), evidence=None, signals=[], onsets=[])
     if event.evidence is None:
         return detail
 
@@ -610,6 +639,7 @@ def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
     first_day, last_day = dt.date(year, 1, 1), dt.date(year, 12, 31)
     days = pd.date_range(first_day, last_day, name="date")
     running: dict[int, list[Event]] = defaultdict(list)
+    latest, on = latest_by_series(session), today()
     for event in session.scalars(
         select(Event)
         .options(selectinload(Event.series))
@@ -633,7 +663,7 @@ def onsets(year: Year, depth: Depth, session: SessionDep) -> Onsets:
         }
         return BuoyYear(
             buoy_id=each.buoy_id,
-            heatwaves=[event_out(event) for event in running[each.id]],
+            heatwaves=[event_out(event, latest.get(each.id), on) for event in running[each.id]],
             anomaly=[_number(value) for value in anomaly],
             heatwave=[start_of.get(day) for day in days.date],
         )
@@ -794,7 +824,7 @@ def data_catalog(directory: ProductsDir) -> DataCatalog:
 @router.get("/data/events.{format}", response_class=FileResponse)
 @router.head("/data/events.{format}", include_in_schema=False)
 def download_events(format: products.Format, directory: ProductsDir, request: Request) -> Response:
-    """Every heatwave at the buoys: a CF point file, or a CSV with the fields of /api/events."""
+    """Every heatwave at the buoys: a CF point file, or a CSV with the fields of /api/events but `status`."""
     return _download(products.events_path(directory, format), format, request)
 
 

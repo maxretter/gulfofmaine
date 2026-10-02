@@ -24,6 +24,7 @@ function heatwave(buoy_id: string, start_date: string, end_date: string, origin:
     category: 1,
     category_name: "Moderate",
     origin,
+    status: "ended",
   };
 }
 
@@ -59,9 +60,9 @@ function Opened() {
   return <p>Opened {useLocation().pathname}</p>;
 }
 
-function renderYear() {
+function renderYear(year: Onsets = onsets) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-  client.setQueryData([...keys.onsets, 2021, 50], onsets);
+  client.setQueryData([...keys.onsets, 2021, 50], year);
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/origins"]}>
@@ -104,23 +105,47 @@ afterEach(() => {
   delete (SVGElement.prototype as { getBBox?: unknown }).getBBox;
 });
 
+/** The chart's table: its column labels, then each row's cells. */
+function openTable(container: HTMLElement): string[][] {
+  const table = container.querySelector("details")!;
+  table.open = true;
+  fireEvent(table, new Event("toggle"));
+  return [
+    [...container.querySelectorAll("thead th")].map((cell) => cell.textContent!),
+    ...[...container.querySelectorAll("tbody tr")].map((row) =>
+      [...row.querySelectorAll("td")].map((cell) => cell.textContent!),
+    ),
+  ];
+}
+
 describe("YearByBuoy", () => {
   it("draws and lists the API's heatwaves for the year, east to west, one carried over from December too", () => {
     const { container } = renderYear();
 
     const [, bars] = container.querySelectorAll('g[aria-label="rect"]');
     expect(bars.querySelectorAll("rect")).toHaveLength(3);
-    const table = container.querySelector("details")!;
-    table.open = true;
-    fireEvent(table, new Event("toggle"));
-    const rows = [...container.querySelectorAll("tbody tr")].map((row) =>
-      [...row.querySelectorAll("td")].map((cell) => cell.textContent),
-    );
+    const [columns, ...rows] = openTable(container);
+    expect(columns).toEqual(["Buoy", "Start", "End", "Days", "Origin"]);
     expect(rows).toEqual([
       ["M01", "Feb 13, 2021", "Feb 22, 2021", "10", "Offshore"],
       ["A01", "Dec 20, 2020", "Jan 5, 2021", "17", "Surface"],
       ["A01", "Apr 14, 2021", "Apr 28, 2021", "15", "Offshore"],
     ]);
+  });
+
+  it("lists a heatwave that hasn't ended as ongoing or paused, not with an end", () => {
+    const [a01, m01] = onsets.buoys;
+    const [december, april] = a01.heatwaves;
+    const { container } = renderYear({
+      ...onsets,
+      buoys: [
+        { ...a01, heatwaves: [december, { ...april, status: "ongoing" }] },
+        { ...m01, heatwaves: [{ ...m01.heatwaves[0], status: "paused" }] },
+      ],
+    });
+
+    const [, ...rows] = openTable(container);
+    expect(rows.map((row) => row[2])).toEqual(["Paused after Feb 22, 2021", "Jan 5, 2021", "Ongoing"]);
   });
 
   it("opens the heatwave a day was part of, though it began the year before", async () => {

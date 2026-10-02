@@ -65,6 +65,36 @@ def test_buoys_report_a_paused_heatwave_as_they_do_one_in_progress(client, sessi
     assert condition["event_start"] == paused.start_date.isoformat()
 
 
+def test_a_heatwave_is_ongoing_or_paused_as_its_series_is(client, session, stopped_clock):
+    ongoing = seasonal_temperatures("2003-01-01", TODAY)
+    ongoing.iloc[-8:] += 2.5
+    paused = seasonal_temperatures("2003-01-01", TODAY, seed=1)
+    paused.iloc[-9:-1] += 2.5
+    paused.iloc[-1] -= 2.0
+    # A record that stopped ten days ago, in a heatwave.
+    stopped = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=10), seed=2)
+    stopped.iloc[-8:] += 2.5
+    for values, depth in ((ongoing, 1), (paused, 20), (stopped, 50)):
+        update_heatwaves(session, add_series(session, values, "A01", depth))
+    session.commit()
+
+    [buoy] = client.get("/api/buoys").json()
+    events = client.get("/api/events").json()
+
+    assert [each["state"] for each in buoy["series"]] == ["heatwave", "paused", "offline"]
+    status = {(event["depth"], event["end_date"]): event["status"] for event in events}
+    assert status.pop((1, TODAY.isoformat())) == "ongoing"
+    assert status.pop((20, (TODAY - dt.timedelta(days=1)).isoformat())) == "paused"
+    # Its record stops in it, and so does the heatwave, as at any long gap.
+    assert status.pop((50, (TODAY - dt.timedelta(days=10)).isoformat())) == "ended"
+    assert set(status.values()) <= {"ended"}
+    # The event's own page and the year at every buoy say the same.
+    [held] = [event for event in events if event["status"] == "paused"]
+    assert client.get(f"/api/events/A01/20/{held['start_date']}").json()["status"] == "paused"
+    [a01] = client.get(f"/api/onsets?year={TODAY.year}&depth=1").json()["buoys"]
+    assert a01["heatwaves"][-1]["status"] == "ongoing"
+
+
 def test_buoys_give_each_series_its_own_first_day(client, session, stopped_clock):
     for depth, first, source in (
         (1, "2003-01-01", "buoy"),
