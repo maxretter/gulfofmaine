@@ -135,6 +135,24 @@ def test_sync_stops_after_one_request_when_the_newest_stamp_was_already_read(ses
     assert len(requests) == 1
 
 
+def test_sync_rereads_every_row_stamped_since_the_overlap_when_the_newest_stamp_goes_back(session, series):
+    # Read up to a stamp newer than any ERDDAP has now: the newest rows were deleted upstream.
+    series.modified_through = dt.datetime(2026, 9, 29, 6, tzinfo=dt.UTC)
+    requests: list[str] = []
+
+    assert sync_series(session, buoy_sources(recorded_erddap(A01_SYNC, requests)), series)
+
+    newest, span, data = requests
+    assert "time_modified>2026-09-27T06:00:00Z&orderByMax" in newest
+    # A single span, of every row stamped from the overlap on, whenever it was observed.
+    assert (
+        'time_modified>2026-09-27T06:00:00Z&time_modified<=2026-09-28T16:32:11Z&orderByMinMax("time")' in span
+    )
+    assert "time>=2026-09-24T00:00:00Z&time<2026-09-29T00:00:00Z" in data
+    # The next sync starts from the newest stamp there is.
+    assert series.modified_through == dt.datetime(2026, 9, 28, 16, 32, 11, tzinfo=dt.UTC)
+
+
 def test_sync_clears_days_whose_rows_are_gone(session, series):
     # ERDDAP stamped changes to these days, but no rows remain in them.
     series.latest_reading_at, series.latest_reading = dt.datetime(2026, 9, 27, 12, tzinfo=dt.UTC), 15.0
