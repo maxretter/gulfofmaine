@@ -159,7 +159,8 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   temperature records, the detected events (856 of them, with their dates and
   categories) are identical to those from Eric Oliver's
   [marineHeatWaves](https://github.com/ecjoliver/marineHeatWaves), run with
-  the same two-day limit on filling gaps (by default it fills them all), and
+  the same two-day limit on filling gaps (by default it fills none, so there
+  a single missing day breaks a heatwave), and
   the thresholds agree to within 0.005 °C (last run 2026-09-29). The comparison
   script is [`scripts/compare_with_reference.py`](scripts/compare_with_reference.py);
   it needs network access and isn't part of CI.

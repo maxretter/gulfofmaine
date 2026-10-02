@@ -11,10 +11,13 @@ day furthest above the climatology: 1 Moderate, 2 Strong, 3 Severe, 4 Extreme.
 Everything here is a plain function over xarray and pandas objects, with no
 database or network access. The parameters are the defaults of the reference
 implementation, https://github.com/ecjoliver/marineHeatWaves, apart from gap
-filling (MAX_PAD), which the reference leaves unbounded by default. Here a
-run of more than MAX_PAD missing days stays missing and ends an event: the
-days either side are events only if each lasts MIN_DURATION days, where the
-reference by default would interpolate across the gap.
+filling (MAX_PAD). The reference fills no gaps unless given maxPadLength (its
+docstring says it fills them all, but its code doesn't), so there a single
+missing day breaks a spell above the threshold: the days either side are
+events only if each lasts MIN_DURATION days. Here runs of up to MAX_PAD
+missing days are interpolated, the more lenient rule, and only a longer run
+breaks a spell. The comparison with the reference
+(scripts/compare_with_reference.py) passes it maxPadLength=MAX_PAD.
 
 References:
     Hobday et al. (2016), A hierarchical approach to defining marine
@@ -115,7 +118,7 @@ def climatology(temperature: pd.Series, baseline: tuple[int, int]) -> xr.Dataset
     """
     first_year, last_year = baseline
     days = pd.date_range(f"{first_year}-01-01", f"{last_year}-12-31", freq="D", name="time")
-    # Short gaps are filled before pooling, as the reference does.
+    # Short gaps are filled before pooling, as the reference does given maxPadLength.
     filled = fill_short_gaps(temperature.asfreq("D"), MAX_PAD).reindex(days)
     values = xr.DataArray.from_series(filled.rename_axis("time"))
     if values.count() < days.size / 2:
