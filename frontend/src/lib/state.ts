@@ -20,8 +20,14 @@ export function stateLook(condition: Pick<Condition, "state" | "category">): { c
     case "no_normal":
       // Reporting, but not judged: hollow like no data, in the darker gray of "no heatwave".
       return { color: colors.muted, variant: "hollow" };
-    default:
+    case "offline":
+    case "no_data":
       return { color: colors.axis, variant: "hollow" };
+    default: {
+      // Every state is listed above, so a new one fails the type check here until it's given a look.
+      const unreachable: never = condition.state;
+      throw new Error(`No look for the state ${unreachable}`);
+    }
   }
 }
 

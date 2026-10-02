@@ -32,8 +32,13 @@ function label(condition: Condition, depth?: number): string {
       return "No normal";
     case "offline":
       return `No data${depth === undefined ? "" : ` at ${depth} m`} since ${formatDate(condition.date!)}`;
-    default:
+    case "no_data":
       return "No data yet";
+    default: {
+      // Every state is listed above, so a new one fails the type check here until it's given a label.
+      const unreachable: never = condition.state;
+      throw new Error(`No label for the state ${unreachable}`);
+    }
   }
 }
 
