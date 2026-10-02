@@ -779,8 +779,9 @@ def stripes(depth: Depth, session: SessionDep) -> list[MonthAnomaly]:
     its own 2003-2022 normal. Months no buoy counts toward are left out. The
     site draws these as the stripes across its header.
     """
-    frames = (queries.daily(session, each.id) for each in queries.buoy_temperatures(session, depth))
-    months = queries.monthly_anomaly(frame["anomaly"] for frame in frames if frame is not None)
+    series = queries.buoy_temperatures(session, depth)
+    anomalies = queries.anomalies(session, [each.id for each in series])
+    months = queries.monthly_anomaly(anomalies[each.id] for each in series if each.id in anomalies)
     return [
         MonthAnomaly(month=month.date(), anomaly=round(anomaly, 3), buoys=int(count))
         for month, anomaly, count in zip(

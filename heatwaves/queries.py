@@ -1,9 +1,11 @@
 """Reads of the stored record, shared by the API and anything else that reports on it."""
 
 import datetime as dt
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from collections.abc import Collection, Iterable
 
+import numpy as np
 import pandas as pd
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -93,6 +95,38 @@ def daily_values(
     return values.reindex(days).astype(float)
 
 
+def anomalies(session: Session, series_ids: Collection[int]) -> dict[int, pd.Series]:
+    """Each series' daily anomalies as `daily` has them, but only on the days with a value.
+
+    By series, for those with a climatology. Two queries for all the series,
+    where `daily` takes two for each, and a row for every day between.
+    """
+    # Through the session's connection, in its transaction: the ORM's handling
+    # of each row would take half as long again as reading them.
+    execute = session.connection().execute
+    normals: dict[int, np.ndarray] = defaultdict(lambda: np.full(367, np.nan))  # by day of year
+    for series_id, day, mean in execute(
+        select(ClimatologyDay.series_id, ClimatologyDay.day_of_year, ClimatologyDay.mean).where(
+            ClimatologyDay.series_id.in_(series_ids)
+        )
+    ):
+        normals[series_id][day] = mean
+    rows = execute(
+        select(DailyMean.series_id, DailyMean.date, DailyMean.value)
+        .where(DailyMean.series_id.in_(normals))
+        .order_by(DailyMean.series_id, DailyMean.date)
+    ).all()
+    ids, dates, values = zip(*rows, strict=True) if rows else ((), (), ())
+    days = pd.DatetimeIndex(dates, name="date")
+    found: dict[int, pd.Series] = {}
+    for series_id, normal in normals.items():
+        # The series' rows, which the order keeps together.
+        first, last = bisect_left(ids, series_id), bisect_right(ids, series_id)
+        on = days[first:last]
+        found[series_id] = pd.Series(np.array(values[first:last], dtype=float) - normal[day_of_year(on)], on)
+    return found
+
+
 def heatwave_days(
     session: Session, series_ids: Collection[int], start: dt.date | None = None, end: dt.date | None = None
 ) -> dict[int, pd.Series]:
@@ -127,8 +161,14 @@ def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.Da
     """
     means = []
     for daily_anomaly in anomalies:
-        months = daily_anomaly.dropna().resample("MS")
-        means.append(months.mean()[months.count() >= min_days])
+        known = daily_anomaly.dropna()
+        days = pd.DatetimeIndex(known.index)
+        # By the months since 1970: resampling by month makes the same groups and
+        # means in twice the time, most of it spent making its bins.
+        months = known.groupby(((days.year - 1970) * 12 + days.month - 1).to_numpy())
+        enough = months.mean()[months.count() >= min_days]
+        first_days = enough.index.to_numpy().astype("datetime64[M]").astype(days.dtype)
+        means.append(pd.Series(enough.to_numpy(), index=first_days))
     if not means:
         return pd.DataFrame({"anomaly": [], "series": []}, index=pd.DatetimeIndex([], name="month"))
     table = pd.concat(means, axis=1)
