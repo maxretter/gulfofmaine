@@ -40,6 +40,9 @@ and the same for `gom_heatwaves_events\.nc` in `/data/products/`. The edits:
   set for the Gulf of Maine.
 - The events file's `event` index variable left out.
 
-Checked by loading both datasets in that image and comparing
-`tabledap/gom_heatwaves_daily.csv` for A01 50 m, M01 250 m and N01 1 m with the
-products' CSV files: every value identical.
+[`tests/test_erddap.py`](../tests/test_erddap.py), which CI runs against this
+image serving the sample products (`tests/sample.py`), checks that both
+datasets load, that every variable in the daily files is served, that every
+daily value ERDDAP serves matches the NetCDF files exactly (the daily CSV
+files round to 0.001), and that the events' buoys, start days, peak
+intensities and origins match the events file.
