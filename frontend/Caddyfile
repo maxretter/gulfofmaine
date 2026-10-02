@@ -33,16 +33,18 @@
 	# without one of its own: /docs sets its own (heatwaves/main.py), as /erddap does below.
 	header ?Content-Security-Policy "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 
+	# The API and ERDDAP by their aliases in compose.yaml, unique on the host: this container is also
+	# on the host's shared proxy network, where another stack's service could be called "api".
 	@api path /api/* /docs /openapi.json /healthz
 	handle @api {
-		reverse_proxy {$API_UPSTREAM:api:8000}
+		reverse_proxy {$API_UPSTREAM:gom-heatwaves-api:8000}
 	}
 
 	# Only with Compose's erddap profile; a 502 without it.
 	handle /erddap* {
 		# ERDDAP's pages run inline scripts and event handlers, so this rules out only framing.
 		header Content-Security-Policy "frame-ancestors 'none'"
-		reverse_proxy {$ERDDAP_UPSTREAM:erddap:8080}
+		reverse_proxy {$ERDDAP_UPSTREAM:gom-heatwaves-erddap:8080}
 	}
 
 	handle {

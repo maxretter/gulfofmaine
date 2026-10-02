@@ -67,6 +67,11 @@ services:
       interval: 60s
       timeout: 5s
       start_period: 3m
+    # The name Caddy reaches it by. The frontend is also on the host's shared proxy network,
+    # where another stack's service could be called plain "api".
+    networks:
+      default:
+        aliases: [gom-heatwaves-api]
 
   # Checks the buoys still reporting every 10 minutes, and everything hourly.
   sync:
@@ -89,6 +94,10 @@ services:
     volumes:
       - products:/data/products:ro
       - erddap:/erddapData
+    # The name Caddy reaches it by, as the API's.
+    networks:
+      default:
+        aliases: [gom-heatwaves-erddap]
 
   # The React app, served by Caddy, which forwards /api, /docs and /healthz to the API
   # and /erddap to ERDDAP.
