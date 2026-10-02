@@ -38,9 +38,9 @@ const days: Day[] = ["2021-06-01", "2021-06-02", "2021-06-03"].map((date, i) => 
   anomaly: 1 + i,
 }));
 
-function renderPage() {
+function renderPage(buoys: Buoy[] = [buoy(14)]) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-  client.setQueryData(keys.buoys, [buoy(14)]);
+  client.setQueryData(keys.buoys, buoys);
   client.setQueryData(keys.events, [heatwave(1), heatwave(50)]);
   render(
     <QueryClientProvider client={client}>
@@ -88,5 +88,23 @@ describe("BuoyPage", () => {
     act(() => client.setQueryData(keys.buoys, [buoy(14.5)]));
     expect(await screen.findAllByText("14.5 °C")).toHaveLength(2);
     expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
+  });
+
+  it("leaves out an offline depth's last values, and a reading since that its badge would contradict", () => {
+    const offline: Condition = {
+      ...condition(50, 9.9),
+      state: "offline",
+      date: "2021-05-20",
+      anomaly: 2.3,
+      reading_at: "2021-06-03T10:00:00Z",
+      reading: 10.1,
+    };
+    const reporting = { ...condition(1, 14), reading_at: "2021-06-03T09:00:00Z", reading: 13.2 };
+    renderPage([{ ...buoy(14), series: [reporting, offline] }]);
+    const tiles = [...document.querySelectorAll(".latest .tile")].map((tile) => tile.textContent);
+
+    expect(tiles[0]).toContain("14.0 °C+1.0 °C vs normal");
+    expect(tiles[0]).toContain("Latest reading13.2 °C");
+    expect(tiles[1]).toBe("50 m–– vs normalNo data since May 20, 2021");
   });
 });

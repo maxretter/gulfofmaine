@@ -133,25 +133,28 @@ function Tiles({ buoy }: { buoy: Buoy }) {
 }
 
 function Tile({ label, condition, day }: { label: string; condition: Condition; day: string | null }) {
-  // An offline series' badge already says when its data stopped.
-  const ownDay = condition.date !== day && condition.state !== "offline" ? condition.date : null;
+  // An offline series' badge says when its data stopped. Its last values, days to years old, are left out so they
+  // can't pass for today's, as on the Now page, and so is a reading since, which would contradict the badge.
+  const offline = condition.state === "offline" || condition.state === "no_data";
+  const ownDay = condition.date !== day && !offline ? condition.date : null;
+  const readingAt = offline ? null : condition.reading_at;
   return (
     <div className="tile">
       <p className="tile-label">{label}</p>
-      <p className="tile-value">{formatTemp(condition.temperature)}</p>
+      <p className="tile-value">{formatTemp(offline ? null : condition.temperature)}</p>
       <p className="tile-line">
-        <strong>{formatSigned(condition.anomaly)}</strong> vs normal
+        <strong>{formatSigned(offline ? null : condition.anomaly)}</strong> vs normal
       </p>
       <p className="tile-state">
         <StateBadge condition={condition} />
       </p>
-      {(ownDay || condition.reading_at) && (
+      {(ownDay || readingAt) && (
         <div className="tile-foot">
           {ownDay && <p>Daily mean for {formatDate(ownDay)}</p>}
-          {condition.reading_at && (
+          {readingAt && (
             <p>
               <span className="tile-foot-label">Latest reading</span>
-              {formatTemp(condition.reading)} at {formatTime(condition.reading_at)}
+              {formatTemp(condition.reading)} at {formatTime(readingAt)}
             </p>
           )}
         </div>
