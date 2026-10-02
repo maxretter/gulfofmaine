@@ -6,12 +6,12 @@ meters on each, and at 100 to 250 m in Jordan Basin (M01). The five still
 reporting are followed live; M01 and N01 are retired. Each buoy but N01 is
 set beside the satellite record in the nearest grid cell, and every heatwave
 at 20 and 50 m gets a rule-of-thumb label for where its heat may have come
-from. A Python job reads NERACOOS's ERDDAP server (and NOAA's, for the
-satellite) every 10 minutes and applies the standard marine heatwave
-definition (Hobday et al. 2016) to each depth; a FastAPI JSON API serves the
-results to a React app for exploring them, and pushes new readings to it
-over a WebSocket as they're stored. The whole record is also published as CF
-NetCDF and CSV files, ready for ERDDAP.
+from. A Python job reads NERACOOS's ERDDAP server every 10 minutes (and
+NOAA's, for the satellite, every hour) and applies the standard marine
+heatwave definition (Hobday et al. 2016) to each depth; a FastAPI JSON API
+serves the results to a React app for exploring them, and pushes new
+readings to it over a WebSocket as they're stored. The whole record is also
+published as CF NetCDF and CSV files, ready for ERDDAP.
 
 **Live site:** <https://gulfofmaine.maxretter.com> · **API docs:** <https://gulfofmaine.maxretter.com/docs>
 
@@ -123,13 +123,13 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   at all: the salinity anomaly at its depth; a heatwave at 1 m beforehand;
   whether the 1 m minus depth temperature difference holds or falls below
   half, whichever end moves; whether M01 at 100–250 m was in a heatwave in
-  the 30 days before onset; and whether a heatwave began at N01 or M01
-  before one at A01 or B01, in the 90 days up to and including the onset,
-  leaving out the heatwave's own buoy: one at A01 is compared with B01 alone
-  on the western side. So its own onset never counts, one at any of the four
-  with no onset at the other three doesn't vote, and an onset on one side
-  alone votes only if the other side has data. A label needs two more votes
-  than the other side, else Unclear. These are rules of thumb
+  the 30 days before onset; and whether a heatwave began at N01 or M01 more
+  than 7 days before one at A01 or B01, in the 90 days up to and including
+  the onset, leaving out the heatwave's own buoy: one at A01 is compared with
+  B01 alone on the western side. So its own onset never counts, one at any of
+  the four with no onset at the other three doesn't vote, and an onset on one
+  side alone votes only if the other side has data. A label needs two more
+  votes than the other side, else Unclear. These are rules of thumb
   written for this project, not a published or tested method. They are pure
   functions, unit-tested on synthetic series, and their thresholds are served
   at `/api/origin/rules` so the About page can't drift from the code. Labels
@@ -231,11 +231,12 @@ works:
 TanStack Query caches API responses, and a period that is still loading keeps
 the previous charts on screen, dimmed. Charts use Observable Plot inside one
 small React frame that handles width, loading, errors and the table view; the
-brush is d3-brush on top of a Plot chart. Every chart has a table view. Data
-colors come from two ordinal ramps checked for lightness order, hue spread and
-contrast, and the satellite's and the origins' colors were checked the same
-way against the ones beside them; anomalies use a blue–gray–orange diverging
-scale.
+brush is d3-brush on top of a Plot chart. Every chart but two has a table
+view: the warming stripes and the strip of a buoy's whole record have none.
+Data colors come from two ordinal ramps checked for lightness order, hue
+spread and contrast, and the satellite's and the origins' colors were
+checked the same way against the ones beside them; anomalies use a
+blue–gray–orange diverging scale.
 
 The look is editorial: Newsreader for titles, readings and long text, Public
 Sans for everything else (both self-hosted through Fontsource, since the
