@@ -67,6 +67,11 @@ services:
       migrate: { condition: service_completed_successfully }
     healthcheck:
       # Fails once no buoy still reporting has synced in SYNC_STALE_AFTER_HOURS (3), as well as if the API is down.
+      # /healthz waits its turn for a database session like any request (heatwaves/db.py), so a burst of a few
+      # hundred requests can hold it past the check's 4 s and fail a check. That does no harm: Docker calls the API
+      # unhealthy only after three failed checks in a row (its default retries), two minutes at the least, and
+      # nothing acts on that. unless-stopped restarts a container that exits, not one that's unhealthy; the
+      # frontend waits for the API to start, not to be healthy; Caddy checks nothing. It's a status to read in ps.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
       interval: 60s
       timeout: 5s
