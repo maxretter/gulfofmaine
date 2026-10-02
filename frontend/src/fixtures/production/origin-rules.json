@@ -1,0 +1,1 @@
+{"depths":[20,50],"before":30,"after":14,"lookback":90,"min_days":7,"salty":0.15,"fresh":0.0,"drift":-1.0,"mixed":1.0,"collapse":0.5,"together":7,"margin":2,"offshore_buoys":["N01","M01"],"western_buoys":["A01","B01"],"deep_buoy":"M01","deep_depths":[100,150,200,250]}

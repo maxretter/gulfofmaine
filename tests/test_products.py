@@ -105,6 +105,9 @@ def test_daily_flags_follow_the_heatwaves(client, tmp_path):
     assert category[GAP].isna().all()
     assert origin[GAP].isna().all()
     assert ds.heatwave_category.attrs["flag_meanings"] == "none moderate strong severe extreme"
+    # The origin labels heatwaves.origin.Origin lists, in its order, after none.
+    assert ds.heatwave_origin.attrs["flag_meanings"] == "none offshore surface unclear"
+    assert list(ds.heatwave_origin.attrs["flag_values"]) == [0, 1, 2, 3]
 
     satellite = ds.satellite_heatwave_category.to_series()
     assert (satellite["2021-04-01":"2021-04-20"] > 0).all()

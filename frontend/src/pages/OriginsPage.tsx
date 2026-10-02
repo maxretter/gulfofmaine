@@ -6,6 +6,7 @@ import { InlineSelect } from "../components/InlineSelect";
 import { OriginsByYear } from "../components/OriginsByYear";
 import { YearByBuoy } from "../components/YearByBuoy";
 import { latest } from "../lib/dates";
+import { formatList } from "../lib/format";
 
 const DEFAULT_YEAR = 2021; // the year the README's figures start with
 const DEFAULT_DEPTH = 50;
@@ -53,9 +54,9 @@ export function OriginsPage() {
         <p className="kicker">Origins</p>
         <h1>Offshore or surface?</h1>
         <p className="lead">
-          Each heatwave at 20 and 50 m is labeled by five signals read around its start: Offshore when they point to
-          warm water arriving at depth, Surface when they point to heat from the surface reaching down, and Unclear
-          when they don't agree. The labels are this site's own rules of thumb.{" "}
+          Each heatwave{rules.data && ` at ${formatList(rules.data.depths)} m`} is labeled by five signals read around
+          its start: Offshore when they point to warm water arriving at depth, Surface when they point to heat from the
+          surface reaching down, and Unclear when they don't agree. The labels are this site's own rules of thumb.{" "}
           <Link to="/about#origin">How the labels are made</Link>.
         </p>
       </section>

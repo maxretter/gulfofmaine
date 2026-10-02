@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Buoy, DataCatalog, Method, OriginRules, SatelliteCondition } from "../api/types";
+import type { Buoy, Condition, DataCatalog, Method, OriginRules, SatelliteCondition } from "../api/types";
+import * as production from "../fixtures/production";
 import { AboutPage, MovedToAbout } from "./AboutPage";
 
 /** The site's own method, as /api/method serves it. */
@@ -242,5 +243,83 @@ describe("AboutPage's method", () => {
     expect(text).not.toContain("percentile");
     expect(text).not.toContain("hours with data");
     expect(text).toContain("against the cell's own normal");
+  });
+});
+
+describe("AboutPage's buoys", () => {
+  /** The paragraphs under the heading `id`, as text. */
+  const section = (id: string) => {
+    const texts = [];
+    for (let at = document.getElementById(id)!.nextElementSibling; at && at.tagName !== "H2"; at = at.nextElementSibling) {
+      if (at.tagName === "P") texts.push(at.textContent);
+    }
+    return texts;
+  };
+
+  beforeEach(() => serve({}));
+
+  it("reads, on production's data, as it did when the buoys were written out", () => {
+    renderAt("/", [
+      [keys.buoys, production.buoys],
+      [keys.method, production.method],
+      [keys.originRules, production.rules],
+    ]);
+
+    expect(section("sources")).toEqual([
+      "Temperature and salinity come from the University of Maine buoys A01, B01, E01, F01, I01, M01 and N01, at 1, " +
+        "20 and 50 m and at M01 also 100–250 m, through the NERACOOS ERDDAP server, checked about every 10 minutes. " +
+        "A reading is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or " +
+        "failed; in September 2026 the QARTOD flag marked no reading suspect, and failed only readings UMaine's flag " +
+        "already marks. Readings are averaged by hour, then by day, and a day needs 18 hours with data, so the current " +
+        "day counts from about 18:00 UTC on the hours so far. M01 has sent no data since September 2025 and N01 since " +
+        "October 2021; their records are kept.",
+    ]);
+    expect(section("satellite")).toEqual([
+      "The satellite record is NOAA's OISST v2.1, a daily sea surface temperature analysis on a quarter-degree grid, " +
+        "from NOAA CoastWatch's ERDDAP server. Each buoy but N01 is compared with the nearest grid cell that has data, " +
+        "at most 13 km away. Satellite heatwaves are found the same way as the buoys', against the cell's own " +
+        "2003–2022 normal, and only days with data from both are compared.",
+      "At 1 m, the buoys' daily temperatures follow the satellite's closely: pooled over the six, they correlate at " +
+        "0.99, mostly through the seasons, and their anomalies from each series' own normal at 0.89 (as of October " +
+        "2026). Even so, about a third of heatwave days at 1 m have no satellite heatwave. That share is the one to " +
+        "hold the 20 and 50 m figures against, though each depth's share pools its own heatwave days from every buoy, " +
+        "so they don't rest on the same days.",
+    ]);
+  });
+
+  it("names the buoys, their depths, those that stopped and those without a satellite series as the API has them", () => {
+    const at = (depth: number, state: Condition["state"], date: string) => ({ depth, state, date }) as Condition;
+    const buoys: Buoy[] = [
+      { ...buoy("A01", "Massachusetts Bay", 5), series: [1, 20, 50].map((d) => at(d, "offline", "2024-02-11")) },
+      { ...buoy("B01", "Western Maine Shelf", 5), series: [1, 20, 50, 80].map((d) => at(d, "normal", "2026-10-01")), satellite: null },
+      { ...buoy("F01", "West Penobscot Bay", 5), series: [1, 20, 50, 90, 120].map((d) => at(d, "heatwave", "2026-10-01")) },
+    ];
+    renderAt("/", [
+      [keys.buoys, buoys],
+      [keys.method, { ...production.method, depths: [1, 20] }],
+    ]);
+
+    const [sources] = section("sources");
+    expect(sources).toContain(
+      "from the University of Maine buoys A01, B01 and F01, at 1, 20 and 50 m and at B01 also 80 m and at F01 also " +
+        "90–120 m, through",
+    );
+    expect(sources).toMatch(/ A01 has sent no data since February 2024; its record is kept\.$/);
+    const [compared, pooled] = section("satellite");
+    expect(compared).toContain("Each buoy but B01 is compared with the nearest grid cell");
+    expect(pooled).toContain("pooled over the two, they correlate");
+    expect(pooled).toContain("the one to hold the 20 m figures against");
+  });
+
+  it("claims nothing of the buoys before they load", () => {
+    renderAt("/");
+
+    const [sources] = section("sources");
+    expect(sources).toMatch(/^Temperature and salinity come from the University of Maine buoys, through the NERACOOS/);
+    expect(sources).not.toContain("no data since");
+    const [compared, pooled] = section("satellite");
+    expect(compared).toContain("The buoys are compared with the nearest grid cell that has data. ");
+    expect(pooled).toContain("pooled over the buoys, they correlate");
+    expect(pooled).toContain("the one to hold the deeper figures against");
   });
 });

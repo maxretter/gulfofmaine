@@ -1,0 +1,1 @@
+{"baseline_start":2003,"baseline_end":2022,"percentile":90.0,"window_half_width":5,"smooth_width":31,"min_duration":5,"max_gap":2,"max_pad":2,"categories":["Moderate","Strong","Severe","Extreme"],"min_hours":18,"offline_after":3,"depths":[1,20,50]}

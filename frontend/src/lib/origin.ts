@@ -5,13 +5,16 @@ import type { Buoy, Evidence, HeatwaveEvent, Origin, OriginRules, Signal, Vote }
 import { daysBetween } from "./dates";
 import { formatDate, formatSigned } from "./format";
 
-export const SIGNALS: { key: Signal; name: string }[] = [
-  { key: "salinity", name: "Salinity at this depth" },
-  { key: "surface_heatwave", name: "Heatwave at 1 m before" },
-  { key: "stratification", name: "1 m minus this depth" },
-  { key: "deep", name: "Deep water at M01" },
-  { key: "onset_order", name: "Which buoys' heatwaves began first" },
-];
+/** The five signals, each with its name: the deep water's buoy as the rules have it. */
+export function signals(rules: Pick<OriginRules, "deep_buoy">): { key: Signal; name: string }[] {
+  return [
+    { key: "salinity", name: "Salinity at this depth" },
+    { key: "surface_heatwave", name: "Heatwave at 1 m before" },
+    { key: "stratification", name: "1 m minus this depth" },
+    { key: "deep", name: `Deep water at ${rules.deep_buoy}` },
+    { key: "onset_order", name: "Which buoys' heatwaves began first" },
+  ];
+}
 
 export function countVotes(votes: Record<Signal, Vote>): { offshore: number; surface: number } {
   const values = Object.values(votes);
@@ -83,7 +86,7 @@ export function reading(signal: Signal, evidence: Evidence, rules: OriginRules, 
     }
     case "deep": {
       const days = evidence.deep_heatwave_days;
-      const where = `M01 at ${rules.deep_depths[0]}–${rules.deep_depths.at(-1)} m`;
+      const where = `${rules.deep_buoy} at ${rules.deep_depths[0]}–${rules.deep_depths.at(-1)} m`;
       if (days === null)
         return `${where} had no heatwave in the ${rules.before} days before onset, but no depth there had ${rules.min_days} days of data, so it doesn't vote.`;
       if (days > 0) return `${where} was in a heatwave on ${plural(days, "day")} of the ${rules.before} before onset, which votes offshore.`;

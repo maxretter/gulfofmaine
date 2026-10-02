@@ -4,7 +4,8 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Buoy, HeatwaveEvent } from "../api/types";
+import type { Buoy, Condition, HeatwaveEvent } from "../api/types";
+import * as production from "../fixtures/production";
 import { EventsPage } from "./EventsPage";
 
 function heatwave(start_date: string, end_date: string): HeatwaveEvent {
@@ -27,10 +28,10 @@ function heatwave(start_date: string, end_date: string): HeatwaveEvent {
 // One heatwave runs from 2012 into 2013; none touches 2014.
 const events = [heatwave("2012-12-25", "2013-01-03"), heatwave("2015-08-01", "2015-08-10")];
 
-function renderAt(path: string, heatwaves: HeatwaveEvent[] = events) {
+function renderAt(path: string, heatwaves: HeatwaveEvent[] = events, buoys: Buoy[] = []) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   client.setQueryData(keys.events, heatwaves);
-  client.setQueryData(keys.buoys, [] as Buoy[]);
+  client.setQueryData(keys.buoys, buoys);
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -82,6 +83,30 @@ describe("EventsPage", () => {
 
     const ends = screen.getAllByRole("row").slice(1).map((row) => row.querySelectorAll("td")[3].textContent);
     expect(ends).toEqual(["Ongoing", "Paused after Sep 10, 2026", "Aug 10, 2015", "Jan 3, 2013"]);
+  });
+
+  it("counts the heatwaves since the first buoy record, on production's data as it read when written out", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    client.setQueryData(keys.events, production.events);
+    client.setQueryData(keys.buoys, production.buoys);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/events"]}>
+          <EventsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("All 858 marine heatwaves detected at the 7 buoys since 2001.")).toBeTruthy();
+  });
+
+  it("takes the first year from the buoys' records, not the satellite's", () => {
+    const series = (first_date: string) => ({ depth: 1, first_date }) as Condition;
+    renderAt("/events", events, [
+      { id: "B01", series: [series("2004-06-04"), series("2005-01-01")], satellite: series("1981-09-01") },
+    ] as Buoy[]);
+
+    expect(screen.getByText("All 2 marine heatwaves detected at the 1 buoys since 2004.")).toBeTruthy();
   });
 
   it("offers the year filtered to when no heatwave touches it, as a heatmap cell can choose", () => {

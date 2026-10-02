@@ -11,6 +11,7 @@ last figure is of every normal, the satellite's and salinity's included.
 import datetime as dt
 import sys
 from collections import Counter
+from typing import get_args
 
 import numpy as np
 import pandas as pd
@@ -18,12 +19,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
-from heatwaves import api, queries
+from heatwaves import api, origin, queries
 from heatwaves.hobday import WINDOW_HALF_WIDTH, day_of_year
 from heatwaves.models import DailyMean, Event, Series
 from heatwaves.stations import BASELINE
 
-LABELED = (20, 50)  # the depths whose heatwaves get an origin label
+LABELED = origin.DEPTHS  # the depths whose heatwaves get an origin label
+AT_LABELED = " and ".join([", ".join(map(str, LABELED[:-1])), str(LABELED[-1])])  # "20 and 50"
 LABEL_YEARS = (2021, 2012)
 DAYS_YEAR = 2021
 DAYS_DEPTHS = (1, 20, 50)
@@ -98,12 +100,12 @@ def figures(session: Session) -> list[str]:
     for year in LABEL_YEARS:
         began = [event for event in labeled if event.start_date.year == year]
         origins = Counter(event.origin for event in began)
-        counts = ", ".join(f"{origins[origin]} {origin}" for origin in ("offshore", "surface", "unclear"))
-        lines.append(f"Heatwaves at 20 and 50 m that began in {year}: {len(began)}; {counts}.")
+        counts = ", ".join(f"{origins[label]} {label}" for label in get_args(origin.Origin))
+        lines.append(f"Heatwaves at {AT_LABELED} m that began in {year}: {len(began)}; {counts}.")
     judged = [event for event in labeled if event.origin is not None]
     unclear = sum(event.origin == "unclear" for event in judged)
     share = f"{unclear / len(judged):.0%}" if judged else "n/a"
-    lines.append(f"Unclear: {share} of the {len(judged)} labeled heatwaves at 20 and 50 m ({unclear}).")
+    lines.append(f"Unclear: {share} of the {len(judged)} labeled heatwaves at {AT_LABELED} m ({unclear}).")
 
     for depth in DAYS_DEPTHS:
         began = [event for event in all_events if event.depth == depth and event.start_date.year == DAYS_YEAR]

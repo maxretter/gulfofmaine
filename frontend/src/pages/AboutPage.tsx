@@ -2,11 +2,13 @@ import { Fragment } from "react";
 import { Navigate, useLocation } from "react-router";
 
 import { useBuoys, useDataCatalog, useMethod, useOriginRules } from "../api/queries";
-import type { Method, OriginRules } from "../api/types";
+import type { Buoy, Method, OriginRules } from "../api/types";
 import { ProductTable } from "../components/DataTables";
 import { OriginLabel } from "../components/Label";
+import { eachCompared } from "../lib/agreement";
 import { ORIGINS } from "../lib/colors";
-import { formatList, formatOrdinal, formatSigned } from "../lib/format";
+import { latest } from "../lib/dates";
+import { formatList, formatLongMonth, formatOrdinal, formatSigned } from "../lib/format";
 import { baselineLength, baselineYears, categoryScale, dayCountsFrom, inWords } from "../lib/method";
 
 const REPOSITORY = "https://github.com/maxretter/gulfofmaine";
@@ -22,6 +24,7 @@ export function AboutPage() {
   const catalog = useDataCatalog();
   const names = new Map(buoys.data?.map((buoy) => [buoy.id, buoy.name]));
   const farthest = Math.max(0, ...(buoys.data ?? []).map((b) => b.satellite?.distance_km ?? 0));
+  const compared = (buoys.data ?? []).filter((b) => b.satellite !== null).length; // buoys with a satellite series
 
   return (
     <article className="prose">
@@ -38,8 +41,8 @@ export function AboutPage() {
 
       <h2 id="sources">Data</h2>
       <p>
-        Temperature and salinity come from the University of Maine buoys A01, B01, E01, F01, I01, M01 and N01, at 1, 20
-        and 50 m and at M01 also 100–250 m, through the{" "}
+        Temperature and salinity come from the University of Maine buoys
+        {buoys.data?.length ? ` ${sources(buoys.data)}` : ""}, through the{" "}
         <a href="https://data.neracoos.org/erddap">NERACOOS ERDDAP server</a>, checked about every 10 minutes. A reading
         is kept only if UMaine's quality flag marks it good and the QARTOD flag doesn't mark it suspect or failed; in
         September 2026 the QARTOD flag marked no reading suspect, and failed only readings UMaine's flag already
@@ -50,7 +53,7 @@ export function AboutPage() {
             current day counts from about {dayCountsFrom(method.data)} on the hours so far.{" "}
           </>
         )}
-        M01 has sent no data since September 2025 and N01 since October 2021; their records are kept.
+        {buoys.data && silent(buoys.data)}
       </p>
 
       <h2 id="origin">Origin labels</h2>
@@ -65,18 +68,19 @@ export function AboutPage() {
         The satellite record is NOAA's{" "}
         <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst">OISST v2.1</a>, a daily sea surface
         temperature analysis on a quarter-degree grid, from{" "}
-        <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>. Each buoy but N01 is
-        compared with the nearest grid cell that has data
+        <a href="https://coastwatch.pfeg.noaa.gov/erddap">NOAA CoastWatch's ERDDAP server</a>.{" "}
+        {eachCompared(buoys.data)} compared with the nearest grid cell that has data
         {farthest > 0 && `, at most ${Math.ceil(farthest)} km away`}. Satellite heatwaves are found the same way as the
         buoys', against the cell's own {method.data && `${baselineYears(method.data)} `}normal, and only days with data
         from both are compared.
       </p>
       <p>
-        At 1 m, the buoys' daily temperatures follow the satellite's closely: pooled over the six, they correlate at
-        0.99, mostly through the seasons, and their anomalies from each series' own normal at 0.89 (as of October 2026).
-        Even so, about a third of heatwave days at 1 m have no satellite heatwave. That share is the one to hold the 20
-        and 50 m figures against, though each depth's share pools its own heatwave days from every buoy, so they don't
-        rest on the same days.
+        At 1 m, the buoys' daily temperatures follow the satellite's closely: pooled over the{" "}
+        {compared > 0 ? inWords(compared) : "buoys"}, they correlate at 0.99, mostly through the seasons, and their
+        anomalies from each series' own normal at 0.89 (as of October 2026). Even so, about a third of heatwave days at
+        1 m have no satellite heatwave. That share is the one to hold the{" "}
+        {method.data ? `${formatList(method.data.depths.slice(1))} m` : "deeper"} figures against, though each depth's
+        share pools its own heatwave days from every buoy, so they don't rest on the same days.
       </p>
 
       <h2 id="data">API and files</h2>
@@ -96,6 +100,38 @@ export function AboutPage() {
       )}
     </article>
   );
+}
+
+/**
+ * The buoys, the depths every one of them measures and any others: "A01, B01 and M01, at 1, 20 and 50 m and at M01
+ * also 100–250 m".
+ */
+function sources(buoys: Buoy[]): string {
+  const depths = buoys.map((buoy) => buoy.series.map((s) => s.depth));
+  const common = depths[0].filter((depth) => depths.every((each) => each.includes(depth)));
+  const more = buoys.flatMap((buoy, i) => {
+    const extra = depths[i].filter((depth) => !common.includes(depth));
+    if (extra.length === 0) return [];
+    return [`at ${buoy.id} also ${extra.length === 1 ? extra[0] : `${extra[0]}–${extra.at(-1)}`} m`];
+  });
+  const where = common.length === 0 ? "" : `, at ${formatList(common)} m${more.length ? ` and ${formatList(more)}` : ""}`;
+  return `${formatList(buoys.map((buoy) => buoy.id))}${where}`;
+}
+
+/**
+ * The buoys that have stopped reporting, with the month each last did: "M01 has sent no data since September 2025 and
+ * N01 since October 2021; their records are kept." Empty if none has.
+ */
+function silent(buoys: Buoy[]): string {
+  const quiet = buoys.flatMap((buoy) => {
+    const reporting = buoy.series.some((s) => s.state !== "offline" && s.state !== "no_data");
+    const last = latest(buoy.series.map((s) => s.date));
+    return reporting || last === null ? [] : [{ id: buoy.id, since: formatLongMonth(last) }];
+  });
+  if (quiet.length === 0) return "";
+  const [first, ...rest] = quiet;
+  const each = [`${first.id} has sent no data since ${first.since}`, ...rest.map(({ id, since }) => `${id} since ${since}`)];
+  return `${formatList(each)}; ${quiet.length === 1 ? "its record is" : "their records are"} kept.`;
 }
 
 /** The pages this one replaced: a link to /methods#origin, say, lands on the same section here. */

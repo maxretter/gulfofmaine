@@ -2,13 +2,13 @@ import * as Plot from "@observablehq/plot";
 import { group, max, utcDay } from "d3";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 
-import { type DayPoint, isNotFound, useDaily, useDailyByDepth } from "../api/queries";
+import { type DayPoint, isNotFound, useDaily, useDailyByDepth, useMethod } from "../api/queries";
 import type { Buoy, HeatwaveEvent } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { categories, colors } from "../lib/colors";
 import { formatDay, parseDay } from "../lib/dates";
 import { heatwaveBands } from "../lib/events";
-import { formatDate, formatSigned, formatTemp } from "../lib/format";
+import { formatDate, formatOrdinal, formatSigned, formatTemp } from "../lib/format";
 import { Chart } from "./Chart";
 import { CategoryLabel } from "./Label";
 import { type PlotElement, PlotFigure } from "./PlotFigure";
@@ -47,6 +47,7 @@ function byDate(days: DayPoint[]): Map<string, DayPoint> {
 
 /** What the lines and shading in DepthCharts mean; the satellite's line only when the buoy has one. */
 export function SeriesLegend({ buoy }: { buoy: Buoy }) {
+  const method = useMethod();
   return (
     <div className="legend series-legend">
       <span className="key">
@@ -59,7 +60,7 @@ export function SeriesLegend({ buoy }: { buoy: Buoy }) {
       </span>
       <span className="key">
         <span className="line dashed" style={{ borderColor: colors.ink2 }} aria-hidden="true" />
-        Heatwave threshold (90th percentile)
+        Heatwave threshold{method.data && ` (${formatOrdinal(method.data.percentile)} percentile)`}
       </span>
       {buoy.satellite?.first_date && (
         <span className="key">

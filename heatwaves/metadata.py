@@ -4,6 +4,8 @@ Each variable's, and the global ones they share; heatwaves.products adds
 each file's own, such as its title and bounds.
 """
 
+from typing import get_args
+
 import numpy as np
 import pandas as pd
 
@@ -15,7 +17,7 @@ REPOSITORY = "https://github.com/maxretter/gulfofmaine"
 
 # Flags, as CF flag_values and flag_meanings: each meaning's value is its position.
 CATEGORY_FLAGS = ["none", *(name.lower() for name in CATEGORIES.values())]
-ORIGIN_FLAGS = ["none", "offshore", "surface", "unclear"]
+ORIGIN_FLAGS = ["none", *get_args(origin.Origin)]
 
 ON_SCALE = {"units": "degree_Celsius", "units_metadata": "temperature: on_scale"}
 DIFFERENCE = {"units": "degree_Celsius", "units_metadata": "temperature: difference"}

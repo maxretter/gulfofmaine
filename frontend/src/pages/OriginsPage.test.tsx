@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Buoy, Condition, HeatwaveEvent, Origin, OriginRules } from "../api/types";
+import * as production from "../fixtures/production";
 import { OriginsPage } from "./OriginsPage";
 
 // The chart of the year at every buoy has tests of its own; here, only which year and depth it's given.
@@ -106,6 +107,26 @@ describe("OriginsPage", () => {
     const years = within(yearSelect()).getAllByRole("option").map((option) => option.textContent);
     expect([years[0], years.at(-1), years.length]).toEqual(["2025", "2001", 25]);
     expect(listLink()).toBe("/events?depth=50&year=2021");
+  });
+
+  it("names the depths labeled as the rules have them, as it read when written out on production's rules", async () => {
+    const lead = () => document.querySelector(".lead")!.textContent;
+    serve({ ...everything, "/api/origin/rules": production.rules });
+    renderAt("/origins");
+
+    await waitFor(() =>
+      expect(lead()).toBe(
+        "Each heatwave at 20 and 50 m is labeled by five signals read around its start: Offshore when they point to " +
+          "warm water arriving at depth, Surface when they point to heat from the surface reaching down, and Unclear " +
+          "when they don't agree. The labels are this site's own rules of thumb. How the labels are made.",
+      ),
+    );
+
+    cleanup();
+    serve({ ...everything, "/api/origin/rules": { ...production.rules, depths: [50] } });
+    renderAt("/origins");
+
+    await waitFor(() => expect(lead()).toMatch(/^Each heatwave at 50 m is labeled by five signals/));
   });
 
   it("takes the depth and year from the address, and either title's menu changes the depth of both", async () => {

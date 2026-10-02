@@ -1,4 +1,5 @@
-import type { Agreement } from "../api/types";
+import type { Agreement, Buoy } from "../api/types";
+import { formatList } from "./format";
 
 /** Heatwave days at one depth and year, split by whether the satellite saw a heatwave too. */
 export interface MissedYear {
@@ -31,4 +32,14 @@ export function missedByYear(rows: Agreement[], buoy?: string): MissedYear[] {
     totals.set(key, total);
   }
   return [...totals.values()].sort((a, b) => a.depth - b.depth || a.year - b.year);
+}
+
+/**
+ * The buoys set beside the satellite record, as a sentence begins: "Each buoy but N01 is", for a buoy without a
+ * satellite series, or "Each buoy is". Before the buoys load, "The buoys are", which claims no more than is known.
+ */
+export function eachCompared(buoys: Buoy[] | undefined): string {
+  if (!buoys?.length) return "The buoys are";
+  const without = buoys.filter((buoy) => buoy.satellite === null).map((buoy) => buoy.id);
+  return without.length === 0 ? "Each buoy is" : `Each buoy but ${formatList(without)} is`;
 }

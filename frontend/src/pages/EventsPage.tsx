@@ -7,6 +7,7 @@ import type { Origin } from "../api/types";
 import { AnnualHeatmap } from "../components/AnnualHeatmap";
 import { CategoryLabel, OriginLabel } from "../components/Label";
 import { categories, origins } from "../lib/colors";
+import { earliest } from "../lib/dates";
 import {
   type EventFilters,
   eventPath,
@@ -74,6 +75,8 @@ export function EventsPage() {
   }
   const totalDays = matching.reduce((sum, e) => sum + e.duration, 0);
   const buoyCount = new Set(events.data.map((e) => e.buoy_id)).size;
+  // The first year of the buoys' records, the satellite's aside.
+  const firstDay = earliest((buoys.data ?? []).flatMap((b) => b.series.map((s) => s.first_date)));
   const filteredBuoy = buoys.data?.find((b) => b.id === filters.buoy);
 
   const header = (label: string, key: SortKey, numeric = false) => (
@@ -95,7 +98,8 @@ export function EventsPage() {
         <p className="kicker">Heatwaves</p>
         <h1>Every heatwave on record</h1>
         <p className="lead">
-          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys since 2001.
+          All {events.data.length} marine heatwaves detected at the {buoyCount} buoys
+          {firstDay && ` since ${firstDay.slice(0, 4)}`}.
         </p>
       </section>
 

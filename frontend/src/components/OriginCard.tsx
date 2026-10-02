@@ -6,7 +6,7 @@ import { chartDefaults } from "../lib/chart";
 import { categories, colors, origins } from "../lib/colors";
 import { addDays, formatDay, parseDay } from "../lib/dates";
 import { formatDate, formatSigned } from "../lib/format";
-import { eastToWest, reading, sides, SIGNALS, verdict } from "../lib/origin";
+import { eastToWest, reading, sides, signals, verdict } from "../lib/origin";
 import { Chart } from "./Chart";
 import { Label, OriginLabel, VoteLabel } from "./Label";
 import { PlotFigure } from "./PlotFigure";
@@ -37,7 +37,7 @@ export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[]
         {verdict(detail.origin!, evidence.votes, rules.margin)} The dotted line marks the onset.
       </p>
       <div className="signals">
-        {SIGNALS.map(({ key, name }) => (
+        {signals(rules).map(({ key, name }) => (
           <div className="signal" key={key}>
             <div className="signal-head">
               <h3>{name}</h3>
@@ -48,7 +48,7 @@ export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[]
           </div>
         ))}
       </div>
-      <SignalTable days={days} depth={detail.depth} />
+      <SignalTable days={days} depth={detail.depth} deepBuoy={rules.deep_buoy} />
     </section>
   );
 }
@@ -256,7 +256,7 @@ function OnsetDots({ detail, rules, order, color, width }: OnsetDotsProps) {
 }
 
 /** The table twin of every signal chart above, day by day. */
-function SignalTable({ days, depth }: { days: Day[]; depth: number }) {
+function SignalTable({ days, depth, deepBuoy }: { days: Day[]; depth: number; deepBuoy: string }) {
   const yes = (value: boolean) => (value ? "yes" : "");
   return (
     <TableToggle
@@ -267,8 +267,8 @@ function SignalTable({ days, depth }: { days: Day[]; depth: number }) {
           { label: `1 m minus ${depth} m`, numeric: true },
           { label: "1 m vs normal", numeric: true },
           { label: "Heatwave at 1 m" },
-          { label: "M01 deep vs normal", numeric: true },
-          { label: "M01 deep heatwave" },
+          { label: `${deepBuoy} deep vs normal`, numeric: true },
+          { label: `${deepBuoy} deep heatwave` },
       ]}
       rows={() =>
         days.map((d) => [

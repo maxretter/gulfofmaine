@@ -3,8 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Buoy, Condition, Day } from "../api/types";
-import { DepthCharts } from "./DepthCharts";
+import { keys } from "../api/queries";
+import type { Buoy, Condition, Day, Method } from "../api/types";
+import * as production from "../fixtures/production";
+import { DepthCharts, SeriesLegend } from "./DepthCharts";
 
 // Counts the charts drawn.
 vi.mock("@observablehq/plot", async (importOriginal) => {
@@ -107,5 +109,38 @@ describe("DepthCharts", () => {
 
     expect(await screen.findByText("Couldn't load the temperature series.")).toBeTruthy();
     expect(screen.queryByText("No normal for this depth, so it isn't charted.")).toBeNull();
+  });
+});
+
+describe("SeriesLegend", () => {
+  function renderLegend(method?: Method) {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    if (method) client.setQueryData(keys.method, method);
+    render(
+      <QueryClientProvider client={client}>
+        <SeriesLegend buoy={production.buoys[0]} />
+      </QueryClientProvider>,
+    );
+  }
+  const keyTexts = () => Array.from(document.querySelectorAll(".series-legend .key"), (key) => key.textContent);
+
+  it("names the threshold's percentile as the method has it, as it read when written out", () => {
+    renderLegend(production.method);
+    expect(keyTexts()).toEqual([
+      "Daily mean",
+      "Normal",
+      "Heatwave threshold (90th percentile)",
+      "Satellite, at the surface (top chart)",
+    ]);
+
+    cleanup();
+    renderLegend({ ...production.method, percentile: 95 });
+    expect(keyTexts()).toContain("Heatwave threshold (95th percentile)");
+  });
+
+  it("names no percentile before the method loads", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    renderLegend();
+    expect(keyTexts()).toContain("Heatwave threshold");
   });
 });

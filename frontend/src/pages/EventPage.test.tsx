@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
 import type { Day, EventDetail, HeatwaveEvent, OriginRules } from "../api/types";
+import * as production from "../fixtures/production";
 import { EventPage } from "./EventPage";
 
 const rules: OriginRules = {
@@ -68,15 +69,15 @@ function serve(statuses: { temperature?: number; salinity?: number; event?: numb
 
 /**
  * The heatwave's page, with the heatwave (`detail`) loaded unless `fetchEvent`, and the buoys, heatwaves (`events`)
- * and rules loaded.
+ * and rules (`originRules`) loaded.
  */
-function renderPage({ fetchEvent = false, detail = event, events = [] as HeatwaveEvent[] } = {}) {
+function renderPage({ fetchEvent = false, detail = event, events = [] as HeatwaveEvent[], originRules = rules } = {}) {
   // Loaded data stays fresh, and a failure that's retried fails at once.
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retryDelay: 0 } } });
   if (!fetchEvent) client.setQueryData([...keys.event, "B01", 50, "2021-06-10"], detail);
   client.setQueryData(keys.buoys, []);
   client.setQueryData(keys.events, events);
-  client.setQueryData(keys.originRules, rules);
+  client.setQueryData(keys.originRules, originRules);
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/events/B01/50/2021-06-10"]}>
@@ -160,6 +161,40 @@ describe("EventPage", () => {
       expect(screen.getAllByText("So far the highest of B01's 2 heatwaves at 50 m")).toHaveLength(2);
       cleanup();
     }
+  });
+
+  it("names the deep water's buoy as the rules have it, as it read when written out on production's rules", async () => {
+    /** The deep water's signal: its name and reading, and the signal table's columns for it. */
+    const deep = () => {
+      const signal = screen.getByText(/^Deep water at/).closest(".signal")!;
+      const card = signal.closest(".card")!;
+      const table = card.querySelector(":scope > details") as HTMLDetailsElement; // the signals' table, day by day
+      table.open = true;
+      fireEvent(table, new Event("toggle"));
+      const columns = Array.from(table.querySelectorAll("th"), (th) => th.textContent).filter((th) => th!.includes("deep"));
+      return [signal.querySelector("h3")!.textContent, signal.querySelector(".signal-reading")!.textContent, ...columns];
+    };
+    serve({});
+    renderPage({ originRules: production.rules });
+    await screen.findByText("Offshore or surface?");
+
+    expect(deep()).toEqual([
+      "Deep water at M01",
+      "M01 at 100–250 m was in a heatwave on 12 days of the 30 before onset, which votes offshore.",
+      "M01 deep vs normal",
+      "M01 deep heatwave",
+    ]);
+
+    cleanup();
+    renderPage({ originRules: { ...production.rules, deep_buoy: "I01", deep_depths: [80, 120] } });
+    await screen.findByText("Offshore or surface?");
+
+    expect(deep()).toEqual([
+      "Deep water at I01",
+      "I01 at 80–120 m was in a heatwave on 12 days of the 30 before onset, which votes offshore.",
+      "I01 deep vs normal",
+      "I01 deep heatwave",
+    ]);
   });
 
   it("says there's no such heatwave when the API has none", async () => {
