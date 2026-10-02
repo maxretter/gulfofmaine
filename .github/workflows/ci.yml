@@ -123,3 +123,9 @@ jobs:
       - name: Caddy accepts the Caddyfile
         if: matrix.context == 'frontend'
         run: docker run --rm ci-image caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Caddy serves the app on port 80, not as root
+        if: matrix.context == 'frontend'
+        run: |
+          docker run -d --name frontend -p 8080:80 ci-image
+          test "$(docker exec frontend id -u)" != 0
+          curl -sf --retry 10 --retry-connrefused --retry-delay 1 http://localhost:8080/ | grep '<div id="root">' > /dev/null
