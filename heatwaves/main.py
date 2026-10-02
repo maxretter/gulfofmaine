@@ -53,22 +53,37 @@ app.include_router(api.router)
 
 # Swagger UI at one version, where FastAPI's default takes the newest 5.x on the CDN.
 SWAGGER_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0/"
+# Its two files' subresource integrity: the SHA-384 of each as published in swagger-ui-dist on npm,
+# which jsDelivr serves unchanged. A browser uses a file only if it still hashes to this. After
+# changing the version, hash the new files: openssl dgst -sha384 -binary <file> | base64
+SWAGGER_UI_INTEGRITY = {
+    "swagger-ui-bundle.js": "sha384-YDALVcy8kj8yltLBVi1vBiBAUqdxvus673gM8XKwiy6aDUJFXivF/KCufekjYbVf",
+    "swagger-ui.css": "sha384-Ov4/wv3j2bmct8cDc5X4ngJZohVPzEmc6uDPH8WeljUxO5vtoykvMEfbu9Vh6RaW",
+}
 
 
 @app.get("/docs", include_in_schema=False)
 def docs() -> HTMLResponse:
-    """Swagger UI, with a content security policy that allows its files and its one inline script.
+    """Swagger UI, its files checked against their hashes, with a content security policy that
+    allows those files and its one inline script.
 
     Caddy gives every other response the app's policy, which would block both.
     """
-    page = get_swagger_ui_html(
-        openapi_url=cast(str, app.openapi_url),
-        title=f"{app.title} - Swagger UI",
-        swagger_js_url=f"{SWAGGER_UI}swagger-ui-bundle.js",
-        swagger_css_url=f"{SWAGGER_UI}swagger-ui.css",
-        swagger_favicon_url="/favicon.svg",  # the app's
-    )
-    [script] = re.findall(r"<script>(.*?)</script>", bytes(page.body).decode(), re.DOTALL)
+    html = bytes(
+        get_swagger_ui_html(
+            openapi_url=cast(str, app.openapi_url),
+            title=f"{app.title} - Swagger UI",
+            swagger_js_url=f"{SWAGGER_UI}swagger-ui-bundle.js",
+            swagger_css_url=f"{SWAGGER_UI}swagger-ui.css",
+            swagger_favicon_url="/favicon.svg",  # the app's
+        ).body
+    ).decode()
+    # FastAPI's page takes no attributes for its files, so they go in after each file's URL.
+    for name, integrity in SWAGGER_UI_INTEGRITY.items():
+        url = f'"{SWAGGER_UI}{name}"'
+        html = html.replace(url, f'{url} integrity="{integrity}" crossorigin="anonymous"')
+    page = HTMLResponse(html)
+    [script] = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
     digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
     page.headers["Content-Security-Policy"] = (
         f"default-src 'self'; script-src {SWAGGER_UI} 'sha256-{digest}'; style-src {SWAGGER_UI}; "
