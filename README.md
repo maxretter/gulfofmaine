@@ -43,9 +43,10 @@ surface; of the 85 that began in 2012, 17 offshore and 30 surface. Across the
 whole record about half are Unclear, and the site says so.
 
 Heatwaves that began in 2021 lasted 1,076 days in all at 20 m and 1,033 at
-50 m, summed over the buoys, against 571 at 1 m. The longest in the record ran
-165 days at 150 m in Jordan Basin (M01), from January to June 2023, and 163
-days at 20 m at F01 (West Penobscot Bay), from June to November 2021.
+50 m, summed over the buoys, against 571 at 1 m. The three longest in the
+record ran 165 and 164 days at 150 and 200 m in Jordan Basin (M01), from
+January to June 2023, and 163 days at 20 m at F01 (West Penobscot Bay), from
+June to November 2021.
 (Figures as of 2026-10-01, from `scripts/readme_figures.py` and
 `scripts/satellite_correlation.py`.)
 

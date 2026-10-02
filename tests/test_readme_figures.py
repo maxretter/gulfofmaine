@@ -23,7 +23,7 @@ def test_the_figures_count_what_the_readme_says_they_do(session):
         "Heatwaves that began in 2021 at 1 m lasted 0 days, summed over the buoys.",
         "Heatwaves that began in 2021 at 20 m lasted 0 days, summed over the buoys.",
         "Heatwaves that began in 2021 at 50 m lasted 16 days, summed over the buoys.",
-        "Long heatwave: 16 days at 50 m at A01, 2021-04-13 to 2021-04-28.",
+        "Longest heatwave 1 of 3: 16 days at 50 m at A01, 2021-04-13 to 2021-04-28.",
         # Salinity starts in June 2005, so its windows before then draw on 2006-2021 alone.
         "Fewest baseline years behind any normal, at any time of year: 16, for A01 50 m salinity (buoy).",
     ]

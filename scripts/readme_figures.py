@@ -30,6 +30,7 @@ AT_LABELED = " and ".join([", ".join(map(str, LABELED[:-1])), str(LABELED[-1])])
 LABEL_YEARS = (2021, 2012)
 DAYS_YEAR = 2021
 DAYS_DEPTHS = (1, 20, 50)
+LONGEST = 3  # the longest heatwaves quoted
 
 
 def heatwaves(session: Session) -> list[Row]:
@@ -127,9 +128,9 @@ def figures(session: Session) -> list[str]:
             f"Heatwaves that began in {DAYS_YEAR} at {depth} m lasted {total:,} days, summed over the buoys."
         )
 
-    for event in sorted(all_events, key=days, reverse=True)[:3]:
+    for rank, event in enumerate(sorted(all_events, key=days, reverse=True)[:LONGEST], start=1):
         lines.append(
-            f"Long heatwave: {days(event)} days at {event.depth} m at {event.buoy_id},"
+            f"Longest heatwave {rank} of {LONGEST}: {days(event)} days at {event.depth} m at {event.buoy_id},"
             f" {event.start_date} to {event.end_date}."
         )
 
