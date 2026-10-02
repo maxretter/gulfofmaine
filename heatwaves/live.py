@@ -12,7 +12,9 @@ NOTIFY, and the feed only pings.
 
 import asyncio
 import datetime as dt
+import ipaddress
 import logging
+from collections import Counter
 from collections.abc import Collection, Iterable
 from typing import Literal
 from urllib.parse import urlsplit
@@ -110,26 +112,65 @@ def libpq_url(database_url: str) -> str | None:
     return url.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
+def address_key(host: str) -> str:
+    """What a connection from `host` counts against: its IPv4 address, or its IPv6 /64.
+
+    A household or a phone is usually given a whole /64, so one client could
+    otherwise open each connection from an address of its own.
+    """
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.IPv6Network((address, 64), strict=False))
+    return str(address)
+
+
 class Hub:
     """The browsers connected to this process, each with a queue of messages to send it."""
 
     BACKLOG = 100  # messages a browser can fall behind by before it's disconnected
 
-    def __init__(self, max_clients: int) -> None:
+    def __init__(self, max_clients: int, max_per_address: int) -> None:
         self.max_clients = max_clients
+        self.max_per_address = max_per_address
+        # Each browser's queue, and the address it counts against (address_key).
         # None in a queue tells its connection to close.
-        self.clients: set[asyncio.Queue[str | None]] = set()
+        self.clients: dict[asyncio.Queue[str | None], str] = {}
+        self.per_address: Counter[str] = Counter()
 
-    def join(self) -> asyncio.Queue[str | None] | None:
-        """A queue for a new browser, or None if the feed is full."""
+    def join(self, host: str) -> asyncio.Queue[str | None] | None:
+        """A queue for a new browser at `host`, or None if the feed is full or has max_per_address from there.
+
+        Without the second limit, one client could take every place. Behind
+        proxies, `host` is the visitor's only if each passes it on (TRUSTED_PROXIES
+        in frontend/Caddyfile, FORWARDED_ALLOW_IPS for uvicorn); otherwise every
+        visitor shares the proxy's, and its limit.
+        """
+        address = address_key(host)
         if len(self.clients) >= self.max_clients:
             return None
+        if self.per_address[address] >= self.max_per_address:
+            log.warning(
+                "Refused a live feed connection from %s, which has %d; LIVE_MAX_PER_ADDRESS can raise it",
+                address,
+                self.max_per_address,
+            )
+            return None
         queue: asyncio.Queue[str | None] = asyncio.Queue(self.BACKLOG)
-        self.clients.add(queue)
+        self.clients[queue] = address
+        self.per_address[address] += 1
         return queue
 
     def leave(self, queue: asyncio.Queue[str | None]) -> None:
-        self.clients.discard(queue)
+        address = self.clients.pop(queue, None)
+        if address is not None:
+            self.per_address[address] -= 1
+            if not self.per_address[address]:
+                del self.per_address[address]
 
     def publish(self, message: str) -> None:
         for queue in list(self.clients):
@@ -150,7 +191,7 @@ class Hub:
         queue.put_nowait(None)
 
 
-hub = Hub(settings.live_max_clients)
+hub = Hub(settings.live_max_clients, settings.live_max_per_address)
 
 
 async def relay(url: str, hub: Hub, retry: float = 5.0) -> None:
@@ -204,7 +245,7 @@ async def serve(websocket: WebSocket, hub: Hub) -> None:
         # Refused before the handshake, which the browser sees as a 403.
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    queue = hub.join()
+    queue = hub.join(websocket.client.host if websocket.client else "")
     if queue is None:
         # Refused before the handshake; the browser retries later.
         await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)

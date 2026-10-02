@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 
 from heatwaves import live, main
 from heatwaves.config import Settings
-from heatwaves.live import Hub, ReadingMessage, StatusMessage
+from heatwaves.live import Hub, ReadingMessage, StatusMessage, address_key
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
 from heatwaves.state import SeriesState, state_of
@@ -28,6 +28,7 @@ from tests.conftest import A01_SYNC, NOW, TODAY, add_series, recorded_erddap, se
 
 # The sync judges each series' state on its clock's day (sync.update_heatwaves), stopped at NOW.
 pytestmark = pytest.mark.usefixtures("stopped_clock")
+BROWSER = "198.51.100.7"  # a browser's address, for the hub
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 postgres_only = pytest.mark.skipif(
@@ -254,6 +255,48 @@ def test_the_feed_turns_browsers_away_when_full(monkeypatch):
         assert refused.value.code == 1013
 
 
+def test_the_feed_turns_away_an_address_holding_its_share_of_places(monkeypatch, caplog):
+    # A script needn't send an Origin, so without this one client could take every place.
+    monkeypatch.setattr(live.hub, "max_per_address", 1)
+
+    with TestClient(main.app) as client, client.websocket_connect("/api/live"):
+        with pytest.raises(WebSocketDisconnect) as refused, client.websocket_connect("/api/live"):
+            pass
+        assert refused.value.code == 1013  # as when the feed is full
+        assert len(live.hub.clients) == 1
+    assert "LIVE_MAX_PER_ADDRESS" in caplog.text
+
+
+def test_an_address_at_its_limit_leaves_the_rest_of_the_feed_open():
+    hub = Hub(max_clients=10, max_per_address=2)
+    first, second = hub.join(BROWSER), hub.join(BROWSER)
+    assert first is not None and second is not None
+
+    assert hub.join(BROWSER) is None
+    assert hub.join("203.0.113.9") is not None
+    hub.leave(first)
+    assert hub.join(BROWSER) is not None
+    assert hub.per_address == {BROWSER: 2, "203.0.113.9": 1}
+
+
+@pytest.mark.parametrize(
+    ("one", "other", "shared"),
+    [
+        ("198.51.100.7", "198.51.100.8", False),
+        ("2001:db8:1:2::a", "2001:db8:1:2:ffff::b", True),  # one /64: usually one household or phone
+        ("2001:db8:1:2::a", "2001:db8:1:3::a", False),
+        ("::ffff:198.51.100.7", BROWSER, True),  # an IPv4 address written as IPv6
+        ("testclient", "testclient", True),  # not an address at all
+    ],
+)
+def test_ipv6_addresses_share_a_limit_by_their_64(one, other, shared):
+    hub = Hub(max_clients=10, max_per_address=1)
+
+    assert hub.join(one) is not None
+    assert (hub.join(other) is None) is shared
+    assert (address_key(one) == address_key(other)) is shared
+
+
 @pytest.mark.parametrize(
     "headers",
     [
@@ -297,8 +340,8 @@ def test_live_origins_is_a_comma_separated_list(monkeypatch):
 
 
 def test_a_browser_that_falls_behind_is_disconnected_to_refetch():
-    hub = Hub(max_clients=2)
-    queue = hub.join()
+    hub = Hub(max_clients=2, max_per_address=2)
+    queue = hub.join(BROWSER)
     assert queue is not None
 
     for n in range(Hub.BACKLOG + 1):
@@ -353,8 +396,8 @@ def test_the_relay_reconnects_and_has_browsers_refetch_what_they_missed(monkeypa
             return attempt
 
         monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
-        hub = Hub(max_clients=2)
-        browser = hub.join()
+        hub = Hub(max_clients=2, max_per_address=2)
+        browser = hub.join(BROWSER)
         assert browser is not None
         relay = asyncio.create_task(live.relay("postgresql://db/heatwaves", hub, retry=0))
         try:
@@ -373,7 +416,7 @@ def test_the_relay_reconnects_and_has_browsers_refetch_what_they_missed(monkeypa
             # Once listening again, the relay closes the browser's connection, so it reconnects and refetches.
             assert await asyncio.wait_for(browser.get(), 5) is None
             hub.leave(browser)
-            reconnected = hub.join()
+            reconnected = hub.join(BROWSER)
             assert reconnected is not None
             second.notices.put_nowait("two")
             assert await asyncio.wait_for(reconnected.get(), 5) == "two"
@@ -450,8 +493,8 @@ async def listening_backend(db: psycopg.AsyncConnection) -> int:
 @postgres_only
 def test_the_relay_listens_again_once_its_connection_is_cut(libpq_url):
     async def scenario() -> None:
-        hub = Hub(max_clients=2)
-        browser = hub.join()
+        hub = Hub(max_clients=2, max_per_address=2)
+        browser = hub.join(BROWSER)
         assert browser is not None
         relay = asyncio.create_task(live.relay(libpq_url, hub, retry=0.05))
         try:
@@ -461,7 +504,7 @@ def test_the_relay_listens_again_once_its_connection_is_cut(libpq_url):
 
                 assert await asyncio.wait_for(browser.get(), 10) is None  # reconnect and refetch
                 hub.leave(browser)
-                reconnected = hub.join()
+                reconnected = hub.join(BROWSER)
                 assert reconnected is not None
                 await db.execute("SELECT pg_notify(%s, 'after')", [live.CHANNEL])
                 assert await asyncio.wait_for(reconnected.get(), 10) == "after"

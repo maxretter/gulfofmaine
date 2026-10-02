@@ -19,6 +19,9 @@ class Settings:
     sync_stale_after: dt.timedelta
     # Browsers the live feed serves at once (heatwaves.live).
     live_max_clients: int
+    # Of those, from any one address. Room for several people with a few tabs each behind one
+    # school's or office's address; one client can still hold no more than a tenth of the default 200.
+    live_max_per_address: int
     # Origins besides the site's own whose pages may open the live feed, such as https://example.org.
     live_origins: frozenset[str]
     # Where the sync job writes the NetCDF and CSV products (heatwaves.products) and the API reads them.
@@ -38,6 +41,7 @@ class Settings:
             ),
             sync_stale_after=dt.timedelta(hours=float(env("SYNC_STALE_AFTER_HOURS", "3"))),
             live_max_clients=int(env("LIVE_MAX_CLIENTS") or "200"),
+            live_max_per_address=int(env("LIVE_MAX_PER_ADDRESS") or "20"),
             live_origins=frozenset(
                 origin.strip().rstrip("/").lower()
                 for origin in env("LIVE_ORIGINS", "").split(",")
