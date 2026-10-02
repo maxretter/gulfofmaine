@@ -42,7 +42,10 @@ function daysSoFar(year: number): number {
  */
 export function AnnualHeatmap({ buoys, depth, minCategory, origin, selected, onSelect }: Props) {
   const annual = useAnnual(depth, minCategory, origin);
-  const names = useMemo(() => new Map(buoys.map((b) => [b.id, b.name])), [buoys]);
+  // Each buoy's name by its ID, in the buoys' order: the heatmap's rows. Kept while those are: the buoys come anew with
+  // every reading the live feed brings, and the same rows in a new map would redraw the heatmap.
+  const rows = JSON.stringify(buoys.map((b) => [b.id, b.name]));
+  const names = useMemo(() => new Map<string, string>(JSON.parse(rows)), [rows]);
   const cells: Cell[] = useMemo(
     () => (annual.data ?? []).map((d) => ({ ...d, enough: d.observed_days >= daysSoFar(d.year) / 2 })),
     [annual.data],
@@ -82,14 +85,7 @@ export function AnnualHeatmap({ buoys, depth, minCategory, origin, selected, onS
     >
       {(width) =>
         cells.length > 0 && (
-          <Heatmap
-            cells={cells}
-            width={width}
-            buoys={buoys}
-            names={names}
-            selected={selected}
-            onSelect={onSelect}
-          />
+          <Heatmap cells={cells} width={width} names={names} selected={selected} onSelect={onSelect} />
         )
       }
     </Chart>
@@ -101,13 +97,13 @@ function isSelected(cell: Cell, { buoy, year }: HeatmapSelection): boolean {
   return (buoy === null || cell.buoy_id === buoy) && (year === null || cell.year === year);
 }
 
-interface HeatmapProps extends Pick<Props, "buoys" | "selected" | "onSelect"> {
+interface HeatmapProps extends Pick<Props, "selected" | "onSelect"> {
   cells: Cell[];
   width: number;
-  names: Map<string, string>;
+  names: Map<string, string>; // by buoy ID, a row each, top first
 }
 
-function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProps) {
+function Heatmap({ cells, width, names, selected, onSelect }: HeatmapProps) {
   const { buoy: selectedBuoy, year: selectedYear } = selected;
   const [first, last] = extent(cells, (d) => d.year) as [number, number];
   const options = useMemo((): Plot.PlotOptions => {
@@ -121,11 +117,11 @@ function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProp
     return {
       ...chartDefaults,
       width: chartWidth,
-      height: 44 + buoys.length * 30,
+      height: 44 + names.size * 30,
       marginLeft: 44,
       marginRight: 20,
       x: { domain: range(first, last + 1), label: null, tickFormat: (y: number) => (y % 5 === 0 || chartWidth > 900 ? String(y) : "") },
-      y: { domain: buoys.map((b) => b.id), label: null },
+      y: { domain: [...names.keys()], label: null },
       marks: [
         Plot.cell(
           cells.filter((d) => d.enough),
@@ -143,7 +139,7 @@ function Heatmap({ cells, width, buoys, names, selected, onSelect }: HeatmapProp
         Plot.tip(cells, Plot.pointer({ x: "year", y: "buoy_id", title: describe })),
       ],
     };
-  }, [cells, width, first, last, buoys, names, selectedBuoy, selectedYear]);
+  }, [cells, width, first, last, names, selectedBuoy, selectedYear]);
 
   // On narrow screens the grid scrolls sideways. It starts at the recent years, and keeps its place when it's redrawn
   // for a selected cell or new data; only other years, or another width, start it at the recent years again.

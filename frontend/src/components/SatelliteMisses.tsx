@@ -20,7 +20,9 @@ const GAP = 1; // px each side of the 2px surface gap between stacked segments
  */
 export function SatelliteMisses({ buoy }: { buoy?: string }) {
   const method = useMethod();
-  const depths = method.data?.depths.slice(1) ?? [];
+  // Kept while the method is: the page renders again with each reading the live feed brings, and a new list of the
+  // same depths would redraw every panel.
+  const depths = useMemo(() => method.data?.depths.slice(1) ?? [], [method.data]);
   const agreements = useAgreements(depths);
   const years = useMemo(() => missedByYear(agreements.byDepth.flat(), buoy), [agreements.byDepth, buoy]);
   const loading = method.isPending || agreements.isPending;
@@ -69,16 +71,23 @@ export function SatelliteMisses({ buoy }: { buoy?: string }) {
 
 /** One panel per depth, on the same years and the same day scale so their bars compare. */
 function Columns({ depths, years, width }: { depths: number[]; years: MissedYear[]; width: number }) {
-  const [first, last] = extent(years, (d) => d.year) as [number, number];
-  const most = max(years, (d) => d.missed + d.seen) ?? 0;
+  // Made again only when the depths or years change: a panel redraws for new lists, even of the same years.
+  const { domain, most, byDepth } = useMemo(() => {
+    const [first, last] = extent(years, (d) => d.year) as [number, number];
+    return {
+      domain: range(first, last + 1),
+      most: max(years, (d) => d.missed + d.seen) ?? 0,
+      byDepth: depths.map((depth) => years.filter((d) => d.depth === depth)),
+    };
+  }, [depths, years]);
   return (
     <div className="chart-panels">
-      {depths.map((depth) => (
+      {depths.map((depth, i) => (
         <section className="chart-panel" key={depth}>
           <h3 className="chart-panel-title">
             {depth} m <span className="unit">heatwave days</span>
           </h3>
-          <Panel years={years.filter((d) => d.depth === depth)} domain={range(first, last + 1)} most={most} width={width} />
+          <Panel years={byDepth[i]} domain={domain} most={most} width={width} />
         </section>
       ))}
     </div>

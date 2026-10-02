@@ -1,12 +1,20 @@
+import * as Plot from "@observablehq/plot";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { withReading } from "../api/live";
 import { keys } from "../api/queries";
-import type { Agreement, Buoy, Method, SatelliteCondition } from "../api/types";
+import type { Agreement, Buoy, Condition, Method, ReadingMessage, SatelliteCondition } from "../api/types";
 import * as production from "../fixtures/production";
 import { SatellitePage } from "./SatellitePage";
+
+// Counts the charts drawn.
+vi.mock("@observablehq/plot", async (importOriginal) => {
+  const actual = await importOriginal<typeof Plot>();
+  return { ...actual, plot: vi.fn(actual.plot) };
+});
 
 const row = (buoy_id: string, depth: number, both: number, buoy_only: number): Agreement => ({
   buoy_id,
@@ -52,6 +60,7 @@ function renderPage(
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return client;
 }
 
 beforeEach(() => {
@@ -130,6 +139,51 @@ describe("SatellitePage", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {}))); // the buoys never arrive
     renderPage({ 1: [], 20: [], 50: [] }, null);
     expect(lead()).toMatch(/^The buoys are set beside NOAA's satellite record/);
+  });
+
+  it("redraws no panel when a reading comes in, or the comparison is refetched unchanged", async () => {
+    // Every chart is 600 px wide, so each is drawn.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        callback: ResizeObserverCallback;
+        constructor(callback: ResizeObserverCallback) {
+          this.callback = callback;
+        }
+        observe() {
+          this.callback([{ contentRect: { width: 600 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+        disconnect() {}
+      },
+    );
+    const agreement = {
+      1: [row("A01", 1, 30, 10)],
+      20: [row("A01", 20, 10, 10)],
+      50: [row("A01", 50, 10, 30)],
+    };
+    const a01 = { ...buoy("A01", "Massachusetts Bay"), series: [{ depth: 20, reading: 9, reading_at: null } as Condition] };
+    // As the API answers a refetch: the same buoys and comparison.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const depth = new URL(url, "http://localhost").searchParams.get("depth");
+        return new Response(JSON.stringify(depth === null ? [a01] : agreement[Number(depth) as 1 | 20 | 50]));
+      }),
+    );
+    const client = renderPage(agreement, [a01]);
+    await waitFor(() => expect(document.querySelectorAll(".chart-panel svg")).toHaveLength(2));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    const drawn = vi.mocked(Plot.plot).mock.calls.length;
+
+    // As the live feed writes in a reading, then refetches the buoys; and as a status message has it refetch the
+    // comparison, which comes back the same. TanStack Query tells the page on its next tick.
+    const reading: ReadingMessage = { type: "reading", buoy: "A01", depth: 20, time: "2021-06-11T01:00:00Z", temperature: 9.5 };
+    act(() => client.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, reading)));
+    await act(() => client.invalidateQueries({ queryKey: keys.buoys }));
+    await act(() => client.invalidateQueries({ queryKey: keys.agreement }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
   });
 
   it("says so when the satellite record hasn't been loaded", () => {

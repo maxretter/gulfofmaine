@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
-import type { Buoy, Condition, Day, HeatwaveEvent } from "../api/types";
+import type { Agreement, Buoy, Condition, Day, HeatwaveEvent, Method, SatelliteCondition } from "../api/types";
 import { BuoyPage } from "./BuoyPage";
 
 // Counts the charts drawn.
@@ -38,10 +38,18 @@ const days: Day[] = ["2021-06-01", "2021-06-02", "2021-06-03"].map((date, i) => 
   anomaly: 1 + i,
 }));
 
+// What the satellite misses at B01, for when it has a satellite series: the map's depths, and the comparison below 1 m.
+const method = { depths: [1, 20, 50] } as Method;
+const agreement = (depth: number): Agreement[] => [
+  { buoy_id: "B01", depth, year: 2021, both: 10, buoy_only: 20, satellite_only: 5, neither: 300 },
+];
+
 function renderPage(buoys: Buoy[] = [buoy(14)]) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   client.setQueryData(keys.buoys, buoys);
   client.setQueryData(keys.events, [heatwave(1), heatwave(50)]);
+  client.setQueryData(keys.method, method);
+  for (const depth of [20, 50]) client.setQueryData([...keys.agreement, depth], agreement(depth));
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/buoys/B01"]}>
@@ -86,6 +94,22 @@ describe("BuoyPage", () => {
 
     // As the live feed does with a new reading: the page renders again with a new list of buoys.
     act(() => client.setQueryData(keys.buoys, [buoy(14.5)]));
+    expect(await screen.findAllByText("14.5 °C")).toHaveLength(2);
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
+  });
+
+  it("doesn't redraw what the satellite misses when the buoys are refetched", async () => {
+    const withSatellite = (temperature: number) => ({ ...buoy(temperature), satellite: {} as SatelliteCondition });
+    const client = renderPage([withSatellite(14)]);
+    // Everything drawn: the readout at both depths once their days have loaded, the record, and both panels.
+    await waitFor(() => expect(screen.getAllByText("14.0 °C", { exact: false })).toHaveLength(4));
+    await waitFor(() => expect(document.querySelector(".range-brush .brush")).toBeTruthy());
+    const card = screen.getByRole("heading", { name: "What the satellite misses here" }).closest("section")!;
+    await waitFor(() => expect(card.querySelectorAll(".chart-panel svg")).toHaveLength(2));
+    const drawn = vi.mocked(Plot.plot).mock.calls.length;
+
+    // As the live feed does with a new reading: the page renders again with a new list of buoys.
+    act(() => client.setQueryData(keys.buoys, [withSatellite(14.5)]));
     expect(await screen.findAllByText("14.5 °C")).toHaveLength(2);
     expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
   });

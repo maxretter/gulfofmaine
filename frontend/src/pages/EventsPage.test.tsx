@@ -1,10 +1,12 @@
+import * as Plot from "@observablehq/plot";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { withReading } from "../api/live";
 import { keys } from "../api/queries";
-import type { Buoy, Condition, HeatwaveEvent } from "../api/types";
+import type { Buoy, Condition, HeatwaveEvent, ReadingMessage, YearSummary } from "../api/types";
 import * as production from "../fixtures/production";
 import { EventsPage } from "./EventsPage";
 
@@ -25,6 +27,12 @@ function heatwave(start_date: string, end_date: string): HeatwaveEvent {
   };
 }
 
+// Counts the charts drawn.
+vi.mock("@observablehq/plot", async (importOriginal) => {
+  const actual = await importOriginal<typeof Plot>();
+  return { ...actual, plot: vi.fn(actual.plot) };
+});
+
 // One heatwave runs from 2012 into 2013; none touches 2014.
 const events = [heatwave("2012-12-25", "2013-01-03"), heatwave("2015-08-01", "2015-08-10")];
 
@@ -39,6 +47,7 @@ function renderAt(path: string, heatwaves: HeatwaveEvent[] = events, buoys: Buoy
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const select = (label: string) =>
@@ -114,6 +123,45 @@ describe("EventsPage", () => {
 
     expect(offered()).toEqual(["All", "2015", "2014", "2013", "2012"]);
     expect(yearSelect().value).toBe("2014");
+  });
+
+  it("redraws no heatmap when a reading comes in, or the yearly counts are refetched unchanged", async () => {
+    // The heatmap is 600 px wide, so it's drawn.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        callback: ResizeObserverCallback;
+        constructor(callback: ResizeObserverCallback) {
+          this.callback = callback;
+        }
+        observe() {
+          this.callback([{ contentRect: { width: 600 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+        disconnect() {}
+      },
+    );
+    const annual: YearSummary[] = [
+      { buoy_id: "B01", depth: null, year: 2012, heatwave_days: 7, observed_days: 366 },
+      { buoy_id: "B01", depth: null, year: 2013, heatwave_days: 3, observed_days: 365 },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(annual))));
+    const b01 = { id: "B01", name: "Western Maine Shelf", series: [{ depth: 20, reading_at: null } as Condition] };
+    const client = renderAt("/events", events, [b01 as Buoy]);
+    await waitFor(() => expect(document.querySelector(".chart svg")).not.toBeNull());
+    const drawn = vi.mocked(Plot.plot).mock.calls.length;
+
+    // As the live feed writes in a reading, then refetches the yearly counts at any depth, which come back the same.
+    // TanStack Query tells the heatmap on its next tick.
+    const reading: ReadingMessage = { type: "reading", buoy: "B01", depth: 20, time: "2021-06-11T01:00:00Z", temperature: 9.5 };
+    act(() => client.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, reading)));
+    await act(() => client.invalidateQueries({ queryKey: [...keys.annual, null] }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
+
+    // A new buoy is a new row.
+    const a01 = { ...b01, id: "A01", name: "Massachusetts Bay" } as Buoy;
+    act(() => client.setQueryData<Buoy[]>(keys.buoys, (buoys) => [a01, ...buoys!]));
+    await waitFor(() => expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn + 1));
   });
 
   it("offers a depth or buoy filtered to that no heatwave has, rather than reading All over an empty list", () => {
