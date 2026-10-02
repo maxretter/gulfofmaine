@@ -11,18 +11,19 @@ last figure is of every normal, the satellite's and salinity's included.
 import datetime as dt
 import sys
 from collections import Counter
+from collections.abc import Sequence
 from typing import get_args
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 
 from heatwaves import api, origin, queries
-from heatwaves.hobday import WINDOW_HALF_WIDTH, day_of_year
+from heatwaves.hobday import FEB_29, MAX_PAD, WINDOW_HALF_WIDTH, day_of_year, fill_short_gaps
 from heatwaves.models import DailyMean, Event, Series
 from heatwaves.stations import BASELINE
+from heatwaves.sync import NORMAL_DAYS
 
 LABELED = origin.DEPTHS  # the depths whose heatwaves get an origin label
 AT_LABELED = " and ".join([", ".join(map(str, LABELED[:-1])), str(LABELED[-1])])  # "20 and 50"
@@ -57,12 +58,28 @@ def days(event: Row) -> int:
     return (event.end_date - event.start_date).days + 1
 
 
-def fewest_baseline_years(session: Session) -> tuple[int, str]:
-    """The fewest baseline years any series with a normal has data in, for any calendar day's window.
+def baseline_years(dates: Sequence[dt.date]) -> pd.Series:
+    """For each calendar day but Feb 29, how many baseline years a normal from `dates` draws on.
 
-    hobday.climatology pools each calendar day's WINDOW_HALF_WIDTH days either
-    side across the baseline years; this counts the years with any data in
-    that window. With the series it's fewest for.
+    hobday.climatology pools, for each calendar day, the WINDOW_HALF_WIDTH days
+    either side of that day in each baseline year, by position in the series:
+    a window can cross New Year, and is cut short at the baseline's ends. It
+    takes whatever values a window holds, after filling short gaps, so a year
+    counts here if its window holds any. Feb 29's normal is the mean of its
+    neighbors', so it has no pool of its own. Indexed by day of the year.
+    """
+    first, last = BASELINE
+    baseline = pd.date_range(f"{first}-01-01", f"{last}-12-31", freq="D")
+    observed = pd.Series(1.0, index=pd.DatetimeIndex(sorted(dates)))
+    has_value = fill_short_gaps(observed.asfreq("D"), MAX_PAD).reindex(baseline).notna()
+    in_window = has_value.astype(float).rolling(2 * WINDOW_HALF_WIDTH + 1, center=True, min_periods=1).max()
+    return in_window.groupby(day_of_year(baseline)).sum().drop(FEB_29).astype(int)
+
+
+def fewest_baseline_years(session: Session) -> tuple[int, str]:
+    """The fewest baseline years any series' normal draws on, at any time of year (`baseline_years`).
+
+    With the series it's fewest for.
     """
     first, last = BASELINE
     fewest: tuple[int, str] = (last - first + 1, "")
@@ -71,16 +88,12 @@ def fewest_baseline_years(session: Session) -> tuple[int, str]:
             select(DailyMean.date).where(
                 DailyMean.series_id == series.id,
                 DailyMean.value.is_not(None),
-                DailyMean.date.between(dt.date(first, 1, 1), dt.date(last, 12, 31)),
+                DailyMean.date.between(*NORMAL_DAYS),
             )
         ).all()
-        index = pd.DatetimeIndex(list(dates))
-        calendar_day, year = day_of_year(index), index.year.to_numpy()
-        for day in range(1, 367):
-            apart = np.abs(calendar_day - day)
-            years = len(np.unique(year[np.minimum(apart, 366 - apart) <= WINDOW_HALF_WIDTH]))
-            if years < fewest[0]:
-                fewest = (years, series.label)
+        years = int(baseline_years(dates).min())
+        if years < fewest[0]:
+            fewest = (years, series.label)
     return fewest
 
 
