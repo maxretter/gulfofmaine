@@ -97,9 +97,10 @@ def test_daily_flags_follow_the_heatwaves(client, tmp_path):
     for event in events:
         days = slice(event["start_date"], event["end_date"])
         assert (category[days] == event["category"]).all()
-        assert (origin[days] == products.ORIGIN_FLAGS.index("offshore")).all()
+        assert (origin[days] == products.ORIGIN_FLAGS.index(event["origin"])).all()
         heatwave[days] = True
-    assert any(event["start_date"].startswith("2021-04") for event in events)
+    origins = [event["origin"] for event in sorted(events, key=lambda event: event["start_date"])]
+    assert origins == list(sample.HEATWAVES_AT_50.values())
     observed = ds.temperature.to_series().notna()
     # No heatwave on the other days with data, and neither flag on days with neither.
     assert (category[~heatwave & observed] == 0).all()
@@ -116,7 +117,7 @@ def test_daily_flags_follow_the_heatwaves(client, tmp_path):
     assert (ds.satellite_latitude.item(), ds.satellite_longitude.item()) == SATELLITE_CELL[:2]
 
     csv = read_csv(client.get("/api/data/A01/50.csv").content, index_col="date")
-    assert set(csv["heatwave_origin"].dropna()) == {"none", "offshore"}
+    assert set(csv["heatwave_origin"].dropna()) == {"none", "offshore", "surface", "unclear"}
     assert csv["heatwave_category"]["2021-04-20"] >= 1
 
 

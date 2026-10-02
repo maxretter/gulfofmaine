@@ -3,6 +3,7 @@
 python -m tests.sample DIRECTORY   # write its products to DIRECTORY
 """
 
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -19,16 +20,23 @@ from tests.conftest import add_series, fresh_database, seasonal_temperatures
 END = "2021-06-30"
 GAP = slice("2020-03-01", "2020-03-06")  # six days without data at 50 m
 SATELLITE_CELL = (42.625, -70.625, 12.7)
+# Warm spells at 50 m, each found as a heatwave, with the origin label it's given.
+HEATWAVES_AT_50 = {
+    ("2020-12-24", "2021-01-07"): "surface",  # across New Year: begun in 2020, overlapping 2021
+    ("2021-04-14", "2021-04-28"): "offshore",
+    ("2021-06-05", "2021-06-14"): "unclear",
+}
 
 
 def build(session: Session) -> None:
     """A01 at 1 and 50 m, with salinity at 50 m and the satellite.
 
-    50 m has a heatwave from about Apr 14 to 28, 2021, labeled offshore, and
-    a gap in March 2020; the satellite has one from Apr 1 to 20, 2021.
+    50 m has a heatwave in each of HEATWAVES_AT_50, and a gap in March 2020;
+    the satellite has one from Apr 1 to 20, 2021.
     """
     at_50 = seasonal_temperatures("2003-01-01", END, seed=1)
-    at_50["2021-04-14":"2021-04-28"] += 2.5
+    for first, last in HEATWAVES_AT_50:
+        at_50[first:last] += 2.5
     at_50 = at_50.drop(at_50[GAP].index)
     satellite = seasonal_temperatures("2003-01-01", END, seed=2)
     satellite["2021-04-01":"2021-04-20"] += 2.5
@@ -45,9 +53,18 @@ def build(session: Session) -> None:
         update_heatwaves(session, add_series(session, values, "A01", depth, variable, source))
     cell = session.scalars(select(Series).where(Series.source == "satellite")).one()
     cell.latitude, cell.longitude, cell.distance_km = SATELLITE_CELL
-    # heatwaves.origin needs more buoys than this to judge; its label is set as it would set it.
+    # heatwaves.origin needs more buoys than this to judge; each label is set as it might set it.
     at_50_id = session.scalar(select(Series.id).where(Series.depth == 50, Series.variable == "temperature"))
-    session.execute(update(Event).where(Event.series_id == at_50_id).values(origin="offshore"))
+    for (first, last), label in HEATWAVES_AT_50.items():
+        session.execute(
+            update(Event)
+            .where(
+                Event.series_id == at_50_id,
+                Event.start_date <= dt.date.fromisoformat(last),
+                Event.end_date >= dt.date.fromisoformat(first),
+            )
+            .values(origin=label)
+        )
     session.commit()
 
 
