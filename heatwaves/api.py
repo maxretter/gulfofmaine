@@ -21,7 +21,7 @@ from heatwaves import compare, hobday, live, origin, products, qc, queries, stat
 from heatwaves.config import settings
 from heatwaves.db import get_session
 from heatwaves.models import Buoy, DailyMean, Event, Series
-from heatwaves.origin import Origin, Vote
+from heatwaves.origin import Origin, Reason, Vote
 from heatwaves.queries import AT_BUOY, DECIMALS
 from heatwaves.sources import connect
 from heatwaves.state import OFFLINE_AFTER, State, latest_by_series, state_of
@@ -154,8 +154,21 @@ class Onset(BaseModel):
     group: Group | None  # which side of the onset-order signal it counts for; none at the heatwave's own buoy
 
 
+class Reasons(BaseModel):
+    """Why each signal voted as it did, or didn't, and the buoys each side of the onset order compared.
+
+    Read from the stored evidence by heatwaves.origin.explain, for the page to put in words.
+    """
+
+    signals: dict[str, Reason]  # by signal, as Evidence.votes
+    offshore_buoys: list[str]  # whose onsets count for each side: never the event's own buoy
+    western_buoys: list[str]
+    left_out: str | None  # the event's own buoy, when it's one of those four and so on neither side
+
+
 class EventDetail(EventOut):
     evidence: Evidence | None
+    reasons: Reasons | None  # null without an origin, as evidence
     signals: list[SignalDay]  # from 30 days before onset to 14 after; empty without an origin
     onsets: list[Onset]  # every buoy's onsets at this depth in the 90 days to this one
 
@@ -563,8 +576,9 @@ def list_events(
 def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -> EventDetail:
     """One heatwave, with the evidence behind its origin label, day by day.
 
-    Heatwaves are addressed by buoy, depth and start date: their database
-    IDs change whenever the sync recomputes them.
+    And why each signal voted as it did, or didn't, read from the stored
+    evidence. Heatwaves are addressed by buoy, depth and start date: their
+    database IDs change whenever the sync recomputes them.
     """
     event = session.scalar(
         select(Event)
@@ -575,7 +589,7 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
     if event is None:
         raise HTTPException(404, f"No heatwave at {buoy_id} {depth} m starting {start}")
     out = event_out(event, latest_of(session, event.series), today())
-    detail = EventDetail(**out.model_dump(), evidence=None, signals=[], onsets=[])
+    detail = EventDetail(**out.model_dump(), evidence=None, reasons=None, signals=[], onsets=[])
     if event.evidence is None:
         return detail
 
@@ -589,6 +603,8 @@ def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -
     offshore, western = origin.sides(event.series.buoy_id)
     groups: dict[str, Group] = {buoy: "offshore" for buoy in offshore} | {buoy: "western" for buoy in western}
     detail.evidence = Evidence.model_validate(event.evidence)
+    reasons = origin.explain(origin.Evidence.from_json(event.evidence), event.series.buoy_id)
+    detail.reasons = Reasons.model_validate(reasons, from_attributes=True)
     detail.signals = [
         SignalDay(
             date=day,

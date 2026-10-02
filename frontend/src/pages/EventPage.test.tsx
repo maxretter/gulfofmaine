@@ -58,6 +58,19 @@ const event: EventDetail = {
     western_onset: null,
     votes: { salinity: null, surface_heatwave: "offshore", stratification: null, deep: "offshore", onset_order: "offshore" },
   },
+  // As origin.explain reads the evidence at B01, which leaves B01 off the western side.
+  reasons: {
+    signals: {
+      salinity: "too_few_days",
+      surface_heatwave: "stratified",
+      stratification: "held",
+      deep: "heatwave",
+      onset_order: "offshore_only",
+    },
+    offshore_buoys: ["N01", "M01"],
+    western_buoys: ["A01"],
+    left_out: "B01",
+  },
   signals: [],
   onsets: [],
 };
@@ -235,7 +248,7 @@ describe("EventPage", () => {
       series: [{ depth: 50, reading: 9, reading_at: "2021-06-11T00:00:00Z" } as Condition],
       satellite: null,
     });
-    const { signals: _, evidence: __, onsets: ___, ...heatwave } = event;
+    const { signals: _, evidence: __, reasons: ___, onsets: ____, ...heatwave } = event;
     const signals = days.map(({ date }) => ({
       date,
       anomaly: 1,

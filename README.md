@@ -133,9 +133,12 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   votes than the other side, else Unclear. These are rules of thumb
   written for this project, not a published or tested method. They are pure
   functions, unit-tested on synthetic series, and their thresholds are served
-  at `/api/origin/rules` so the About page can't drift from the code. Labels
-  and their evidence are stored on each event, and judged again whenever the
-  days they rest on change, at any of the buoys and depths they read.
+  at `/api/origin/rules` so the About page can't drift from the code. Why each
+  signal voted as it did, or didn't, is read from the evidence by the same
+  module and served with the heatwave, so the heatwave's page only puts it in
+  words. Labels and their evidence are stored on each event, and judged again
+  whenever the days they rest on change, at any of the buoys and depths they
+  read.
 - **The results as data** ([`heatwaves/products.py`](heatwaves/products.py)).
   One NetCDF file per buoy and depth (the daily temperature, normal,
   threshold, anomaly and heatwave category, each heatwave's origin, salinity,
@@ -259,7 +262,7 @@ every page as the site's mark.
 | `GET /api/buoys/{id}/{depth}/daily?start=&end=&variable=` | Daily mean, normal, threshold and anomaly of `temperature` or `salinity`, to 0.001; gaps are `null`; depth 0 is the satellite |
 | `GET /api/buoys/{id}/{depth}/daily/values?start=&end=&variable=` | The same days' means alone, without the normal, in about a third of the bytes; they need no normal, so a series without one has them too |
 | `GET /api/events?buoy_id=&depth=&year=&min_category=&origin=` | Heatwaves at the buoys, newest first, with their origin and whether each has ended, is ongoing or is paused |
-| `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, and every buoy's onsets before it |
+| `GET /api/events/{id}/{depth}/{start}` | One heatwave with the evidence for its origin, day by day, why each signal voted as it did, and every buoy's onsets before it |
 | `GET /api/onsets?year=&depth=` | Each buoy's heatwaves through a year, its daily anomaly, and the heatwave each day was part of |
 | `GET /api/origin/rules` | The thresholds the origin labels come from |
 | `GET /api/method` | The parameters heatwaves are found with (baseline years, percentile, pooling window and smoothing, minimum length, gaps joined and filled, category names), the hours a day needs, the days after which a series is offline, and the depths the map shows |

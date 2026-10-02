@@ -33,7 +33,8 @@ particular:
 
 These are this project's own rules of thumb, not a published or tested
 method: plain rules rather than a fitted model, so every label can be
-explained from its evidence.
+explained from its evidence. `explain` does that, signal by signal, for
+the event page to put in words.
 
 Anomalies are against the same fixed 2003-2022 climatology as the
 heatwaves. Everything here is a plain function over pandas objects, with
@@ -44,13 +45,38 @@ import datetime as dt
 from collections.abc import Collection, Mapping
 from dataclasses import asdict, dataclass
 from functools import cached_property
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
 Origin = Literal["offshore", "surface", "unclear"]
 Vote = Literal["offshore", "surface"] | None
+# Why a signal voted as it did, or didn't vote (`explain`), and the vote each gives:
+Reason = Literal[
+    "too_few_days",  # none: fewer than MIN_DAYS days of data (1 m minus the depth: in both windows)
+    "too_few_days_before",  # none: 1 m minus the depth, too few before onset
+    "too_few_days_after",  # none: the same from onset
+    "too_few_days_to_compare",  # none: no 1 m heatwave, but too few days at 1 m and the depth together
+    "salty",  # offshore: salinity SALTY or more
+    "fresh",  # surface: FRESH down to DRIFT
+    "between",  # none: between FRESH and SALTY
+    "drift",  # none: below DRIFT
+    "heatwave",  # surface at 1 m, offshore at M01's deep water
+    "no_heatwave",  # surface: none at M01's deep water
+    "stratified",  # offshore: no 1 m heatwave, and 1 m at least MIXED warmer than the depth
+    "mixed",  # none: 1 m less than MIXED warmer than the depth before onset
+    "collapsed",  # surface: 1 m minus the depth fell below COLLAPSE of its value before
+    "held",  # offshore: it held at COLLAPSE or more
+    "offshore_first",  # offshore: both sides had onsets, offshore's more than TOGETHER days first
+    "western_first",  # surface: the western side's more than TOGETHER days first
+    "together",  # surface: within TOGETHER days of each other
+    "offshore_only",  # offshore: an onset offshore alone, and the western side had data
+    "western_only",  # surface: an onset on the western side alone, and offshore had data
+    "western_unobserved",  # none: an onset offshore alone, and too little data on the western side
+    "offshore_unobserved",  # none: an onset on the western side alone, and too little data offshore
+    "no_onsets",  # none: no onset on either side
+]
 
 DEPTHS = (20, 50)  # meters: the depths whose heatwaves get a label
 BEFORE = 30  # days before onset in the evidence window
@@ -112,6 +138,25 @@ class Evidence:
             for key, value in asdict(self).items()
         }
 
+    @classmethod
+    def from_json(cls, stored: Mapping[str, Any]) -> Evidence:
+        """The evidence `to_json` stored."""
+        fields = dict(stored)
+        for key in ("offshore_onset", "western_onset"):
+            if fields[key] is not None:
+                fields[key] = dt.date.fromisoformat(fields[key])
+        return cls(**fields)
+
+
+@dataclass(frozen=True)
+class Reasons:
+    """Why each signal behind an origin voted as it did, or didn't, and what the onset order compared."""
+
+    signals: dict[str, Reason]  # by signal, in SIGNALS order
+    offshore_buoys: tuple[str, ...]  # whose onsets the onset order compared on each side (`sides`)
+    western_buoys: tuple[str, ...]
+    left_out: str | None  # the event's own buoy, if it's one of those four, so on neither side
+
 
 def judge(record: Record, buoy: str, depth: int, onset: dt.date) -> Evidence:
     """Where the heat in the heatwave starting at `onset` at a buoy and depth likely came from."""
@@ -163,6 +208,35 @@ def judge(record: Record, buoy: str, depth: int, onset: dt.date) -> Evidence:
         western_onset=western_onset,
         votes=votes,
         origin=label(votes.values()),
+    )
+
+
+def explain(evidence: Evidence, buoy: str) -> Reasons:
+    """Why each signal in the evidence for a heatwave at `buoy` voted as it did, or didn't vote.
+
+    Read from the evidence by the rules `judge` votes with, so a stored
+    judgment is explained without judging it again. Only the onset order
+    with an onset on one side alone reads its vote too: whether the other
+    side had the data to have had one isn't stored.
+    """
+    offshore_buoys, western_buoys = sides(buoy)
+    return Reasons(
+        signals={
+            "salinity": _salinity_reason(evidence.salinity_anomaly),
+            "surface_heatwave": _surface_heatwave_reason(
+                evidence.surface_heatwave_days, evidence.stratification_before
+            ),
+            "stratification": _stratification_reason(
+                evidence.stratification_before, evidence.stratification_after
+            ),
+            "deep": _deep_reason(evidence.deep_heatwave_days),
+            "onset_order": _onset_order_reason(
+                evidence.offshore_onset, evidence.western_onset, evidence.votes["onset_order"]
+            ),
+        },
+        offshore_buoys=offshore_buoys,
+        western_buoys=western_buoys,
+        left_out=buoy if buoy in (*OFFSHORE_BUOYS, *WESTERN_BUOYS) else None,
     )
 
 
@@ -301,6 +375,59 @@ def onsets(heatwave_days: pd.Series) -> pd.DatetimeIndex:
     """The first day of each heatwave in a series' heatwave days."""
     days = pd.DatetimeIndex(heatwave_days.index)
     return days[~(days - pd.Timedelta(days=1)).isin(days)]
+
+
+def _salinity_reason(anomaly: float | None) -> Reason:
+    if anomaly is None:
+        return "too_few_days"
+    if anomaly < DRIFT:
+        return "drift"
+    if anomaly >= SALTY:
+        return "salty"
+    return "fresh" if anomaly <= FRESH else "between"
+
+
+def _surface_heatwave_reason(days: int | None, before: float | None) -> Reason:
+    """`before` is 1 m minus the depth before onset: without a heatwave, the vote turns on it."""
+    if days is None:
+        return "too_few_days"
+    if days:
+        return "heatwave"
+    if before is None:
+        return "too_few_days_to_compare"
+    return "stratified" if before >= MIXED else "mixed"
+
+
+def _stratification_reason(before: float | None, after: float | None) -> Reason:
+    if before is None and after is None:
+        return "too_few_days"
+    if before is None:
+        return "too_few_days_before"
+    if after is None:
+        return "too_few_days_after"
+    if before < MIXED:
+        return "mixed"
+    return "collapsed" if after < COLLAPSE * before else "held"
+
+
+def _deep_reason(days: int | None) -> Reason:
+    if days is None:
+        return "too_few_days"
+    return "heatwave" if days else "no_heatwave"
+
+
+def _onset_order_reason(offshore: dt.date | None, western: dt.date | None, vote: Vote) -> Reason:
+    if offshore is not None and western is not None:
+        lag = (western - offshore).days  # positive: offshore first
+        if abs(lag) <= TOGETHER:
+            return "together"
+        return "offshore_first" if lag > 0 else "western_first"
+    # With an onset on one side alone, the vote says whether the other side had the data to have had one.
+    if offshore is not None:
+        return "offshore_only" if vote else "western_unobserved"
+    if western is not None:
+        return "western_only" if vote else "offshore_unobserved"
+    return "no_onsets"
 
 
 def _window(values: pd.Series, start: pd.Timestamp, first: int, last: int) -> pd.Series:

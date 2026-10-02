@@ -6,7 +6,7 @@ import { chartDefaults } from "../lib/chart";
 import { categories, colors, origins } from "../lib/colors";
 import { addDays, formatDay, parseDay } from "../lib/dates";
 import { formatDate, formatSigned } from "../lib/format";
-import { eastToWest, reading, sides, signals, verdict } from "../lib/origin";
+import { eastToWest, reading, signals, verdict } from "../lib/origin";
 import { Chart } from "./Chart";
 import { Label, OriginLabel, VoteLabel } from "./Label";
 import { PlotFigure } from "./PlotFigure";
@@ -24,6 +24,7 @@ interface CardProps {
 /** The five signals behind the origin label, each with its reading, its vote and a small chart. */
 export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
   const evidence = detail.evidence!;
+  const reasons = detail.reasons!;
   // Kept while the heatwave is, so the page's other renders (one per reading the live feed brings) redraw no chart.
   const days = useMemo(() => detail.signals.map((d) => ({ ...d, date: parseDay(d.date) })), [detail.signals]);
   const onset = useMemo(() => parseDay(detail.start_date), [detail.start_date]);
@@ -44,7 +45,7 @@ export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[]
               <h3>{name}</h3>
               <VoteLabel vote={evidence.votes[key]} />
             </div>
-            <p className="signal-reading">{reading(key, evidence, rules, detail.depth, detail.buoy_id)}</p>
+            <p className="signal-reading">{reading(key, evidence, reasons, rules, detail.depth)}</p>
             <SignalChart signal={key} days={days} onset={onset} detail={detail} rules={rules} buoys={buoys} />
           </div>
         ))}
@@ -212,15 +213,15 @@ function OnsetOrder({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
     .map((b) => b.id)
     .join();
   const order = useMemo(() => (ids ? ids.split(",") : []), [ids]);
-  const compared = sides(rules, detail.buoy_id);
+  const { offshore_buoys: offshore, western_buoys: western } = detail.reasons!; // the heatwave's own buoy on neither
   return (
     <Chart
       className="chart"
       minHeight={40 + order.length * 18}
       legend={
         <div className="legend">
-          <Label color={fills.offshore}>{compared.offshore.join(", ")}: eastern side</Label>
-          <Label color={fills.western}>{compared.western.join(", ")}: western side</Label>
+          <Label color={fills.offshore}>{offshore.join(", ")}: eastern side</Label>
+          <Label color={fills.western}>{western.join(", ")}: western side</Label>
         </div>
       }
       table={{

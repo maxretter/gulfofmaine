@@ -97,6 +97,42 @@ export interface Evidence {
   votes: Record<Signal, Vote>;
 }
 
+/**
+ * Why a signal voted as it did, or didn't vote (heatwaves/origin.py, Reason), for the page to put in words. "salty" to
+ * "drift" are salinity's, "offshore_first" to "no_onsets" the onset order's.
+ */
+export type Reason =
+  | "too_few_days"
+  | "too_few_days_before"
+  | "too_few_days_after"
+  | "too_few_days_to_compare"
+  | "salty"
+  | "fresh"
+  | "between"
+  | "drift"
+  | "heatwave"
+  | "no_heatwave"
+  | "stratified"
+  | "mixed"
+  | "collapsed"
+  | "held"
+  | "offshore_first"
+  | "western_first"
+  | "together"
+  | "offshore_only"
+  | "western_only"
+  | "western_unobserved"
+  | "offshore_unobserved"
+  | "no_onsets";
+
+/** Why each signal voted as it did, or didn't, and the buoys each side of the onset order compared (origin.explain). */
+export interface Reasons {
+  signals: Record<Signal, Reason>;
+  offshore_buoys: string[]; // whose onsets count for each side: never the heatwave's own buoy
+  western_buoys: string[];
+  left_out: string | null; // the heatwave's own buoy, when it's one of those four and so on neither side
+}
+
 /** One day of the evidence window. */
 export interface SignalDay {
   date: string;
@@ -117,6 +153,7 @@ export interface Onset {
 
 export interface EventDetail extends HeatwaveEvent {
   evidence: Evidence | null;
+  reasons: Reasons | null; // null without an origin, as evidence
   signals: SignalDay[]; // 30 days before onset to 14 after; empty without an origin
   onsets: Onset[]; // every buoy's onsets at this depth in the 90 days to this one
 }

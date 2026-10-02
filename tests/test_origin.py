@@ -1,6 +1,9 @@
 import dataclasses
 import datetime as dt
+import json
+from typing import get_args
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -335,3 +338,109 @@ def test_evidence_serializes_dates_for_json():
     assert stored["offshore_onset"] == "2021-02-13"
     assert stored["origin"] == "offshore"
     assert stored["votes"]["onset_order"] == "offshore"
+
+
+def test_evidence_reads_back_as_it_was_stored():
+    # With an onset offshore, and with none.
+    for buoy, around in (("A01", record()), ("E01", record(onsets={}))):
+        judged = origin.judge(around, buoy, 50, ONSET)
+
+        assert origin.Evidence.from_json(json.loads(json.dumps(judged.to_json()))) == judged
+
+
+# The vote each reason a signal can give stands for.
+VOTES: dict[str, dict[str, origin.Vote]] = {
+    "salinity": {
+        "too_few_days": None,
+        "drift": None,
+        "salty": "offshore",
+        "fresh": "surface",
+        "between": None,
+    },
+    "surface_heatwave": {
+        "too_few_days": None,
+        "heatwave": "surface",
+        "stratified": "offshore",
+        "too_few_days_to_compare": None,
+        "mixed": None,
+    },
+    "stratification": {
+        "too_few_days": None,
+        "too_few_days_before": None,
+        "too_few_days_after": None,
+        "mixed": None,
+        "collapsed": "surface",
+        "held": "offshore",
+    },
+    "deep": {"too_few_days": None, "heatwave": "offshore", "no_heatwave": "surface"},
+    "onset_order": {
+        "offshore_first": "offshore",
+        "western_first": "surface",
+        "together": "surface",
+        "offshore_only": "offshore",
+        "western_only": "surface",
+        "western_unobserved": None,
+        "offshore_unobserved": None,
+        "no_onsets": None,
+    },
+}
+# Days with data, from the onset: the whole record, most often; the evidence window before onset, or from
+# it; a few days before it; only long before; None for no series at all.
+SPANS = [(-120, 60), (-120, 60), (-120, 60), (-30, -1), (0, 14), (-5, -1), (-95, -50), None]
+
+
+def random_record(rng: np.random.Generator, buoy: str) -> origin.Record:
+    """A record around a heatwave at `buoy`, 50 m, from ONSET, each series over a random span, or none."""
+
+    def over(frame: pd.DataFrame) -> pd.DataFrame | None:
+        span = SPANS[rng.integers(len(SPANS))]
+        if span is None:
+            return None
+        first, last = (pd.Timestamp(day(each)) for each in span)
+        return frame.loc[first:last]
+
+    def heatwave_from(first: int, last: int) -> pd.Series:
+        start = int(rng.integers(first, last + 1))
+        return heatwave(start, start + int(rng.integers(5, 20)))
+
+    temperature = {
+        (buoy, 50): over(daily(9.0, 10.0)),
+        # 1 m minus 50 m: 0.5, 2 or 4 degrees before onset, 0.2, 1.5 or 3 after.
+        (buoy, 1): over(daily(rng.choice([9.5, 11.0, 13.0]), rng.choice([10.2, 11.5, 13.0]))),
+        ("M01", 100): over(daily(7.0)),
+        **{(other, 50): over(daily(9.0)) for other in FOUR if other != buoy},
+    }
+    anomaly = rng.choice([-1.5, -1.0, -0.5, 0.0, 0.1, 0.15, 0.3]) + rng.choice([0.0, 0.02])
+    salinity = over(daily(32 + anomaly, normal=32.0))
+    heatwave_days = {(buoy, 50): heatwave(0, 10)}
+    if rng.random() < 0.5:
+        heatwave_days[buoy, 1] = heatwave_from(-40, 10)
+    if rng.random() < 0.5:
+        heatwave_days["M01", 100] = heatwave_from(-45, 5)
+    for other in (*FOUR, "E01"):
+        if other != buoy and rng.random() < 0.5:
+            heatwave_days[other, 50] = heatwave_from(-100, 5)
+    return origin.Record(
+        temperature={key: frame for key, frame in temperature.items() if frame is not None},
+        salinity={(buoy, 50): salinity} if salinity is not None else {},
+        heatwave_days=heatwave_days,
+    )
+
+
+def test_every_reason_stands_for_the_vote_judge_cast():
+    assert {reason for reasons in VOTES.values() for reason in reasons} == set(get_args(origin.Reason))
+    rng = np.random.default_rng(1)
+    given: set[tuple[str, str]] = set()
+
+    for _ in range(300):
+        buoy = str(rng.choice([*FOUR, "E01"]))
+        judged = origin.judge(random_record(rng, buoy), buoy, 50, ONSET)
+
+        reasons = origin.explain(origin.Evidence.from_json(judged.to_json()), buoy)
+
+        assert {signal: VOTES[signal][reason] for signal, reason in reasons.signals.items()} == judged.votes
+        assert (reasons.offshore_buoys, reasons.western_buoys) == origin.sides(buoy)
+        assert reasons.left_out == (buoy if buoy in FOUR else None)
+        given |= set(reasons.signals.items())
+    # Every reason, so none goes untested.
+    assert given == {(signal, reason) for signal, reasons in VOTES.items() for reason in reasons}

@@ -79,6 +79,20 @@ def test_one_event_with_its_evidence_day_by_day(client):
     assert evidence["salinity_anomaly"] == pytest.approx(0.3, abs=0.05)
     assert (evidence["stratification_before"], evidence["stratification_after"]) == pytest.approx((6, 3.5))
     assert (evidence["offshore_onset"], evidence["western_onset"]) == ("2021-02-13", None)
+    # Each reason as origin.explain reads it from the stored evidence: the onset order with no data at B01,
+    # the western side without A01's own.
+    assert event["reasons"] == {
+        "signals": {
+            "salinity": "salty",
+            "surface_heatwave": "stratified",
+            "stratification": "held",
+            "deep": "heatwave",
+            "onset_order": "western_unobserved",
+        },
+        "offshore_buoys": ["N01", "M01"],
+        "western_buoys": ["B01"],
+        "left_out": "A01",
+    }
 
     signals = event["signals"]
     assert len(signals) == origin.BEFORE + 1 + origin.AFTER
@@ -117,7 +131,7 @@ def test_an_event_page_reads_only_what_it_shows(monkeypatch, client, path):
 def test_an_event_without_an_origin_has_no_evidence(client):
     event = client.get("/api/events/M01/100/2021-03-20").json()
 
-    assert (event["evidence"], event["signals"], event["onsets"]) == (None, [], [])
+    assert (event["evidence"], event["reasons"], event["signals"], event["onsets"]) == (None, None, [], [])
     assert client.get("/api/events/A01/50/2021-04-15").status_code == 404
 
 

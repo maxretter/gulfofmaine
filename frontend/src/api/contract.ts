@@ -9,10 +9,11 @@ import type * as App from "./types";
 /** Type-checks only if A and B are each assignable to the other. */
 type Same<A extends B, B extends Back, Back = A> = [A, B];
 
-// The API's votes are a dict by signal, where types.ts names the five signals it always sends
+// The API's votes and reasons are dicts by signal, where types.ts names the five signals it always sends
 // (heatwaves.origin.SIGNALS), so they're compared by their values alone.
 type Evidence = Omit<Api.Evidence, "votes"> & Pick<App.Evidence, "votes">;
-type EventDetail = Omit<Api.EventDetail, "evidence"> & { evidence: Evidence | null };
+type Reasons = Omit<Api.Reasons, "signals"> & Pick<App.Reasons, "signals">;
+type EventDetail = Omit<Api.EventDetail, "evidence" | "reasons"> & { evidence: Evidence | null; reasons: Reasons | null };
 
 export type Contract = [
   Same<App.Condition, Api.Condition>,
@@ -23,6 +24,8 @@ export type Contract = [
   Same<App.HeatwaveEvent, Api.EventOut>,
   Same<App.Evidence, Evidence>,
   Same<App.Evidence["votes"][App.Signal], Api.Evidence["votes"][string]>,
+  Same<App.Reasons, Reasons>,
+  Same<App.Reasons["signals"][App.Signal], Api.Reasons["signals"][string]>,
   Same<App.SignalDay, Api.SignalDay>,
   Same<App.Onset, Api.Onset>,
   Same<App.EventDetail, EventDetail>,

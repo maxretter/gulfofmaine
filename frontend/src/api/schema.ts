@@ -102,6 +102,7 @@ export interface EventDetail {
   origin: "offshore" | "surface" | "unclear" | null;
   status: "ongoing" | "paused" | "ended";
   evidence: Evidence | null;
+  reasons: Reasons | null;
   signals: SignalDay[];
   onsets: Onset[];
 }
@@ -216,6 +217,13 @@ export interface ReadingMessage {
   depth: number;
   time: string;
   temperature: number;
+}
+
+export interface Reasons {
+  signals: Record<string, "too_few_days" | "too_few_days_before" | "too_few_days_after" | "too_few_days_to_compare" | "salty" | "fresh" | "between" | "drift" | "heatwave" | "no_heatwave" | "stratified" | "mixed" | "collapsed" | "held" | "offshore_first" | "western_first" | "together" | "offshore_only" | "western_only" | "western_unobserved" | "offshore_unobserved" | "no_onsets">;
+  offshore_buoys: string[];
+  western_buoys: string[];
+  left_out: string | null;
 }
 
 export interface SatelliteCondition {
