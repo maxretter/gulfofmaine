@@ -110,11 +110,25 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.context }}
           cache-to: type=gha,mode=max,scope=${{ matrix.context }}
       # The image has no dev dependencies, so this catches a runtime one that the test job's would hide.
-      - name: Migrations apply in the image, and the app and the sync job import
+      # As Compose runs it: migrate, then the image's own command on the migrated database, which
+      # with nothing synced yet answers /healthz with a 503 and JSON saying so. The sync job only
+      # imports, since running it would download from NERACOOS.
+      - name: Migrations apply in the image, its command serves /healthz, and the sync job imports
         if: matrix.context == '.'
-        run: >-
-          docker run --rm -e DATABASE_URL=sqlite:////tmp/ci.db ci-image
-          sh -c 'alembic upgrade head && python -c "import heatwaves.main, heatwaves.sync"'
+        run: |
+          mkdir -m 777 db # the image's user writes the database, and SQLite its journal, here
+          docker run --rm -v "$PWD/db:/db" -e DATABASE_URL=sqlite:////db/ci.db ci-image alembic upgrade head
+          docker run -d --name api -p 8000:8000 -v "$PWD/db:/db" -e DATABASE_URL=sqlite:////db/ci.db ci-image
+          for attempt in $(seq 30); do
+            status=$(curl -s -o healthz.json -w '%{http_code}' http://localhost:8000/healthz) && break
+            sleep 1
+          done
+          if [[ $status != 503 ]] || ! jq -e '.status == "stale" and .last_sync == null' healthz.json; then
+            echo "/healthz answered ${status:-nothing}" >&2
+            docker logs api
+            exit 1
+          fi
+          docker run --rm ci-image python -c "import heatwaves.sync"
       - name: Compose accepts compose.yaml
         if: matrix.context == '.'
         run: docker compose --profile erddap config -q
