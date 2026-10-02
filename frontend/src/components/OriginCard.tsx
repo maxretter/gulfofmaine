@@ -24,8 +24,9 @@ interface CardProps {
 /** The five signals behind the origin label, each with its reading, its vote and a small chart. */
 export function OriginCard({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
   const evidence = detail.evidence!;
+  // Kept while the heatwave is, so the page's other renders (one per reading the live feed brings) redraw no chart.
   const days = useMemo(() => detail.signals.map((d) => ({ ...d, date: parseDay(d.date) })), [detail.signals]);
-  const onset = parseDay(detail.start_date);
+  const onset = useMemo(() => parseDay(detail.start_date), [detail.start_date]);
 
   return (
     <section className="card">
@@ -200,12 +201,18 @@ function WindowChart({ signal, days, onset, detail, rules, width }: Omit<SignalC
   return <PlotFigure options={options} />;
 }
 
+const fills = { offshore: origins.offshore.color, western: origins.surface.color };
+const color = (onset: Onset) => (onset.group ? fills[onset.group] : colors.muted);
+
 /** Each buoy's heatwave onsets at this depth in the lookback, east at the top; the heatwave's own buoy on neither side. */
 function OnsetOrder({ detail, rules, buoys }: CardProps & { buoys: Buoy[] }) {
-  const order = eastToWest(buoys, detail.depth).map((b) => b.id);
+  // Kept while the order is: the buoys come anew with every reading the live feed brings, and the same order in a new
+  // list would redraw the chart.
+  const ids = eastToWest(buoys, detail.depth)
+    .map((b) => b.id)
+    .join();
+  const order = useMemo(() => (ids ? ids.split(",") : []), [ids]);
   const compared = sides(rules, detail.buoy_id);
-  const fills = { offshore: origins.offshore.color, western: origins.surface.color };
-  const color = (onset: Onset) => (onset.group ? fills[onset.group] : colors.muted);
   return (
     <Chart
       className="chart"

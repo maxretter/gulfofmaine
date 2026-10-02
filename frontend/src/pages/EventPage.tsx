@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 
 import { isNotFound, useBuoys, useEvent, useEvents, useOriginRules } from "../api/queries";
+import type { HeatwaveEvent } from "../api/types";
 import { DepthCharts, SeriesLegend } from "../components/DepthCharts";
 import { AtTheSameTime, EventFigures } from "../components/EventContext";
 import { CategoryLabel, OriginLabel } from "../components/Label";
@@ -9,6 +11,8 @@ import { TSCard } from "../components/TSDiagram";
 import { isDay } from "../lib/dates";
 import { eventRange } from "../lib/events";
 import { heatwavePeriodPath } from "../state/buoyView";
+
+const NO_EVENTS: HeatwaveEvent[] = [];
 
 /** One heatwave: what it was, and the evidence for where its heat came from. /events/A01/50/2021-04-14 */
 export function EventPage() {
@@ -21,6 +25,13 @@ export function EventPage() {
   const buoys = useBuoys();
   const events = useEvents();
   const rules = useOriginRules();
+  // Kept as long as the heatwaves are: the page renders again with each reading the live feed brings, and a new list,
+  // even of the same heatwaves, would redraw every depth's chart.
+  const eventBuoy = event.data?.buoy_id;
+  const buoyEvents = useMemo(
+    () => events.data?.filter((e) => e.buoy_id === eventBuoy) ?? NO_EVENTS,
+    [events.data, eventBuoy],
+  );
 
   if (!valid || isNotFound(event.error)) return <NotFoundEvent />;
   if (event.isPending || rules.isPending) return <p className="note">Loading…</p>;
@@ -28,7 +39,6 @@ export function EventPage() {
 
   const detail = event.data;
   const buoy = buoys.data?.find((b) => b.id === detail.buoy_id);
-  const buoyEvents = events.data?.filter((e) => e.buoy_id === detail.buoy_id) ?? [];
   const period = eventRange(detail);
   return (
     <>

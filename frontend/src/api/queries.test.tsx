@@ -82,9 +82,14 @@ describe("useDailyValues", () => {
       "/api/buoys/B01/1/daily?start=2021-06-01&end=2021-06-01&variable=temperature",
     ]);
 
-    // As the live feed does with a message from B01 at 1 m.
+    // As the live feed does with a message from B01 at 1 m. The same days come back, so the charts get the very same
+    // rows, and redraw nothing (TanStack Query tells them on its next tick).
+    const before = result.current;
     await act(() => client.invalidateQueries({ queryKey: [...keys.daily, "B01", 1] }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     expect(fetch).toHaveBeenCalledTimes(4);
+    expect(result.current.values.data).toBe(before.values.data);
+    expect(result.current.days.data).toBe(before.days.data);
   });
 });
 

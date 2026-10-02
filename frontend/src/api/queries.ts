@@ -143,17 +143,23 @@ export function useStripes(depth: number) {
   });
 }
 
+/**
+ * Days with their dates parsed, as the charts take them: the daily queries' `select`. The cache keeps the JSON as it
+ * came, so a refetch that brings the same days leaves the cached copy as it was, and TanStack Query runs a `select`
+ * defined once, as this is, again only when that copy changes. An unchanged refetch hands back the same days, and no
+ * chart redraws; parsed in the query function, they'd be new Dates each time, which never compare equal.
+ */
+function withDates<T extends { date: string }>(days: T[]): (Omit<T, "date"> & { date: Date })[] {
+  return days.map((day) => ({ ...day, date: parseDay(day.date) }));
+}
+
 /** Depth 0 is the satellite. */
 function dailyQuery(buoy: string, depth: number, start: string, end: string, variable: Variable = "temperature") {
   return {
     queryKey: [...keys.daily, buoy, depth, start, end, variable],
-    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<DayPoint[]> => {
-      const days = await getJSON<Day[]>(
-        `/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}&variable=${variable}`,
-        signal,
-      );
-      return days.map((day) => ({ ...day, date: parseDay(day.date) }));
-    },
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      getJSON<Day[]>(`/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}&variable=${variable}`, signal),
+    select: withDates<Day>,
     // Keep showing the previous range while a new one loads.
     placeholderData: keepPreviousData,
     // A 404 is a series without a normal: asking again won't change that. main.tsx gives every query this rule, but
@@ -185,13 +191,9 @@ export function useDailyValues(buoy: string, depth: number, start: string, end: 
     // Under keys.daily, so the live feed refreshes it with the other days at its buoy and depth, but never useDaily's
     // key for the same days: the rows aren't the same shape.
     queryKey: [...keys.daily, buoy, depth, start, end, "values"],
-    queryFn: async ({ signal }): Promise<DayValuePoint[]> => {
-      const days = await getJSON<DayValue[]>(
-        `/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`,
-        signal,
-      );
-      return days.map((day) => ({ ...day, date: parseDay(day.date) }));
-    },
+    queryFn: ({ signal }) =>
+      getJSON<DayValue[]>(`/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`, signal),
+    select: withDates<DayValue>,
     placeholderData: keepPreviousData,
     retry,
   });

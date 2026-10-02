@@ -1,6 +1,6 @@
 import * as Plot from "@observablehq/plot";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
@@ -44,6 +44,7 @@ function renderCharts() {
       <DepthCharts buoy={buoy} from="2021-06-01" to="2021-06-03" events={[]} />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const panel = (depth: number) => screen.getByRole("heading", { name: new RegExp(`^${depth} m`) }).closest("section")!;
@@ -101,6 +102,27 @@ describe("DepthCharts", () => {
     expect(await screen.findByText("Jun 2, 2021")).toBeTruthy();
     expect(screen.getAllByText("13.0 °C", { exact: false })).toHaveLength(3);
     expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
+  });
+
+  it("redraws nothing when a refetch brings the same days, and only the depth whose days changed", async () => {
+    const fetch = serve({});
+    const client = renderCharts();
+    expect(await screen.findAllByText("14.0 °C", { exact: false })).toHaveLength(3);
+    const drawn = vi.mocked(Plot.plot).mock.calls.length;
+
+    // As the live feed refetches them. TanStack Query tells the charts on its next tick.
+    await act(() => client.invalidateQueries({ queryKey: keys.daily }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(fetch).toHaveBeenCalledTimes(6);
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn);
+
+    fetch.mockImplementation(async (url: string) => {
+      const warmer = url.startsWith("/api/buoys/B01/50/") ? days.map((d) => ({ ...d, value: d.value! + 1 })) : days;
+      return new Response(JSON.stringify(warmer));
+    });
+    await act(() => client.invalidateQueries({ queryKey: keys.daily }));
+    expect(await screen.findByText("15.0 °C", { exact: false })).toBeTruthy();
+    expect(vi.mocked(Plot.plot).mock.calls.length).toBe(drawn + 1);
   });
 
   it("still says it couldn't load the series when a depth fails", async () => {
