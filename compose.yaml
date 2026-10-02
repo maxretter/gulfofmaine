@@ -60,7 +60,8 @@ services:
       - products:/data/products:ro
     # A safety net for a runaway request. On a full-size synthetic database, M01's
     # page over its full record peaked near 230 MB, and 40 of the longest daily
-    # series at once, as many as its thread pool runs, near 330 MB.
+    # series at once near 330 MB, though no more than 15 requests read the
+    # database at once, one per connection (heatwaves.db).
     mem_limit: 1g
     depends_on:
       migrate: { condition: service_completed_successfully }

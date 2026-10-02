@@ -6,9 +6,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import unquote
 
-# Keep imports of heatwaves.db from pointing at a real database file, and
-# anything that writes the products from writing them into the repository.
-os.environ.setdefault("DATABASE_URL", "sqlite://")
+# Keep imports of heatwaves.db from pointing at the repository's database file
+# (a file all the same, as heatwaves.db sizes its pool, which SQLite's in memory
+# has none of), and anything that writes the products from writing them into the repository.
+os.environ.setdefault("DATABASE_URL", f"sqlite:///{tempfile.mkdtemp(prefix='gom-heatwaves-db-')}/unused.db")
 os.environ.setdefault("PRODUCTS_DIR", tempfile.mkdtemp(prefix="gom-heatwaves-products-"))
 
 import httpx

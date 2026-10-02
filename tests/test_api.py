@@ -1,17 +1,20 @@
+import asyncio
 import datetime as dt
 import os
 
+import anyio
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from heatwaves import db
 from heatwaves.main import app, revalidate_api_responses
-from heatwaves.models import Buoy, Event, Series, UTCDateTime
+from heatwaves.models import Base, Buoy, Event, Series, UTCDateTime
 from heatwaves.sync import update_heatwaves
 from tests.conftest import NOW, TODAY, add_series, api_client, seasonal_temperatures
 
@@ -226,7 +229,7 @@ def test_requests_read_one_snapshot_on_postgres():
 
 @pytest.mark.skipif(db.engine.dialect.name != "postgresql", reason="needs Postgres (DATABASE_URL)")
 def test_each_request_gets_a_read_only_snapshot():
-    for session in db.get_session():  # one, as FastAPI gets it for a request
+    for session in db.get_session(None):  # one, as FastAPI gets it for a request
         assert session.scalar(text("SHOW transaction_isolation")) == "repeatable read"
         assert session.scalar(text("SHOW transaction_read_only")) == "on"
 
@@ -262,5 +265,37 @@ def test_a_request_sees_none_of_what_the_sync_commits_meanwhile(session):
             assert sync.scalar(select(Buoy.name)) == "After"
             assert sync.scalar(text("SHOW transaction_isolation")) == "read committed"
             assert sync.scalar(text("SHOW transaction_read_only")) == "off"
+    finally:
+        engine.dispose()
+
+
+def test_a_burst_of_requests_waits_for_the_pool_rather_than_stalling_it(
+    session_factory, tmp_path, monkeypatch
+):
+    """More requests at once than threads, on fewer connections: each waits its turn, and every one succeeds.
+
+    A request holds its connection until its response is sent, and a sync
+    route's response is checked in a second trip to the thread pool. Once every
+    thread was taken by a request waiting for a connection, the requests holding
+    one waited for a thread, until the pool timed out and those waiting answered 500.
+    """
+    url = session_factory.kw["bind"].url
+    if url.get_backend_name() == "sqlite":
+        url = f"sqlite:///{tmp_path / 'api.db'}"  # in memory, each connection would have its own database
+    engine = create_engine(url, pool_size=1, max_overflow=0, pool_timeout=1)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(db, "RequestSession", sessionmaker(db.reading(engine), expire_on_commit=False))
+    monkeypatch.setattr(db, "sessions", anyio.CapacityLimiter(1))
+
+    async def burst() -> list[int]:
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 4  # this event loop's, of 40
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app, raise_app_exceptions=False), base_url="http://test"
+        ) as client:
+            responses = await asyncio.gather(*(client.get("/api/buoys") for _ in range(20)))
+        return [response.status_code for response in responses]
+
+    try:
+        assert anyio.run(burst) == [200] * 20
     finally:
         engine.dispose()
