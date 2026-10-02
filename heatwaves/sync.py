@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from heatwaves import hobday, live, origin, products, queries, state
 from heatwaves.config import settings
-from heatwaves.erddap import Erddap, same_host
+from heatwaves.erddap import Erddap, same_origin
 from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.sources import Download, Source, connect
 from heatwaves.state import SeriesState
@@ -587,9 +587,9 @@ def main(argv: list[str] | None = None) -> int:
         # Per step, such as each read; Erddap limits each request's whole time and its size.
         timeout=settings.erddap_timeout,
         headers=headers,
-        # Within a host only: ERDDAP serves its own data.
+        # Within an origin only, and by each request's deadline (same_origin).
         follow_redirects=True,
-        event_hooks={"response": [same_host]},
+        event_hooks={"response": [same_origin]},
     ) as client:
         erddap = Erddap(settings.erddap_url, client)
         sources = connect(client)

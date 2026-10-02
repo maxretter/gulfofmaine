@@ -18,7 +18,7 @@ import httpx
 
 from heatwaves import qc
 from heatwaves.config import settings
-from heatwaves.erddap import Erddap, same_host
+from heatwaves.erddap import Erddap, same_origin
 from heatwaves.stations import SERIES, VARIABLES
 
 SUSPECT = 3  # the QARTOD aggregate's flag for suspect; 4 is fail (qc.BAD_QARTOD_FLAGS)
@@ -83,7 +83,7 @@ def main() -> int:
         timeout=settings.erddap_timeout,
         headers={"User-Agent": settings.user_agent},
         follow_redirects=True,
-        event_hooks={"response": [same_host]},
+        event_hooks={"response": [same_origin]},
     ) as client:
         counts = flags_everywhere(Erddap(settings.erddap_url, client))
     for line in report(counts):

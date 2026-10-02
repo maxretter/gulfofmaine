@@ -37,7 +37,8 @@ class Erddap:
     # dataset's whole record as NetCDF, is tens of MB, a year of the
     # satellite's cells about 120 kB, and the tables a few hundred bytes. The
     # client's timeout bounds each step of a request, such as each read;
-    # DEADLINE bounds the whole of it, give or take one step.
+    # DEADLINE bounds the whole of it, give or take one step: each read of
+    # the body, and each redirect on the way, which same_origin checks.
     MAX_NETCDF = 256 * 2**20  # bytes
     MAX_TABLE = 2**20  # bytes
     DEADLINE = 600.0  # seconds
@@ -110,7 +111,8 @@ class Erddap:
     def _get(self, url: str, into: IO[bytes], limit: int) -> bool:
         """Write a response's body into `into`, a chunk at a time; False if nothing matched."""
         deadline = time.monotonic() + self.DEADLINE
-        with self.client.stream("GET", url) as response:
+        # Carried by the request and each redirect from it, for same_origin.
+        with self.client.stream("GET", url, extensions={"deadline": deadline}) as response:
             if response.status_code == 404:
                 # ERDDAP reports an empty result as a 404 rather than an empty table.
                 error = b"".join(self._body(response, self.MAX_TABLE, deadline))
@@ -133,12 +135,25 @@ class Erddap:
             yield chunk
 
 
-def same_host(response: httpx.Response) -> None:
-    """An httpx response hook that refuses a redirect to another host: ERDDAP serves its own data."""
+def same_origin(response: httpx.Response) -> None:
+    """An httpx response hook that follows a redirect only within an origin, and only by its deadline.
+
+    ERDDAP serves its own data, so a redirect elsewhere, or from https to
+    http, or to another port, is refused. So is one after the deadline an
+    Erddap request carries: up to 20 redirects, each within the client's
+    timeout, would otherwise stretch it.
+    """
     if response.has_redirect_location:
         target = response.url.join(response.headers["Location"])
-        if target.host != response.url.host:
-            raise ValueError(f"{response.url} redirects to another host: {target}")
+        if _origin(target) != _origin(response.url):
+            raise ValueError(f"{response.url} redirects to another origin: {target}")
+        deadline = response.request.extensions.get("deadline")
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError(f"{response.url} took longer than {Erddap.DEADLINE:.0f} s, in redirects")
+
+
+def _origin(url: httpx.URL) -> tuple[str, str, int | None]:
+    return url.scheme, url.host, url.port  # httpx gives a scheme's default port as None
 
 
 def _axis(axis: Axis) -> str:
