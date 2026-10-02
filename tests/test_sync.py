@@ -404,13 +404,20 @@ def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, s
         with pytest.raises(OSError):
             round_of(A01_ocean_001m=june + 1)
     assert round_of() == files(a01_1, a01_50, b01_20)
+    # And the round after one that stored a dataset, then lost its database before the next.
+    with monkeypatch.context() as patched:
+        each = iter([sync.sync_one, fails])
+        patched.setattr(sync, "sync_one", lambda *args: next(each)(*args))
+        with pytest.raises(OSError):
+            round_of(A01_ocean_001m=june + 2)
+    assert round_of() == files(a01_1, a01_50, b01_20)
 
 
 def test_a_failed_write_leaves_the_sync_alone(session_factory, series, tmp_path, caplog):
     blocked = tmp_path / "products"
     blocked.write_text("not a directory")
 
-    publish(session_factory, blocked)
+    assert not publish(session_factory, blocked)
 
     assert "Writing the products" in caplog.text
 
@@ -819,6 +826,18 @@ def test_recompute_rebuilds_heatwaves_from_stored_data(monkeypatch, session_fact
     session.refresh(series)
     assert series.latest_date == dt.date(2026, 9, 27)
     assert session.scalars(select(Event).where(Event.end_date == series.latest_date)).one().duration >= 8
+
+
+def test_a_recompute_that_cant_write_the_files_fails(monkeypatch, session_factory, session):
+    add_series(session, seasonal_temperatures("2003-01-01", "2026-09-27"))
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+
+    def fails(*args: object) -> None:
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(sync.products, "write", fails)
+
+    assert sync.main(["--recompute"]) == 1
 
 
 def test_a_recompute_and_the_catalog_wait_for_any_other_sync(monkeypatch, session_factory, session):

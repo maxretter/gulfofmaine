@@ -417,17 +417,17 @@ def sync_one(session_factory: sessionmaker, sources: Mapping[str, Source], serie
 # The daily files, by buoy and depth, this process has yet to write to each products directory
 # since their data changed. Until a write to a directory succeeds, every one: a process stopped
 # between storing and writing may have left any behind, and code deployed since may write them
-# differently.
+# differently. So too after a round that failed partway (sync_all).
 _unwritten: dict[Path, set[tuple[str, int]]] = {}
 
 
 def publish(
     session_factory: sessionmaker, directory: Path, changed: Collection[tuple[str, int]] | None = None
-) -> None:
+) -> bool:
     """Rewrite the NetCDF and CSV products from the stored record (heatwaves.products).
 
     Every daily file, or those `changed`, by buoy and depth, with any still
-    unwritten; and the events each time.
+    unwritten; and the events each time. False if the write failed.
     """
     unwritten = _unwritten.get(directory)
     depths = None if changed is None or unwritten is None else unwritten | set(changed)
@@ -438,9 +438,9 @@ def publish(
         with session_factory() as session:
             products.write(session, directory, depths)
     except Exception:
-        # The stored record is up to date; the files are written at the next round.
+        # The stored record is up to date; the files are left for the next write (_unwritten).
         log.exception("Writing the products to %s failed", directory)
-        return
+        return False
     _unwritten[directory] = set()
     log.info(
         "Wrote the products to %s in %.1f s (%s)",
@@ -448,6 +448,7 @@ def publish(
         time.monotonic() - started,
         "every file" if depths is None else f"{len(depths)} buoy depths, and the events",
     )
+    return True
 
 
 def sync_all(
@@ -468,39 +469,43 @@ def sync_all(
 
     The products in `products_dir`, if given, are rewritten at the end,
     once a round: the files of each buoy depth the round changed and any
-    left unwritten (every one, at a process's first round, see `publish`),
-    and the events.
+    left unwritten (every one, at a process's first round or after one that
+    failed partway, see `publish`), and the events.
     """
     failures = 0
-    with session_factory() as session:
-        before = products.extras(session) if products_dir is not None else {}
-        if everything and not ensure_catalog(session, erddap):
-            failures += 1
-        # One series from each fetch; sync_one brings the rest along.
-        query = (
-            select(func.min(Series.id))
-            .group_by(Series.source, Series.dataset_id)
-            # "buoy" before "satellite", so the satellite's first backfill doesn't hold the buoys up.
-            .order_by(Series.source, Series.dataset_id)
-        )
-        if not everything:
-            reporting_since = dt.datetime.now(dt.UTC).date() - state.OFFLINE_AFTER
-            query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
-        series_ids = session.scalars(query).all()
-    outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
-    if products_dir is not None:
+    try:
+        with session_factory() as session:
+            before = products.extras(session) if products_dir is not None else {}
+            if everything and not ensure_catalog(session, erddap):
+                failures += 1
+            # One series from each fetch; sync_one brings the rest along.
+            query = (
+                select(func.min(Series.id))
+                .group_by(Series.source, Series.dataset_id)
+                # "buoy" before "satellite", so the satellite's first backfill doesn't hold the buoys up.
+                .order_by(Series.source, Series.dataset_id)
+            )
+            if not everything:
+                reporting_since = dt.datetime.now(dt.UTC).date() - state.OFFLINE_AFTER
+                query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
+            series_ids = session.scalars(query).all()
+        outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]
+        if products_dir is None:
+            return failures + outcomes.count("failed")
         stored = [
             series_id for series_id, outcome in zip(series_ids, outcomes, strict=True) if outcome == "updated"
         ]
-        try:
-            with session_factory() as session:
-                changed = _changed_files(session, stored, before)
-        except Exception:
-            _unwritten.pop(products_dir, None)  # so the next write is of every file
-            raise
-        # Any left unwritten too: every file, at a process's first round.
-        if changed or _unwritten.get(products_dir) != set() or not products.listing(products_dir):
-            publish(session_factory, products_dir, changed)
+        with session_factory() as session:
+            changed = _changed_files(session, stored, before)
+    except Exception:
+        # The round may have stored data, or moved a buoy, before it failed, and
+        # can't say whose files that changed: the next write is of every file.
+        if products_dir is not None:
+            _unwritten.pop(products_dir, None)
+        raise
+    # Any left unwritten too: every file, at a process's first round.
+    if changed or _unwritten.get(products_dir) != set() or not products.listing(products_dir):
+        publish(session_factory, products_dir, changed)
     return failures + outcomes.count("failed")
 
 
@@ -558,8 +563,9 @@ def main(argv: list[str] | None = None) -> int:
                 log.info("%s: recomputed", series.label)
             update_origins(session)
             session.commit()
-        publish(SessionLocal, settings.products_dir)
-        return 0
+        # Files left as they were don't match what was recomputed, and the sync job doesn't know to
+        # rewrite them: failing says so.
+        return 0 if publish(SessionLocal, settings.products_dir) else 1
 
     headers = {"User-Agent": settings.user_agent}
     with httpx.Client(
