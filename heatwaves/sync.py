@@ -213,6 +213,12 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
     return messages
 
 
+# Why each series this process has tried couldn't get a normal, by series ID. Each store tries
+# again, with the same outcome until days of the baseline change, so a reason is a warning only
+# the first time a series has it, and after it has had a normal since.
+_no_normal: dict[int, str] = {}
+
+
 @dataclass(frozen=True)
 class Updated:
     """What update_heatwaves did to a series."""
@@ -260,8 +266,16 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
         try:
             normal = hobday.climatology(daily, BASELINE)
         except hobday.InsufficientData as error:
-            log.warning("%s: can't compute heatwaves: %s", series.label, error)
+            known = _no_normal.get(series.id) == str(error)
+            _no_normal[series.id] = str(error)
+            log.log(
+                logging.DEBUG if known else logging.WARNING,
+                "%s: can't compute heatwaves: %s",
+                series.label,
+                error,
+            )
         else:
+            _no_normal.pop(series.id, None)
             session.execute(
                 insert(ClimatologyDay),
                 [

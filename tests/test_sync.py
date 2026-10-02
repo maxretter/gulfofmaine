@@ -3,6 +3,7 @@
 import datetime as dt
 import io
 import json
+import logging
 import operator
 import os
 import re
@@ -20,7 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from sqlalchemy import delete, event, select, text, update
+from sqlalchemy import delete, event, insert, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -738,6 +739,35 @@ def test_a_series_that_still_cant_get_a_normal_changes_no_days(session):
     sync.update_heatwaves(session, series)
 
     assert sync.update_heatwaves(session, series).changed == []
+
+
+def test_a_series_that_cant_get_a_normal_warns_once_for_each_reason(monkeypatch, session, caplog):
+    monkeypatch.setattr(sync, "_no_normal", {})
+    caplog.set_level(logging.DEBUG, logger=sync.__name__)
+    series = add_series(session, seasonal_temperatures("2026-09-01", "2026-09-27"))
+
+    def stores(first_day: str) -> list[str]:
+        """How three stores in a row log that the series can't compute heatwaves, its record from this day."""
+        values = seasonal_temperatures(first_day, "2026-09-27")
+        session.execute(delete(DailyMean))
+        session.execute(
+            insert(DailyMean),
+            [
+                {"series_id": series.id, "date": day, "value": value}
+                for day, value in zip(pd.DatetimeIndex(values.index).date, values, strict=True)
+            ],
+        )
+        caplog.clear()
+        for _ in range(3):
+            sync.update_heatwaves(session, series)
+        return [record.levelname for record in caplog.records if "can't compute heatwaves" in record.message]
+
+    assert stores("2020-01-01") == ["WARNING", "DEBUG", "DEBUG"]
+    assert stores("2020-01-01") == ["DEBUG", "DEBUG", "DEBUG"]
+    # Another reason is a warning, as is the same reason once the series has had a normal since.
+    assert stores("2021-01-01") == ["WARNING", "DEBUG", "DEBUG"]
+    assert stores("2003-01-01") == []
+    assert stores("2021-01-01") == ["WARNING", "DEBUG", "DEBUG"]
 
 
 def test_a_series_whose_daily_means_are_all_gone_loses_all_that_came_from_them(session):
