@@ -24,6 +24,9 @@
 		X-Content-Type-Options nosniff
 		# OpenStreetMap's tile servers block requests without a Referer; this sends them only the origin.
 		Referrer-Policy strict-origin-when-cross-origin
+		# Seen over https, through the proxy in front, it keeps a browser on https for a year.
+		# Browsers ignore it over plain http, as locally.
+		Strict-Transport-Security max-age=31536000
 	}
 	# The app's policy, which the API's JSON gets too: inline styles are Leaflet's and
 	# React's style attributes; there are no inline scripts. Set only on a response
