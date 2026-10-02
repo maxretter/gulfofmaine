@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useAgreements, useBuoys, useMethod } from "../api/queries";
 import type { Agreement } from "../api/types";
 import { SatelliteMisses } from "../components/SatelliteMisses";
-import { missedShare } from "../lib/agreement";
+import { eachCompared, missedShare } from "../lib/agreement";
 import { formatList, formatPercent } from "../lib/format";
 import { buoyPath } from "../state/buoyView";
 
@@ -34,8 +34,8 @@ export function SatellitePage() {
         <p className="kicker">Satellite gap</p>
         <h1>What the satellite misses</h1>
         <p className="lead">
-          Each buoy is set beside NOAA's satellite record of sea surface temperature in the nearest grid cell. On the
-          days a buoy logged a heatwave, did the satellite show one at the surface?{" "}
+          {eachCompared(buoys.data)} set beside NOAA's satellite record of sea surface temperature in the nearest grid
+          cell. On the days a buoy logged a heatwave, did the satellite show one at the surface?{" "}
           <Link to="/about#satellite">How the comparison is made</Link>.
         </p>
       </section>
