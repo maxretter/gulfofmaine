@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keys } from "../api/queries";
 import type { Buoy, Condition, Method } from "../api/types";
+import * as production from "../fixtures/production";
 import { NowPage } from "./NowPage";
 
 function condition(depth: number, state: Condition["state"]): Condition {
@@ -80,6 +81,36 @@ describe("NowPage", () => {
     expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Depth" }).value).toBe("1");
     expect(screen.getByText("The one buoy reporting from 1 m isn't in a heatwave.")).toBeTruthy();
     expect(screen.getByRole("link", { name: /M01/ }).getAttribute("href")).toBe("/buoys/M01");
+  });
+
+  it("counts the buoys with a heatwave paused apart from those in one", () => {
+    /** Production's buoys, with E01's heatwave at 50 m paused if `paused`, and the page at 50 m. */
+    function renderWith(paused: boolean) {
+      const pause = (c: Condition) =>
+        ({ ...c, state: "paused", category: 1, category_name: "Moderate", event_start: "2026-09-20" }) as Condition;
+      const withPaused = production.buoys.map((b) =>
+        b.id !== "E01" || !paused ? b : { ...b, series: b.series.map((c) => (c.depth === 50 ? pause(c) : c)) },
+      );
+      const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+      client.setQueryData(keys.buoys, withPaused);
+      client.setQueryData(keys.method, production.method);
+      render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={["/?depth=50"]}>
+            <NowPage />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      return document.querySelector(".summary")!.textContent;
+    }
+
+    // A01 and B01 are in one at 50 m; M01 and N01 aren't reporting.
+    expect(renderWith(false)).toBe("2 of the 5 buoys reporting from 50 m are in a heatwave.");
+    cleanup();
+    expect(renderWith(true)).toBe(
+      "2 of the 5 buoys reporting from 50 m are in a heatwave, and 1 more has a heatwave paused.",
+    );
+    expect(screen.getByText("Moderate heatwave · paused")).toBeTruthy();
   });
 
   it("states the method with the API's numbers, and offers the map's depths", () => {

@@ -44,18 +44,37 @@ describe("the front page's summary", () => {
     expect(heatwaveSummary(states("no_data"), 50)).toBe("No buoy is reporting from 50 m.");
   });
 
-  it("counts a paused heatwave as one, on hold, and says how many are paused", () => {
+  it("counts the buoys with a heatwave paused apart from those in one, as it may have ended", () => {
+    // Heatwaves and paused ones.
     expect(heatwaveSummary(states("heatwave", "paused", "normal"), 50)).toBe(
-      "2 of the 3 buoys reporting from 50 m are in a heatwave, 1 of them paused.",
+      "1 of the 3 buoys reporting from 50 m is in a heatwave, and 1 more has a heatwave paused.",
     );
+    expect(heatwaveSummary(states("heatwave", "heatwave", "paused", "paused", "above_threshold", "normal"), 20)).toBe(
+      "2 of the 6 buoys reporting from 20 m are in a heatwave, and 2 more have a heatwave paused. 1 more is above the " +
+        "threshold.",
+    );
+    // Paused ones alone.
     expect(heatwaveSummary(states("paused", "normal", "above_threshold"), 20)).toBe(
-      "1 of the 3 buoys reporting from 20 m is in a heatwave, now paused. 1 more is above the threshold.",
+      "None of the 3 buoys reporting from 20 m is in a heatwave, but 1 has a heatwave paused. 1 more is above the " +
+        "threshold.",
     );
-    expect(heatwaveSummary(states("paused", "paused"), 1)).toBe("All 2 buoys reporting from 1 m are in a heatwave, both paused.");
-    expect(heatwaveSummary(states("paused", "paused", "paused", "normal"), 1)).toBe(
-      "3 of the 4 buoys reporting from 1 m are in a heatwave, all paused.",
+    expect(heatwaveSummary(states("paused", "paused", "normal", "normal"), 1)).toBe(
+      "None of the 4 buoys reporting from 1 m is in a heatwave, but 2 have a heatwave paused.",
     );
-    expect(heatwaveSummary(states("paused", "offline"), 50)).toBe("The one buoy reporting from 50 m is in a heatwave, now paused.");
+    expect(heatwaveSummary(states("paused", "paused"), 1)).toBe(
+      "None of the 2 buoys reporting from 1 m is in a heatwave, but both have a heatwave paused.",
+    );
+    expect(heatwaveSummary(states("paused", "paused", "paused"), 1)).toBe(
+      "None of the 3 buoys reporting from 1 m is in a heatwave, but all 3 have a heatwave paused.",
+    );
+    expect(heatwaveSummary(states("paused", "offline"), 50)).toBe("The one buoy reporting from 50 m has a heatwave paused.");
+    // Heatwaves alone, and neither.
+    expect(heatwaveSummary(states("heatwave", "above_threshold"), 50)).toBe(
+      "1 of the 2 buoys reporting from 50 m is in a heatwave. 1 more is above the threshold.",
+    );
+    expect(heatwaveSummary(states("normal", "above_threshold"), 50)).toBe(
+      "None of the 2 buoys reporting from 50 m is in a heatwave. 1 is above the threshold.",
+    );
   });
 
   it("leaves the buoys without a normal out of the count, and says so", () => {

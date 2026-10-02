@@ -32,15 +32,15 @@ export function stateLook(condition: Pick<Condition, "state" | "category">): { c
 }
 
 /**
- * How many of the buoys reporting from `depth` are in a heatwave, and how many more are above the threshold, in a
- * sentence or two. A buoy whose heatwave is paused is in one, on hold, and the sentence says how many are. Those with
- * no recent data aren't reporting. Those without a normal can't be in a heatwave or out of one, so they're left out of
- * the count, and it says so.
+ * How many of the buoys reporting from `depth` are in a heatwave, how many more have one paused, and how many more are
+ * above the threshold, in a sentence or two. A paused heatwave may go on or may turn out to have ended, so a buoy with
+ * one is counted apart from those in a heatwave. Those with no recent data aren't reporting. Those without a normal
+ * can't be in a heatwave or out of one, so they're left out of the count, and it says so.
  */
 export function heatwaveSummary(conditions: Pick<Condition, "state">[], depth: number): string {
   const reporting = conditions.filter((c) => !["offline", "no_data", "no_normal"].includes(c.state)).length;
+  const hot = conditions.filter((c) => c.state === "heatwave").length;
   const paused = conditions.filter((c) => c.state === "paused").length;
-  const hot = conditions.filter((c) => c.state === "heatwave").length + paused;
   const warm = conditions.filter((c) => c.state === "above_threshold").length;
   const unjudged = conditions.filter((c) => c.state === "no_normal").length;
   const buoys = `buoys reporting from ${depth} m`;
@@ -55,26 +55,33 @@ export function heatwaveSummary(conditions: Pick<Condition, "state">[], depth: n
       : unjudged === 1
         ? " A buoy without a normal isn't counted."
         : ` ${unjudged} buoys without a normal aren't counted.`;
+  if (reporting === 1) {
+    const one = hot
+      ? "is in a heatwave"
+      : paused
+        ? "has a heatwave paused"
+        : warm
+          ? "is above the heatwave threshold"
+          : "isn't in a heatwave";
+    return `The one buoy reporting from ${depth} m ${one}.${aside}`;
+  }
+  const has = (count: number) => (count === 1 ? "has" : "have");
   const onHold =
     paused === 0
       ? ""
-      : paused < hot
-        ? `, ${paused} of them paused`
-        : hot === 1
-          ? ", now paused"
-          : hot === 2
-            ? ", both paused"
-            : ", all paused";
-  if (reporting === 1)
-    return `The one buoy reporting from ${depth} m ${hot ? `is in a heatwave${onHold}` : warm ? "is above the heatwave threshold" : "isn't in a heatwave"}.${aside}`;
+      : hot > 0
+        ? `, and ${paused} more ${has(paused)} a heatwave paused`
+        : paused === reporting
+          ? `, but ${reporting === 2 ? "both" : `all ${reporting}`} have a heatwave paused`
+          : `, but ${paused} ${has(paused)} a heatwave paused`;
   const heatwaves =
     hot === 0
-      ? `None of the ${reporting} ${buoys} is in a heatwave.`
+      ? `None of the ${reporting} ${buoys} is in a heatwave${onHold}.`
       : hot === reporting
-        ? `All ${reporting} ${buoys} are in a heatwave${onHold}.`
+        ? `All ${reporting} ${buoys} are in a heatwave.`
         : `${hot} of the ${reporting} ${buoys} ${hot === 1 ? "is" : "are"} in a heatwave${onHold}.`;
   if (warm === 0) return `${heatwaves}${aside}`;
-  return `${heatwaves} ${warm}${hot ? " more" : ""} ${warm === 1 ? "is" : "are"} above the threshold.${aside}`;
+  return `${heatwaves} ${warm}${hot + paused ? " more" : ""} ${warm === 1 ? "is" : "are"} above the threshold.${aside}`;
 }
 
 /**

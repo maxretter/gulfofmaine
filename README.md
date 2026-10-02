@@ -172,10 +172,10 @@ lives in the URL, so any view can be bookmarked or shared and the back button
 works:
 
 - **Now** (`/?depth=50`). Every buoy's latest daily mean at one depth, on a map
-  and in a table, with a line saying how many are in a heatwave, and how many
-  of those heatwaves are paused. Each buoy leads to its own page. Above them,
-  the whole record at 50 m as warming stripes, a month to a stripe; hover one
-  for its month.
+  and in a table, with a line saying how many are in a heatwave and, counted
+  apart, how many more have one paused, which may go on or may turn out to
+  have ended. Each buoy leads to its own page. Above them, the whole record at
+  50 m as warming stripes, a month to a stripe; hover one for its month.
 - **Buoys** (`/buoys`). Every buoy, retired ones included: its depths, the span
   of its record, how many heatwaves it has logged and whether it's in one now,
   or one is paused.
