@@ -191,7 +191,7 @@ describe("EventPage", () => {
     }
   });
 
-  it("names the deep water's buoy as the rules have it, as it read when written out on production's rules", async () => {
+  it("names the deep water's buoy and depths as the rules have them, as it read when written out on production's rules", async () => {
     /** The deep water's signal: its name and reading, and the signal table's columns for it. */
     const deep = () => {
       const signal = screen.getByText(/^Deep water at/).closest(".signal")!;
@@ -223,6 +223,13 @@ describe("EventPage", () => {
       "I01 deep vs normal",
       "I01 deep heatwave",
     ]);
+
+    // Read at a single depth, it's no range.
+    cleanup();
+    renderPage({ originRules: { ...production.rules, deep_buoy: "I01", deep_depths: [120] } });
+    await screen.findByText("Offshore or surface?");
+
+    expect(deep()[1]).toBe("I01 at 120 m was in a heatwave on 12 days of the 30 before onset, which votes offshore.");
   });
 
   it("redraws no chart when a reading comes in, or a refetch brings the same days", async () => {

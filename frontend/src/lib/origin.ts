@@ -16,6 +16,12 @@ export function signals(rules: Pick<OriginRules, "deep_buoy">): { key: Signal; n
   ];
 }
 
+/** The deep water the rules read: "M01 at 100–250 m", or at a single depth "M01 at 100 m". */
+export function deepWater(rules: Pick<OriginRules, "deep_buoy" | "deep_depths">): string {
+  const [shallowest, deepest] = [Math.min(...rules.deep_depths), Math.max(...rules.deep_depths)];
+  return `${rules.deep_buoy} at ${shallowest === deepest ? shallowest : `${shallowest}–${deepest}`} m`;
+}
+
 export function countVotes(votes: Record<Signal, Vote>): { offshore: number; surface: number } {
   const values = Object.values(votes);
   return {
@@ -81,7 +87,7 @@ export function reading(signal: Signal, evidence: Evidence, reasons: Reasons, ru
       return `${change} Falling below ${Math.round(rules.collapse * 100)}% of the value before votes surface; otherwise it votes offshore.`;
     }
     case "deep": {
-      const where = `${rules.deep_buoy} at ${rules.deep_depths[0]}–${rules.deep_depths.at(-1)} m`;
+      const where = deepWater(rules);
       if (reason === "too_few_days")
         return `${where} had no heatwave in the ${rules.before} days before onset, but no depth there had ${rules.min_days} days of data, so it doesn't vote.`;
       if (reason === "heatwave")

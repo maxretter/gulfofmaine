@@ -18,13 +18,13 @@ vi.mock("../components/YearByBuoy", () => ({
 
 const rules = { depths: [20, 50] } as OriginRules;
 
-/** A buoy whose newest data, at 20 and 50 m, is from `date`. */
-const buoy = (id: string, longitude: number, date: string): Buoy => ({
+/** A buoy whose data, at 20 and 50 m, runs from `first_date` to `date`. */
+const buoy = (id: string, longitude: number, date: string, first_date = "2001-07-10"): Buoy => ({
   id,
   name: id,
   latitude: 43,
   longitude,
-  series: [20, 50].map((depth) => ({ depth, state: "offline", date }) as Condition),
+  series: [20, 50].map((depth) => ({ depth, state: "offline", first_date, date }) as Condition),
   satellite: null,
 });
 
@@ -156,8 +156,31 @@ describe("OriginsPage", () => {
     renderAt("/origins?depth=1&year=1999");
 
     expect(await screen.findByText("2 (50%)")).toBeTruthy();
+    expect(await screen.findByText("2021 at 50 m, at 2 buoys")).toBeTruthy(); // the years known
     expect(depthSelects()[0].value).toBe("50");
     expect(yearSelect().value).toBe("2021");
+  });
+
+  it("offers the years of the buoys' records, as it read when written out on production's buoys", async () => {
+    const offered = () => within(yearSelect()).getAllByRole("option").map((option) => option.textContent);
+    serve({ ...everything, "/api/buoys": production.buoys });
+    renderAt("/origins");
+
+    expect(await screen.findByText("2021 at 50 m, at 7 buoys")).toBeTruthy();
+    expect(offered()).toEqual(Array.from({ length: 26 }, (_, i) => String(2026 - i))); // 2026 back to 2001
+
+    // Records that begin in 2004: a year before that isn't offered, nor taken from the address.
+    cleanup();
+    serve({ ...everything, "/api/buoys": [buoy("N01", -65.9, "2021-10-30", "2004-06-04")] });
+    renderAt("/origins?year=2003");
+
+    expect(await screen.findByText("2021 at 50 m, at 1 buoys")).toBeTruthy();
+    expect(offered()).toEqual(Array.from({ length: 18 }, (_, i) => String(2021 - i))); // 2021 back to 2004
+
+    cleanup();
+    renderAt("/origins?year=2004");
+
+    expect(await screen.findByText("2004 at 50 m, at 1 buoys")).toBeTruthy();
   });
 
   it("says when the heatwaves didn't load, and offers both depths without the rules", async () => {

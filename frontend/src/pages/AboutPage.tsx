@@ -10,6 +10,7 @@ import { ORIGINS } from "../lib/colors";
 import { latest } from "../lib/dates";
 import { formatList, formatLongMonth, formatOrdinal, formatSigned } from "../lib/format";
 import { baselineLength, baselineYears, categoryScale, dayCountsFrom, inWords } from "../lib/method";
+import { deepWater } from "../lib/origin";
 
 const REPOSITORY = "https://github.com/maxretter/gulfofmaine";
 
@@ -244,9 +245,7 @@ function OriginTable({ rules }: { rules: OriginRules }) {
             <td>{before}, against onset to {rules.after} days after</td>
           </tr>
           <tr>
-            <td>
-              {rules.deep_buoy} at {rules.deep_depths[0]}–{rules.deep_depths.at(-1)} m
-            </td>
+            <td>{deepWater(rules)}</td>
             <td>In a heatwave</td>
             <td>Not in a heatwave</td>
             <td>{before}</td>

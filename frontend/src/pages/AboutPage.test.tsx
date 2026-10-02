@@ -141,6 +141,19 @@ describe("AboutPage", () => {
     expect(screen.getByRole("link", { name: "Events table, NetCDF, 100 KB" })).toBeTruthy();
   });
 
+  it("gives the deep water's depths as the rules have them, as it read when written out on production's rules", () => {
+    serve({});
+    renderAt("/", [[keys.originRules, production.rules]]);
+
+    expect(screen.getByText("M01 at 100–250 m")).toBeTruthy();
+
+    // Read at a single depth, it's no range.
+    cleanup();
+    renderAt("/", [[keys.originRules, { ...production.rules, deep_buoy: "I01", deep_depths: [120] }]]);
+
+    expect(screen.getByText("I01 at 120 m")).toBeTruthy();
+  });
+
   it("still reads when nothing loads, and says the files didn't", async () => {
     serve({ "/api/buoys": 500, "/api/origin/rules": 500, "/api/method": 500, "/api/data": 500 });
     const client = renderAt("/");

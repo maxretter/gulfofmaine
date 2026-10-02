@@ -5,12 +5,11 @@ import { useBuoys, useEvents, useOriginRules } from "../api/queries";
 import { InlineSelect } from "../components/InlineSelect";
 import { OriginsByYear } from "../components/OriginsByYear";
 import { YearByBuoy } from "../components/YearByBuoy";
-import { latest } from "../lib/dates";
+import { earliest, latest } from "../lib/dates";
 import { formatList } from "../lib/format";
 
 const DEFAULT_YEAR = 2021; // the year the README's figures start with
 const DEFAULT_DEPTH = 50;
-const FIRST_YEAR = 2001; // the first buoy records
 
 /** Where the heat in heatwaves at depth came from, and one year's heatwaves at every buoy. /origins?depth=50&year=2021 */
 export function OriginsPage() {
@@ -20,12 +19,19 @@ export function OriginsPage() {
   const [params, setParams] = useSearchParams();
 
   const depths = rules.data?.depths ?? [20, DEFAULT_DEPTH];
-  const lastYear = Number((latest((buoys.data ?? []).flatMap((b) => b.series.map((s) => s.date))) ?? "2026").slice(0, 4));
   const requestedDepth = Number(params.get("depth"));
   const depth = depths.includes(requestedDepth) ? requestedDepth : DEFAULT_DEPTH;
-  const requestedYear = Number(params.get("year"));
-  const year = Number.isInteger(requestedYear) && requestedYear >= FIRST_YEAR && requestedYear <= lastYear ? requestedYear : DEFAULT_YEAR;
-  const years = Array.from({ length: lastYear - FIRST_YEAR + 1 }, (_, i) => lastYear - i);
+  // The years of the buoys' records, the satellite's aside, the menu's once they're known; until then, any year asked
+  // for is taken, as the first chart needs no buoys.
+  const series = (buoys.data ?? []).flatMap((b) => b.series);
+  const [first, last] = [earliest(series.map((s) => s.first_date)), latest(series.map((s) => s.date))];
+  const span = first && last ? { first: Number(first.slice(0, 4)), last: Number(last.slice(0, 4)) } : null;
+  const requestedYear = params.get("year") === null ? NaN : Number(params.get("year"));
+  const year =
+    Number.isInteger(requestedYear) && (!span || (requestedYear >= span.first && requestedYear <= span.last))
+      ? requestedYear
+      : DEFAULT_YEAR;
+  const years = span ? Array.from({ length: span.last - span.first + 1 }, (_, i) => span.last - i) : [year];
 
   const update = useCallback(
     (patch: { depth?: number; year?: number }) =>
