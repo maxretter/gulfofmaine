@@ -157,6 +157,10 @@ export interface MonthAnomaly {
   buoys: number;
 }
 
+export interface NotFound {
+  detail: string;
+}
+
 export interface Onset {
   buoy_id: string;
   date: string;

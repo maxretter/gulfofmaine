@@ -4,12 +4,13 @@ import datetime as dt
 import os
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Annotated, BinaryIO, Literal, cast
+from typing import Annotated, Any, BinaryIO, Literal, cast
 
 import httpx
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
 from fastapi import Path as PathParameter
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import extract, func, select
@@ -262,6 +263,17 @@ class DataCatalog(BaseModel):
     variables: list[DataVariable]
 
 
+class NotFound(BaseModel):
+    """A 404's body: what wasn't found."""
+
+    detail: str
+
+
+def not_found(description: str) -> dict[int | str, dict[str, Any]]:
+    """A route's 404, for the OpenAPI document: when it answers one, and with what."""
+    return {404: {"model": NotFound, "description": description}}
+
+
 class Agreement(BaseModel):
     """Days in a year with data at both a buoy depth and the satellite, by which saw a heatwave."""
 
@@ -404,7 +416,7 @@ def list_buoys(session: SessionDep) -> list[BuoyOut]:
     return buoy_conditions(session, today())
 
 
-@router.get("/buoys/{buoy_id}")
+@router.get("/buoys/{buoy_id}", responses=not_found("No buoy with that ID"))
 def get_buoy(buoy_id: str, session: SessionDep) -> BuoyOut:
     for buoy in buoy_conditions(session, today()):
         if buoy.id == buoy_id.upper():
@@ -412,7 +424,10 @@ def get_buoy(buoy_id: str, session: SessionDep) -> BuoyOut:
     raise HTTPException(404, f"No buoy {buoy_id}")
 
 
-@router.get("/buoys/{buoy_id}/{depth}/daily")
+@router.get(
+    "/buoys/{buoy_id}/{depth}/daily",
+    responses=not_found("No series of the variable at that buoy and depth, or none with a normal yet"),
+)
 def daily(
     buoy_id: str,
     depth: Depth,
@@ -454,7 +469,10 @@ def daily(
     ]
 
 
-@router.get("/buoys/{buoy_id}/{depth}/daily/values")
+@router.get(
+    "/buoys/{buoy_id}/{depth}/daily/values",
+    responses=not_found("No series of the variable at that buoy and depth"),
+)
 def daily_values(
     buoy_id: str,
     depth: Depth,
@@ -491,13 +509,20 @@ def _daily_range(
     end = end or series.latest_date or today()
     start = start or end - dt.timedelta(days=364)
     if start > end:
-        raise HTTPException(422, "start must be on or before end")
+        raise invalid("start", start, "start must be on or before end")
     # Every day asked for costs a row, whether or not it has data, so the
     # range is bounded to keep any request to about a full record.
     last = today() + dt.timedelta(days=365)
     if end > last:
-        raise HTTPException(422, f"end must be on or before {last}, a year from today")
+        raise invalid("end", end, f"end must be on or before {last}, a year from today")
     return series, start, end
+
+
+def invalid(parameter: str, value: object, message: str) -> RequestValidationError:
+    """A 422 for a query parameter, sent as FastAPI sends its own: a list of errors, each with its place."""
+    return RequestValidationError(
+        [{"type": "value_error", "loc": ("query", parameter), "msg": message, "input": value}]
+    )
 
 
 @router.get("/events")
@@ -531,7 +556,10 @@ def list_events(
     ]
 
 
-@router.get("/events/{buoy_id}/{depth}/{start}")
+@router.get(
+    "/events/{buoy_id}/{depth}/{start}",
+    responses=not_found("No heatwave at that buoy and depth starting that day"),
+)
 def get_event(buoy_id: str, depth: Depth, start: dt.date, session: SessionDep) -> EventDetail:
     """One heatwave, with the evidence behind its origin label, day by day.
 
@@ -824,14 +852,22 @@ def data_catalog(directory: ProductsDir) -> DataCatalog:
     )
 
 
-@router.get("/data/events.{format}", response_class=FileResponse)
+@router.get(
+    "/data/events.{format}",
+    response_class=FileResponse,
+    responses=not_found("Not written yet: it appears after the sync job's next run"),
+)
 @router.head("/data/events.{format}", include_in_schema=False)
 def download_events(format: products.Format, directory: ProductsDir, request: Request) -> Response:
     """Every heatwave at the buoys: a CF point file, or a CSV with the fields of /api/events but `status`."""
     return _download(products.events_path(directory, format), format, request)
 
 
-@router.get("/data/{buoy_id}/{depth}.{format}", response_class=FileResponse)
+@router.get(
+    "/data/{buoy_id}/{depth}.{format}",
+    response_class=FileResponse,
+    responses=not_found("No series at that buoy and depth, or its file isn't written yet"),
+)
 @router.head("/data/{buoy_id}/{depth}.{format}", include_in_schema=False)
 def download_daily(
     buoy_id: Annotated[str, PathParameter(pattern=r"^[A-Za-z0-9]{1,8}$")],

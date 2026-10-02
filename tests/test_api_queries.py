@@ -100,6 +100,37 @@ def test_daily_series_rejects_a_reversed_or_early_range_and_a_series_that_isnt_t
     assert client.get(f"/api/buoys/B01/50/{endpoint}").status_code == 404
 
 
+def test_errors_are_sent_as_the_openapi_document_has_them(client):
+    def detail(query: str) -> list[dict]:
+        response = client.get(f"/api/buoys/A01/1/daily?{query}")
+        assert response.status_code == 422
+        return response.json()["detail"]
+
+    # A list of errors, each with its place, as FastAPI's own are, like the first's here.
+    [early] = detail("start=2000-12-31")
+    assert early["loc"] == ["query", "start"]
+    [reversed_range] = detail(f"start={TODAY}&end={TODAY - dt.timedelta(days=1)}")
+    assert reversed_range["loc"] == ["query", "start"]
+    assert reversed_range["msg"] == "start must be on or before end"
+    [too_far] = detail(f"end={TODAY + dt.timedelta(days=366)}")
+    assert too_far["loc"] == ["query", "end"]
+    assert too_far["input"] == str(TODAY + dt.timedelta(days=366))
+
+    assert client.get("/api/buoys/Z99").json() == {"detail": "No buoy Z99"}
+    paths = client.get("/openapi.json").json()["paths"]
+    documented = {path for path, route in paths.items() if "404" in route["get"]["responses"]}
+    assert documented == {
+        "/api/buoys/{buoy_id}",
+        "/api/buoys/{buoy_id}/{depth}/daily",
+        "/api/buoys/{buoy_id}/{depth}/daily/values",
+        "/api/events/{buoy_id}/{depth}/{start}",
+        "/api/data/events.{format}",
+        "/api/data/{buoy_id}/{depth}.{format}",
+    }
+    not_found = paths["/api/buoys/{buoy_id}"]["get"]["responses"]["404"]["content"]["application/json"]
+    assert not_found["schema"] == {"$ref": "#/components/schemas/NotFound"}
+
+
 def test_daily_series_goes_to_the_nearest_thousandth(client):
     response = client.get("/api/buoys/A01/20/daily?start=2021-01-01&end=2021-12-31")
     stored = seasonal_temperatures("2003-01-01", TODAY, seed=1)["2021"]
