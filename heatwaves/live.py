@@ -15,7 +15,7 @@ import datetime as dt
 import ipaddress
 import logging
 from collections import Counter
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Sequence
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -34,6 +34,9 @@ log = logging.getLogger(__name__)
 
 CHANNEL = "live"
 PING_EVERY = 30.0  # seconds; keeps idle connections open through proxies and tunnels
+# Heatwaves an OriginsMessage lists at most. Postgres takes a NOTIFY payload of under 8000 bytes,
+# and each heatwave is about 70 (tests/test_live.py checks the longest).
+ORIGINS_PER_MESSAGE = 100
 
 
 class ReadingMessage(BaseModel):
@@ -65,12 +68,34 @@ class StatusMessage(BaseModel):
     previous_category: int | None
 
 
+class JudgedHeatwave(BaseModel):
+    """A heatwave, by its buoy, depth and first day, as the API addresses it, and its last day."""
+
+    buoy: str
+    depth: int
+    start: dt.date
+    end: dt.date
+
+
+class OriginsMessage(BaseModel):
+    """Heatwaves whose origin, or the evidence for it, came out different when judged again.
+
+    A heatwave at the depths heatwaves.origin labels is judged again when days
+    its evidence comes from change, at its own buoy or another, and judged
+    for the first time when it's found. A store lists every one whose label or
+    evidence changed, ORIGINS_PER_MESSAGE to a message.
+    """
+
+    type: Literal["origins"] = "origins"
+    heatwaves: list[JudgedHeatwave]
+
+
 class PingMessage(BaseModel):
     type: Literal["ping"] = "ping"
     time: dt.datetime
 
 
-Message = ReadingMessage | StatusMessage | PingMessage
+Message = ReadingMessage | StatusMessage | OriginsMessage | PingMessage
 
 
 def reading_message(series: Series) -> ReadingMessage:
@@ -94,6 +119,14 @@ def status_message(series: Series, before: SeriesState, after: SeriesState) -> S
         previous_state=before.state,
         previous_category=before.category,
     )
+
+
+def origins_messages(heatwaves: Sequence[JudgedHeatwave]) -> list[OriginsMessage]:
+    """The heatwaves judged again with a different outcome, in as few messages as NOTIFY carries."""
+    return [
+        OriginsMessage(heatwaves=list(heatwaves[start : start + ORIGINS_PER_MESSAGE]))
+        for start in range(0, len(heatwaves), ORIGINS_PER_MESSAGE)
+    ]
 
 
 def publish(session: Session, messages: Iterable[Message]) -> None:

@@ -395,8 +395,9 @@ def test_a_round_rewrites_the_files_of_each_buoy_depth_it_changed(monkeypatch, s
     assert round_of(**{OISST: june}) == files(a01_1, a01_50, b01_20)
 
     # A store at A01 1 m that changes the origin of the heatwave at B01.
-    def relabel(session: Session, changed: object) -> None:
+    def relabel(session: Session, changed: object) -> list[live.JudgedHeatwave]:
         session.execute(update(Event).where(Event.series_id == b01.id).values(origin="surface"))
+        return [live.JudgedHeatwave(buoy="B01", depth=20, start=start, end=end)]
 
     with monkeypatch.context() as patched:
         patched.setattr(sync, "update_origins", relabel)

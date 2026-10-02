@@ -229,12 +229,29 @@ export interface StatusMessage {
   previous_category: number | null;
 }
 
+/** A heatwave, by its buoy, depth and first day, as the API addresses it, and its last day. */
+export interface JudgedHeatwave {
+  buoy: string;
+  depth: number;
+  start: string;
+  end: string;
+}
+
+/**
+ * Heatwaves whose origin, or the evidence for it, came out different when judged again: when days its evidence comes
+ * from changed, at its own buoy or another, or when it was just found.
+ */
+export interface OriginsMessage {
+  type: "origins";
+  heatwaves: JudgedHeatwave[];
+}
+
 export interface PingMessage {
   type: "ping";
   time: string;
 }
 
-export type LiveMessage = ReadingMessage | StatusMessage | PingMessage;
+export type LiveMessage = ReadingMessage | StatusMessage | OriginsMessage | PingMessage;
 
 /** A product file the sync job writes, from GET /api/data. */
 export interface DataFile {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
 import { enteredHeatwave, GATHER_MS, SILENCE_MS, useLiveFeed, withReading } from "./live";
 import { keys } from "./queries";
-import type { Buoy, Condition, LiveMessage, ReadingMessage, StatusMessage } from "./types";
+import type { Buoy, Condition, LiveMessage, OriginsMessage, ReadingMessage, StatusMessage } from "./types";
 
 /** Stands in for the browser's WebSocket; the test plays the server. */
 class MockSocket {
@@ -102,6 +102,10 @@ const cached: QueryKey[] = [
   [...keys.annual, null, 1, null],
   [...keys.agreement, 50],
   [...keys.onsets, 2026, 50],
+  [...keys.onsets, 2025, 50],
+  [...keys.onsets, 2026, 1],
+  [...keys.annual, 1, 1, null],
+  [...keys.event, "A01", 50, "2026-08-01"],
 ];
 
 /** The keys of the queries marked stale. */
@@ -170,8 +174,27 @@ describe("useLiveFeed", () => {
     expect(invalidated(queryClient)).toEqual([]);
     act(() => vi.advanceTimersByTime(1));
 
-    // What the day's mean feeds: the conditions, the buoy's days at that depth, and the month's stripe there.
-    expect(invalidated(queryClient)).toEqual([keys.buoys, cached[1], cached[2], cached[3]]);
+    // What the day's mean feeds: the conditions, the buoy's days at that depth, the month's stripe there, and the
+    // year's onsets and the yearly counts there and at any depth.
+    expect(invalidated(queryClient)).toEqual([keys.buoys, cached[1], cached[2], cached[3], cached[6], cached[8]]);
+  });
+
+  it("refetches what shows the origins of the heatwaves judged again, in each year they span", () => {
+    const { queryClient } = setup();
+    openFeed(queryClient);
+    const judged: OriginsMessage = {
+      type: "origins",
+      heatwaves: [
+        { buoy: "B01", depth: 50, start: "2026-09-24", end: "2026-09-28" },
+        { buoy: "A01", depth: 50, start: "2025-12-20", end: "2026-01-05" },
+      ],
+    };
+
+    act(() => latestSocket().deliver(judged));
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    // The heatwaves, B01's heatwave's page, the counts at any depth, and the onsets at 50 m in 2026 and 2025.
+    expect(invalidated(queryClient)).toEqual([cached[4], cached[5], cached[6], cached[8], cached[9]]);
   });
 
   it("refetches each query a sync round's messages make stale once, together", async () => {

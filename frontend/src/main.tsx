@@ -11,7 +11,9 @@ import { RouterProvider } from "react-router";
 import { retry } from "./api/queries";
 import { router } from "./router";
 
-// The live feed invalidates whatever it changes (api/live.ts), so cached responses otherwise stay fresh for five minutes.
+// The live feed marks stale what its messages say changed (api/live.ts): what a buoy's newest reading feeds, what's
+// built from heatwaves when a series' state or its latest heatwave changes, and what shows an origin judged again.
+// Anything else, such as the satellite's days, stays fresh for five minutes.
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60_000, refetchOnWindowFocus: false, retry } },
 });

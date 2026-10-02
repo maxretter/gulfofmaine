@@ -19,11 +19,11 @@ from sqlalchemy.orm import sessionmaker
 
 from heatwaves import live, main
 from heatwaves.config import Settings
-from heatwaves.live import Hub, ReadingMessage, StatusMessage, address_key
+from heatwaves.live import Hub, JudgedHeatwave, OriginsMessage, ReadingMessage, StatusMessage, address_key
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
 from heatwaves.state import SeriesState, state_of
-from heatwaves.sync import store, sync_series, update_heatwaves
+from heatwaves.sync import store, sync_series, update_heatwaves, update_origins
 from tests.conftest import A01_SYNC, NOW, TODAY, add_series, recorded_erddap, seasonal_temperatures
 
 # The sync judges each series' state on its clock's day (sync.update_heatwaves), stopped at NOW.
@@ -198,6 +198,45 @@ def test_a_buoy_sync_publishes_its_newest_good_reading(monkeypatch, session):
     assert reading.time == dt.datetime(2026, 9, 28, 16, tzinfo=dt.UTC)
     assert reading.temperature == 15.11
     assert series.latest_reading_at == reading.time
+
+
+def test_a_sync_announces_each_heatwave_whose_origin_or_evidence_changes(session):
+    # At A01 50 m, a heatwave from Apr 14, 2025, whose evidence reads A01 1 m around it.
+    calm = slice("2025-01-01", "2025-05-31")  # noise-free, so the heatwave's edges are exact
+
+    def warmed(offset: float, seed: int, heatwave: slice | None = None) -> pd.Series:
+        values = seasonal_temperatures("2003-01-01", "2025-06-30", seed=seed) + offset
+        values[calm] = seasonal_temperatures("2003-01-01", "2025-06-30", noise=0)[calm] + offset
+        if heatwave is not None:
+            values[heatwave] += 2.5
+        return values
+
+    at_50 = add_series(session, warmed(0, 0, slice("2025-04-14", "2025-04-28")), "A01", 50)
+    surface = warmed(6, 1)
+    at_1 = add_series(session, surface, "A01", 1)
+    for series in at_50, at_1:
+        update_heatwaves(session, series)
+    [april] = update_origins(session)
+    assert (april.buoy, april.depth, april.start) == ("A01", 50, dt.date(2025, 4, 14))
+
+    # 1 m three degrees cooler in the weeks before the onset: less stratified before it.
+    cooler = surface["2025-03-20":"2025-04-10"] - 3
+    assert store(session, [at_1], download(at_1, cooler)) == [OriginsMessage(heatwaves=[april])]
+
+    # The same days again: judged again, and found as they were.
+    assert store(session, [at_1], download(at_1, cooler)) == []
+
+
+def test_a_message_lists_as_many_heatwaves_as_a_notify_carries():
+    longest = JudgedHeatwave(buoy="ABCDEFGH", depth=1000, start=dt.date(2025, 12, 1), end=dt.date(2026, 3, 1))
+    heatwaves = [longest] * (2 * live.ORIGINS_PER_MESSAGE + 1)
+
+    messages = live.origins_messages(heatwaves)
+
+    assert [len(message.heatwaves) for message in messages] == [100, 100, 1]
+    # Postgres takes a payload of under 8000 bytes.
+    assert len(messages[0].model_dump_json().encode()) < 8000
+    assert live.origins_messages([]) == []
 
 
 @pytest.mark.parametrize(
@@ -491,6 +530,20 @@ def test_messages_go_out_only_when_the_sync_commits(session, libpq_url):
 
         [notice] = listener.notifies(timeout=5, stop_after=1)
     assert ReadingMessage.model_validate_json(notice.payload) == message
+
+
+@postgres_only
+def test_a_full_origins_message_goes_out(session, libpq_url):
+    longest = JudgedHeatwave(buoy="ABCDEFGH", depth=1000, start=dt.date(2025, 12, 1), end=dt.date(2026, 3, 1))
+    [message] = live.origins_messages([longest] * live.ORIGINS_PER_MESSAGE)
+    with psycopg.connect(libpq_url, autocommit=True) as listener:
+        listener.execute(f"LISTEN {live.CHANNEL}")
+
+        live.publish(session, [message])
+        session.commit()
+
+        [notice] = listener.notifies(timeout=5, stop_after=1)
+    assert OriginsMessage.model_validate_json(notice.payload) == message
 
 
 @postgres_only

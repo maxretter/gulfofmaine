@@ -153,9 +153,9 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
 
     Each heatwave whose origin rests on the changed days, at any buoy since
     the evidence for one comes from other series too, is then judged again.
-    Returns the live feed's messages: each newer temperature reading, and
-    each temperature series whose state changed or whose heatwave in
-    progress grew or changed.
+    Returns the live feed's messages: each newer temperature reading, each
+    temperature series whose state changed or whose heatwave in progress
+    grew or changed, and the heatwaves whose origin or its evidence did.
     """
     messages: list[live.Message] = []
     changed: list[Change] = []
@@ -209,7 +209,7 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             download.last_day,
             len(daily),
         )
-    update_origins(session, changed)
+    messages += live.origins_messages(update_origins(session, changed))
     return messages
 
 
@@ -369,21 +369,30 @@ def _replace_events(
     return [(start, end) for start, end, *_ in gone] + [(event.start, event.end) for event in new]
 
 
-def update_origins(session: Session, changed: Collection[Change] | None = None) -> None:
+def update_origins(session: Session, changed: Collection[Change] | None = None) -> list[live.JudgedHeatwave]:
     """Label heatwaves at the depths heatwaves.origin covers with where their heat likely came from.
 
     Every one, or with `changed`, those not labeled yet and those whose
-    evidence a changed span of the record falls in.
+    evidence a changed span of the record falls in. Returns those whose
+    label or evidence came out different, for the live feed.
     """
     events = session.execute(
-        select(Event.id, Event.start_date, Event.origin, Series.buoy_id, Series.depth)
+        select(
+            Event.id,
+            Event.start_date,
+            Event.end_date,
+            Event.origin,
+            Event.evidence,
+            Series.buoy_id,
+            Series.depth,
+        )
         .join(Series)
         .where(Series.source == "buoy", Series.variable == "temperature", Series.depth.in_(origin.DEPTHS))
     ).all()
     if changed is not None:
         events = [event for event in events if event.origin is None or _rests_on(event, changed)]
     if not events:
-        return
+        return []
     windows = [origin.window(event.start_date) for event in events]
     record = queries.origin_record(
         session,
@@ -391,16 +400,19 @@ def update_origins(session: Session, changed: Collection[Change] | None = None) 
         max(last for _, last in windows),
         around={(event.buoy_id, event.depth) for event in events},
     )
-    judged = [
-        (event.id, origin.judge(record, event.buoy_id, event.depth, event.start_date)) for event in events
-    ]
+    judged = [origin.judge(record, event.buoy_id, event.depth, event.start_date) for event in events]
     session.execute(
         update(Event),
         [
-            {"id": event_id, "origin": evidence.origin, "evidence": evidence.to_json()}
-            for event_id, evidence in judged
+            {"id": event.id, "origin": evidence.origin, "evidence": evidence.to_json()}
+            for event, evidence in zip(events, judged, strict=True)
         ],
     )
+    return [
+        live.JudgedHeatwave(buoy=event.buoy_id, depth=event.depth, start=event.start_date, end=event.end_date)
+        for event, evidence in zip(events, judged, strict=True)
+        if (evidence.origin, evidence.to_json()) != (event.origin, event.evidence)
+    ]
 
 
 def _rests_on(event: Row, changed: Collection[Change]) -> bool:

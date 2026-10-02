@@ -136,6 +136,13 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+export interface JudgedHeatwave {
+  buoy: string;
+  depth: number;
+  start: string;
+  end: string;
+}
+
 export interface Method {
   baseline_start: number;
   baseline_end: number;
@@ -191,6 +198,11 @@ export interface OriginRules {
   western_buoys: string[];
   deep_buoy: string;
   deep_depths: number[];
+}
+
+export interface OriginsMessage {
+  type: "origins";
+  heatwaves: JudgedHeatwave[];
 }
 
 export interface PingMessage {

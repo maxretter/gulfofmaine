@@ -35,6 +35,8 @@ export type Contract = [
   Same<App.YearSummary, Api.YearSummary>,
   Same<App.ReadingMessage, Api.ReadingMessage>,
   Same<App.StatusMessage, Api.StatusMessage>,
+  Same<App.JudgedHeatwave, Api.JudgedHeatwave>,
+  Same<App.OriginsMessage, Api.OriginsMessage>,
   Same<App.PingMessage, Api.PingMessage>,
   Same<App.DataFile, Api.DataFile>,
   Same<App.DataProduct, Api.DataProduct>,

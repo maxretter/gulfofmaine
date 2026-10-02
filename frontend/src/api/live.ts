@@ -77,22 +77,46 @@ export function alertId(alert: StatusMessage): string {
 /**
  * Brings the cache up to date with one message, and returns the queries it makes stale. A reading is written straight
  * into the latest conditions, so it shows at once; they are stale too, for what a reading can change but doesn't carry
- * (the day's mean, its anomaly), with the daily series at that buoy and depth and the stripes at that depth, which
- * average those means by month. A status message can mean a heatwave started, ended, grew a day or changed, so
- * everything built from heatwaves is stale as well.
+ * (the day's mean, its anomaly), with what's built from those at that depth: the buoy's daily series, the stripes,
+ * which average the means by month, and the year's anomalies and the days observed, which the onsets and the yearly
+ * counts give. A status message can mean a heatwave started, ended, grew a day or changed, so everything built from
+ * heatwaves is stale as well. An origins message makes stale what shows the origins of the heatwaves it lists: each
+ * one's page, the list of heatwaves, the onsets of the years each spans, and the counts by origin at its depth.
  */
 export function applyMessage(queryClient: QueryClient, message: LiveMessage): QueryKey[] {
-  if (message.type === "ping") return [];
-  if (message.type === "reading") {
-    queryClient.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, message));
+  switch (message.type) {
+    case "ping":
+      return [];
+    case "origins":
+      return [
+        keys.events,
+        [...keys.annual, null],
+        ...message.heatwaves.flatMap(({ buoy, depth, start, end }) => [
+          [...keys.event, buoy, depth, start],
+          ...years(start, end).map((year) => [...keys.onsets, year, depth]),
+          [...keys.annual, depth],
+        ]),
+      ];
   }
   const stale: QueryKey[] = [
     keys.buoys,
     [...keys.daily, message.buoy, message.depth],
     [...keys.stripes, message.depth],
   ];
-  if (message.type === "status") stale.push(keys.events, keys.event, keys.annual, keys.agreement, keys.onsets);
+  if (message.type === "reading") {
+    queryClient.setQueryData<Buoy[]>(keys.buoys, (buoys) => buoys && withReading(buoys, message));
+    const year = new Date(message.time).getUTCFullYear();
+    stale.push([...keys.onsets, year, message.depth], [...keys.annual, message.depth], [...keys.annual, null]);
+  } else {
+    stale.push(keys.events, keys.event, keys.annual, keys.agreement, keys.onsets);
+  }
   return stale;
+}
+
+/** The years from the one `start` is in to the one `end` is in, days given as YYYY-MM-DD. */
+function years(start: string, end: string): number[] {
+  const first = Number(start.slice(0, 4));
+  return Array.from({ length: Number(end.slice(0, 4)) - first + 1 }, (_, i) => first + i);
 }
 
 /**
