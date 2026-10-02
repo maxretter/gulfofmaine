@@ -214,7 +214,7 @@ class Updated:
     before: SeriesState  # its state today
     after: SeriesState
     # Spans of days, first to last, whose anomalies or heatwave days it may have changed: every
-    # day when it computed the normal, else those of each heatwave it added or removed.
+    # day when it computed the normal or dropped one, else those of each heatwave it added or removed.
     changed: list[tuple[dt.date, dt.date]]
 
 
@@ -246,10 +246,10 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
         return Updated(before, state.current(session, series, today), changed)
     daily = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
 
-    normal = None if new_normal else _stored_normal(session, series)
+    stored = _stored_normal(session, series)
+    normal = None if new_normal else stored
     changed: list[tuple[dt.date, dt.date]] = []
     if normal is None:
-        changed.append((rows[0].date, rows[-1].date))
         session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
         try:
             normal = hobday.climatology(daily, BASELINE)
@@ -273,6 +273,9 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
                     )
                 ],
             )
+        # A normal computed or dropped changes every day's anomaly; still without one, none changed.
+        if normal is not None or stored is not None:
+            changed.append((rows[0].date, rows[-1].date))
 
     frame = hobday.align(daily, normal) if normal is not None else None
     events = hobday.detect_events(frame) if frame is not None and series.variable == "temperature" else []

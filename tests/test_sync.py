@@ -629,11 +629,21 @@ def test_a_series_that_loses_its_normal_loses_its_heatwaves(session):
     # Reprocessed upstream, the baseline years are gone.
     session.execute(delete(DailyMean).where(DailyMean.date < dt.date(2023, 1, 1)))
 
-    sync.update_heatwaves(session, series)
+    updated = sync.update_heatwaves(session, series)
 
     assert session.scalars(select(Event)).all() == []
     assert session.scalars(select(ClimatologyDay)).all() == []
     assert (series.latest_date, series.latest_climatology) == (dt.date(2026, 9, 27), None)
+    # Without its normal, every day's anomaly is gone.
+    assert (dt.date(2023, 1, 1), dt.date(2026, 9, 27)) in updated.changed
+
+
+def test_a_series_that_still_cant_get_a_normal_changes_no_days(session):
+    # A summer of readings: too few for a normal, each time the sync tries.
+    series = add_series(session, seasonal_temperatures("2026-06-01", "2026-09-27"))
+    sync.update_heatwaves(session, series)
+
+    assert sync.update_heatwaves(session, series).changed == []
 
 
 def test_a_series_whose_daily_means_are_all_gone_loses_all_that_came_from_them(session):
