@@ -19,6 +19,7 @@ x-backend: &backend
   # SIGKILL to stop. Docker's init passes the signal on. The job can stop
   # anywhere: it stores each series in one transaction and replaces each file whole,
   # and it unwinds on the signal, so a file it was writing leaves no partial copy.
+  # So does a one-off `python -m heatwaves.products`.
   init: true
   logging: *logging
   environment:

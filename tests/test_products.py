@@ -2,8 +2,12 @@
 
 import io
 import os
+import signal
 import stat
+import subprocess
+import sys
 from pathlib import Path
+from time import monotonic, sleep
 
 import pandas as pd
 import pytest
@@ -338,6 +342,51 @@ def test_a_failed_write_leaves_no_partial_file(tmp_path):
     with pytest.raises(OSError, match="No space"):
         products._replace(tmp_path / "A01_heatwaves_050m.nc", fail)
     assert list(tmp_path.iterdir()) == []
+
+
+# The command, run as Docker runs it (python -m heatwaves.products), with one buoy depth to write
+# and a NetCDF write that never finishes.
+WRITING_FOREVER = """
+import datetime as dt, runpy, sys, time
+import xarray as xr
+from heatwaves import db
+from heatwaves.models import Base, Buoy, DailyMean, Series
+
+def forever(ds, path, **kwargs):
+    path.write_bytes(b"started")
+    time.sleep(60)
+
+xr.Dataset.to_netcdf = forever
+Base.metadata.create_all(db.engine)
+with db.SessionLocal() as session:
+    session.add(Buoy(id="A01", name="Massachusetts Bay", latitude=42.5, longitude=-70.6))
+    series = Series(buoy_id="A01", depth=1, variable="temperature", source="buoy", dataset_id="A01")
+    session.add(series)
+    session.flush()
+    session.add(DailyMean(series_id=series.id, date=dt.date(2025, 1, 1), value=10.0, hours=24))
+    session.commit()
+sys.argv = ["heatwaves.products"]
+runpy.run_module("heatwaves.products", run_name="__main__")
+"""
+
+
+def test_a_stop_while_writing_leaves_no_partial_file(tmp_path):
+    environment = os.environ | {"DATABASE_URL": "sqlite://", "PRODUCTS_DIR": str(tmp_path)}
+    command = subprocess.Popen(
+        [sys.executable, "-c", WRITING_FOREVER], cwd=Path(__file__).parents[1], env=environment
+    )
+    try:
+        deadline = monotonic() + 60
+        while not list(tmp_path.rglob("*.partial")) and command.poll() is None and monotonic() < deadline:
+            sleep(0.05)
+        assert list(tmp_path.rglob("*.partial")), "the command never started writing"
+
+        command.send_signal(signal.SIGTERM)  # as docker stop does, through Docker's init
+
+        assert command.wait(timeout=30) == 128 + signal.SIGTERM
+    finally:
+        command.kill()
+    assert [path for path in tmp_path.rglob("*") if path.is_file()] == []
 
 
 @pytest.mark.parametrize(("umask", "mode"), [(0o022, 0o644), (0o002, 0o664)], ids=["022", "002"])

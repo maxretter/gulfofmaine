@@ -31,6 +31,7 @@ import argparse
 import datetime as dt
 import logging
 import os
+import signal
 import sys
 import tempfile
 from collections import defaultdict
@@ -552,6 +553,22 @@ def _new_file_mode() -> int:
     return 0o666 & ~umask
 
 
+def stop_on_sigterm() -> None:
+    """Have SIGTERM stop the process as an error would, unwinding.
+
+    For the commands that write the products: this module's, and the sync
+    job. Python's own response to SIGTERM, which is how Docker stops a
+    container, ends the process on the spot, so a file being written was
+    left behind as a .partial one. Unwinding, each write cleans up after
+    itself, and each session closes.
+    """
+    signal.signal(signal.SIGTERM, _stop)
+
+
+def _stop(signum: int, frame: object) -> None:
+    raise SystemExit(128 + signum)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -570,4 +587,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    stop_on_sigterm()
     sys.exit(main())
