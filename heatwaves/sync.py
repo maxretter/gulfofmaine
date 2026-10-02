@@ -224,8 +224,9 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
     events. Without `new_normal`, the stored climatology stands: the same
     as one computed anew while none of NORMAL_DAYS has changed. A series
     with too little data in the baseline for a normal has neither, but still
-    gets its newest day and value. Heatwaves found again as they were keep
-    their rows, and with them their origin.
+    gets its newest day and value; one with no daily means left has none of
+    these. Heatwaves found again as they were keep their rows, and with them
+    their origin.
     """
     today = dt.datetime.now(dt.UTC).date()
     before = state.current(session, series, today)
@@ -235,7 +236,13 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
         .order_by(DailyMean.date)
     ).all()
     if not rows:
-        return Updated(before, before, [])
+        # Every daily mean is gone, deleted upstream: so is all that was derived from them.
+        session.execute(delete(ClimatologyDay).where(ClimatologyDay.series_id == series.id))
+        changed = _replace_events(session, series, [])
+        series.latest_date = series.latest_value = None
+        series.latest_climatology = series.latest_threshold = None
+        series.days_above = 0
+        return Updated(before, state.current(session, series, today), changed)
     daily = pd.Series([row.value for row in rows], index=pd.DatetimeIndex([row.date for row in rows]))
 
     normal = None if new_normal else _stored_normal(session, series)

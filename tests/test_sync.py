@@ -595,6 +595,27 @@ def test_a_series_that_loses_its_normal_loses_its_heatwaves(session):
     assert (series.latest_date, series.latest_climatology) == (dt.date(2026, 9, 27), None)
 
 
+def test_a_series_whose_daily_means_are_all_gone_loses_all_that_came_from_them(session):
+    temperatures = seasonal_temperatures("2003-01-01", "2026-09-27")
+    temperatures.iloc[-8:] += 2.5
+    series = add_series(session, temperatures)
+    sync.update_heatwaves(session, series)
+    heatwaves = session.execute(select(Event.start_date, Event.end_date)).all()
+    assert heatwaves
+    # Deleted upstream, every row.
+    session.execute(delete(DailyMean))
+
+    updated = sync.update_heatwaves(session, series)
+
+    assert session.scalars(select(Event)).all() == []
+    assert session.scalars(select(ClimatologyDay)).all() == []
+    latest = (series.latest_date, series.latest_value, series.latest_climatology, series.latest_threshold)
+    assert (latest, series.days_above) == ((None, None, None, None), 0)
+    # The live feed hears of it, and the origins that read its heatwaves are judged again.
+    assert updated.before.state != updated.after.state == "no_data"
+    assert sorted(updated.changed) == sorted(tuple(heatwave) for heatwave in heatwaves)
+
+
 def download(series: Series, values: pd.Series) -> Download:
     """What a source would return for one series: these daily values."""
     days = pd.DatetimeIndex(values.index, name="date")
