@@ -1,8 +1,9 @@
-// types.ts held to the API's own types, schema.ts, generated from its pydantic models (scripts/api_types.py).
-// The type check fails here unless each of the app's types and the API's are assignable to each other, so a
-// field renamed, added, dropped, retyped or made nullable on either side fails it, as does a value added to or
-// dropped from a union such as State. It can't tell a date from a datetime, or an integer from a float: both
-// sides have only strings and numbers.
+// types.ts held to the API's own types, schema.ts, generated from its pydantic models and routes
+// (scripts/api_types.py). The type check fails here unless each of the app's types and the API's are assignable to
+// each other, so a field renamed, added, dropped, retyped or made nullable on either side fails it, as does a value
+// added to or dropped from a union such as State. It can't tell a date from a datetime, or an integer from a float:
+// both sides have only strings and numbers. It fails too for a path the app fetches that the API doesn't serve, or
+// whose route sends another model than the app expects.
 import type * as Api from "./schema";
 import type * as App from "./types";
 
@@ -14,6 +15,14 @@ type Same<A extends B, B extends Back, Back = A> = [A, B];
 type Evidence = Omit<Api.Evidence, "votes"> & Pick<App.Evidence, "votes">;
 type Reasons = Omit<Api.Reasons, "signals"> & Pick<App.Reasons, "signals">;
 type EventDetail = Omit<Api.EventDetail, "evidence" | "reasons"> & { evidence: Evidence | null; reasons: Reasons | null };
+
+// What the API's route for each path the app fetches sends: indexing Paths by a path it lacks fails the type check.
+// A heatwave's detail is compared with its votes by value, as above.
+type Responses = {
+  [Path in keyof App.Responses]: Api.Paths[Path]["response"] extends Api.EventDetail
+    ? EventDetail
+    : Api.Paths[Path]["response"];
+};
 
 export type Contract = [
   Same<App.Condition, Api.Condition>,
@@ -45,4 +54,5 @@ export type Contract = [
   Same<App.DataProduct, Api.DataProduct>,
   Same<App.DataVariable, Api.DataVariable>,
   Same<App.DataCatalog, Api.DataCatalog>,
+  Same<App.Responses, Responses>,
 ];

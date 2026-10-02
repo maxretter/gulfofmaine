@@ -370,8 +370,10 @@ cd frontend && npm run lint && npm test && npm run build   # build includes the 
 ```
 
 The type check holds `frontend/src/api/types.ts` to the API's own types in
-`schema.ts`, which pytest fails unless current: after changing a response
-model or a live message, run `uv run python -m scripts.api_types`.
+`schema.ts`, and the paths `queries.ts` fetches, with their parameters and
+responses, to the API's routes there. pytest fails unless `schema.ts` is
+current: after changing a route, a response model or a live message, run
+`uv run python -m scripts.api_types`.
 
 Not in CI, since it downloads every record from NERACOOS: the comparison with
 the reference implementation, with no arguments three datasets, or name them.

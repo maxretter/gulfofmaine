@@ -104,12 +104,12 @@ describe("a first visit", () => {
     renderAt("/events");
 
     await vi.waitFor(() => expect(requested()).toContain("/api/events"));
-    await vi.waitFor(() => expect(requested()).toContain("/api/annual?"));
+    await vi.waitFor(() => expect(requested()).toContain("/api/annual"));
     expect(timeline.filter((e) => e.startsWith("←"))).toEqual([]);
 
     await answer("/");
     expect(await screen.findByText("Every heatwave on record")).toBeTruthy();
-    expect(requested().filter((path) => path.startsWith("/api/annual"))).toEqual(["/api/annual?"]);
+    expect(requested().filter((path) => path.startsWith("/api/annual"))).toEqual(["/api/annual"]);
   });
 
   it("asks for the method while the satellite page's code is on its way, and its comparisons once both are in", async () => {

@@ -1,6 +1,7 @@
-// The API's JSON, generated from its OpenAPI schema and the live feed's messages by scripts/api_types.py:
-// don't edit it, but run `uv run python -m scripts.api_types` after changing a response model. The app uses
-// the names in types.ts, which contract.ts checks against these.
+// The API's JSON and routes, generated from its OpenAPI schema and the live feed's messages by
+// scripts/api_types.py: don't edit it, but run `uv run python -m scripts.api_types` after changing a route
+// or a response model. The app uses the names in types.ts, which contract.ts checks against these, and
+// fetches by Paths, in queries.ts.
 
 export interface Agreement {
   buoy_id: string;
@@ -286,4 +287,136 @@ export interface YearSummary {
   year: number;
   heatwave_days: number;
   observed_days: number;
+}
+
+/** Each GET path that answers with JSON: its route's parameters, and what it sends with a 200. */
+export interface Paths {
+  "/api/agreement": {
+    parameters: {
+      path?: never;
+      query: {
+        depth: number;
+      };
+    };
+    response: Agreement[];
+  };
+  "/api/annual": {
+    parameters: {
+      path?: never;
+      query?: {
+        depth?: number | null;
+        min_category?: number;
+        origin?: "offshore" | "surface" | "unclear" | null;
+      };
+    };
+    response: YearSummary[];
+  };
+  "/api/buoys": {
+    parameters: {
+      path?: never;
+      query?: never;
+    };
+    response: BuoyOut[];
+  };
+  "/api/buoys/{buoy_id}": {
+    parameters: {
+      path: {
+        buoy_id: string;
+      };
+      query?: never;
+    };
+    response: BuoyOut;
+  };
+  "/api/buoys/{buoy_id}/{depth}/daily": {
+    parameters: {
+      path: {
+        buoy_id: string;
+        depth: number;
+      };
+      query?: {
+        start?: string | null;
+        end?: string | null;
+        variable?: "temperature" | "salinity";
+      };
+    };
+    response: Day[];
+  };
+  "/api/buoys/{buoy_id}/{depth}/daily/values": {
+    parameters: {
+      path: {
+        buoy_id: string;
+        depth: number;
+      };
+      query?: {
+        start?: string | null;
+        end?: string | null;
+        variable?: "temperature" | "salinity";
+      };
+    };
+    response: DayValue[];
+  };
+  "/api/data": {
+    parameters: {
+      path?: never;
+      query?: never;
+    };
+    response: DataCatalog;
+  };
+  "/api/events": {
+    parameters: {
+      path?: never;
+      query?: {
+        buoy_id?: string | null;
+        depth?: number | null;
+        year?: number | null;
+        min_category?: number;
+        origin?: "offshore" | "surface" | "unclear" | null;
+      };
+    };
+    response: EventOut[];
+  };
+  "/api/events/{buoy_id}/{depth}/{start}": {
+    parameters: {
+      path: {
+        buoy_id: string;
+        depth: number;
+        start: string;
+      };
+      query?: never;
+    };
+    response: EventDetail;
+  };
+  "/api/method": {
+    parameters: {
+      path?: never;
+      query?: never;
+    };
+    response: Method;
+  };
+  "/api/onsets": {
+    parameters: {
+      path?: never;
+      query: {
+        year: number;
+        depth: number;
+      };
+    };
+    response: Onsets;
+  };
+  "/api/origin/rules": {
+    parameters: {
+      path?: never;
+      query?: never;
+    };
+    response: OriginRules;
+  };
+  "/api/stripes": {
+    parameters: {
+      path?: never;
+      query: {
+        depth: number;
+      };
+    };
+    response: MonthAnomaly[];
+  };
 }

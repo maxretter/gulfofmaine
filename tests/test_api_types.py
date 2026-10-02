@@ -39,3 +39,46 @@ def test_a_field_with_a_default_is_required_since_it_is_always_sent():
         "  note?: string;",
         "}",
     ]
+
+
+def test_a_route_has_its_parameters_by_where_they_go_and_a_query_with_a_default_is_optional():
+    category = {"type": "integer", "default": 1}
+    day = {"$ref": "#/components/schemas/Day"}
+    operation = {
+        "parameters": [
+            {"name": "buoy_id", "in": "path", "required": True, "schema": {"type": "string"}},
+            {"name": "start", "in": "query", "schema": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            {"name": "min_category", "in": "query", "required": False, "schema": category},
+        ],
+        "responses": {"200": {"content": {"application/json": {"schema": day}}}},
+    }
+
+    assert api_types.route("/api/days/{buoy_id}", operation).splitlines() == [
+        '  "/api/days/{buoy_id}": {',
+        "    parameters: {",
+        "      path: {",
+        "        buoy_id: string;",
+        "      };",
+        "      query?: {",
+        "        start?: string | null;",
+        "        min_category?: number;",
+        "      };",
+        "    };",
+        "    response: Day;",
+        "  };",
+    ]
+
+
+def test_paths_has_the_routes_that_send_json_but_not_the_downloads():
+    routes = api_types.routes()
+
+    assert "/api/annual" in routes
+    assert "/api/events/{buoy_id}/{depth}/{start}" in routes
+    assert not any(path.startswith("/api/data/") for path in routes)
+
+
+def test_a_parameter_neither_in_the_path_nor_the_query_is_an_error():
+    operation = {"parameters": [{"name": "key", "in": "header", "required": True, "schema": {}}]}
+
+    with pytest.raises(ValueError, match=r"No TypeScript for parameters in \['header'\]"):
+        api_types.route("/api/buoys", operation)

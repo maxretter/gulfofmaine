@@ -3,7 +3,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HttpError, keys, retry, useAnnual, useBuoys, useDaily, useDailyValues, useEvent } from "./queries";
+import { HttpError, keys, retry, url, useAnnual, useBuoys, useDaily, useDailyValues, useEvent } from "./queries";
 import type { Day, Origin } from "./types";
 
 /** Answers every request with `status`. */
@@ -108,6 +108,31 @@ describe("useAnnual", () => {
 
     expect(await asked(50, 1, null)).toBe("/api/annual?depth=50");
     expect(await asked(null, 2, "offshore")).toBe("/api/annual?min_category=2&origin=offshore");
+  });
+});
+
+describe("url", () => {
+  it("fills in the path's parameters, and leaves the query's null ones out", () => {
+    const path = { buoy_id: "B01", depth: 50, start: "2021-06-10" };
+    expect(url("/api/events/{buoy_id}/{depth}/{start}", { path })).toBe("/api/events/B01/50/2021-06-10");
+    expect(url("/api/annual", { query: { depth: null, min_category: 2, origin: "surface" } })).toBe(
+      "/api/annual?min_category=2&origin=surface",
+    );
+    expect(url("/api/buoys", {})).toBe("/api/buoys");
+  });
+
+  it("takes only the paths the API serves, with the parameters their routes take", () => {
+    // Each line fails the type check, as schema.ts's Paths has it; were one to pass, tsc would fail on its directive.
+    // @ts-expect-error: no such path
+    url("/api/annuals", {});
+    // @ts-expect-error: the minimum category is min_category
+    url("/api/annual", { query: { minCategory: 2 } });
+    // @ts-expect-error: an origin is one of three
+    url("/api/annual", { query: { origin: "western" } });
+    // @ts-expect-error: the onsets need a year
+    url("/api/onsets", { query: { depth: 50 } });
+    // @ts-expect-error: a buoy's days are by its ID and depth, in the path
+    url("/api/buoys/{buoy_id}/{depth}/daily", { query: { buoy_id: "B01", depth: 50 } });
   });
 });
 

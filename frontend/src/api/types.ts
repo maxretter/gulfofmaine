@@ -318,3 +318,22 @@ export interface DataCatalog {
   products: DataProduct[];
   variables: DataVariable[];
 }
+
+/**
+ * What each path the app fetches sends, by the API's path template (schema.ts's Paths), as queries.ts fetches them.
+ * contract.ts holds each to what the API's route says it sends.
+ */
+export interface Responses {
+  "/api/agreement": Agreement[];
+  "/api/annual": YearSummary[];
+  "/api/buoys": Buoy[];
+  "/api/buoys/{buoy_id}/{depth}/daily": Day[];
+  "/api/buoys/{buoy_id}/{depth}/daily/values": DayValue[];
+  "/api/data": DataCatalog;
+  "/api/events": HeatwaveEvent[];
+  "/api/events/{buoy_id}/{depth}/{start}": EventDetail;
+  "/api/method": Method;
+  "/api/onsets": Onsets;
+  "/api/origin/rules": OriginRules;
+  "/api/stripes": MonthAnomaly[];
+}

@@ -1,22 +1,8 @@
 import { keepPreviousData, queryOptions, useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { parseDay } from "../lib/dates";
-import type {
-  Agreement,
-  Buoy,
-  DataCatalog,
-  Day,
-  DayValue,
-  EventDetail,
-  HeatwaveEvent,
-  Method,
-  MonthAnomaly,
-  Onsets,
-  Origin,
-  OriginRules,
-  Variable,
-  YearSummary,
-} from "./types";
+import type { Paths } from "./schema";
+import type { Agreement, Day, DayValue, Origin, Responses, Variable } from "./types";
 
 export interface DayPoint extends Omit<Day, "date"> {
   date: Date;
@@ -69,23 +55,49 @@ export function retry(failures: number, error: Error): boolean {
   return !(error instanceof HttpError && error.status >= 400 && error.status < 500) && failures < 3;
 }
 
+/** A path the app fetches, as the API's routes write it: "/api/events/{buoy_id}/{depth}/{start}". */
+type Path = keyof Responses & keyof Paths;
+
+type Values = Record<string, string | number | null | undefined>;
+
 /**
- * `signal` is the one TanStack Query gives each fetch, so a request no longer wanted is abandoned rather than read to
- * the end: one a newer refetch replaces, or one for a page left before it loaded.
+ * The URL for `path` with `parameters`: each `{name}` in the path filled in, and the query's values, but for the null
+ * and undefined ones, as its query string. The type check holds both to what the path's route takes (schema.ts), so it
+ * fails for a path the API doesn't serve, and for a parameter the route doesn't take, or needs but isn't given: one the
+ * API renames or drops can't go quietly unheard. Write the parameters in the call: TypeScript checks the names of an
+ * object written there, but not those of one made beforehand and passed in.
  */
-async function getJSON<T>(path: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: "application/json" }, signal });
-  if (!response.ok) throw new HttpError(path, response.status);
-  return response.json() as Promise<T>;
+export function url<P extends Path>(path: P, parameters: Paths[P]["parameters"]): string {
+  const { path: names = {}, query = {} } = parameters as { path?: Values; query?: Values };
+  const filled = path.replace(/\{(\w+)\}/g, (_, name: string) => encodeURIComponent(String(names[name])));
+  const given = Object.entries(query).filter(([, value]) => value !== null && value !== undefined);
+  const search = new URLSearchParams(given.map(([name, value]) => [name, String(value)]));
+  return given.length ? `${filled}?${search}` : filled;
+}
+
+/**
+ * What `path` sends, which contract.ts holds to what its route says it does. `signal` is the one TanStack Query gives
+ * each fetch, so a request no longer wanted is abandoned rather than read to the end: one a newer refetch replaces, or
+ * one for a page left before it loaded.
+ */
+async function getJSON<P extends Path>(
+  path: P,
+  parameters: Paths[P]["parameters"],
+  signal: AbortSignal,
+): Promise<Responses[P]> {
+  const address = url(path, parameters);
+  const response = await fetch(address, { headers: { Accept: "application/json" }, signal });
+  if (!response.ok) throw new HttpError(address, response.status);
+  return response.json() as Promise<Responses[P]>;
 }
 
 export function useBuoys() {
-  return useQuery({ queryKey: keys.buoys, queryFn: ({ signal }) => getJSON<Buoy[]>("/api/buoys", signal) });
+  return useQuery({ queryKey: keys.buoys, queryFn: ({ signal }) => getJSON("/api/buoys", {}, signal) });
 }
 
 /** Every heatwave at every buoy and depth: ~860 rows, fetched once and filtered locally. */
 export function useEvents() {
-  return useQuery({ queryKey: keys.events, queryFn: ({ signal }) => getJSON<HeatwaveEvent[]>("/api/events", signal) });
+  return useQuery({ queryKey: keys.events, queryFn: ({ signal }) => getJSON("/api/events", {}, signal) });
 }
 
 /**
@@ -93,13 +105,15 @@ export function useEvents() {
  * however many depths were in a heatwave. Only heatwaves of at least `minCategory`, and of `origin` if given, count.
  */
 export function annualQuery(depth: number | null, minCategory: number, origin: Origin | null) {
-  const params = new URLSearchParams();
-  if (depth !== null) params.set("depth", String(depth));
-  if (minCategory > 1) params.set("min_category", String(minCategory));
-  if (origin !== null) params.set("origin", origin);
   return queryOptions({
     queryKey: [...keys.annual, depth, minCategory, origin],
-    queryFn: ({ signal }) => getJSON<YearSummary[]>(`/api/annual?${params}`, signal),
+    // Category 1, the API's default, is left out.
+    queryFn: ({ signal }) =>
+      getJSON(
+        "/api/annual",
+        { query: { depth, min_category: minCategory > 1 ? minCategory : undefined, origin } },
+        signal,
+      ),
     placeholderData: keepPreviousData,
   });
 }
@@ -129,7 +143,7 @@ export function useAgreements(depths: number[]): Agreements {
   return useQueries({
     queries: depths.map((depth) => ({
       queryKey: [...keys.agreement, depth],
-      queryFn: ({ signal }) => getJSON<Agreement[]>(`/api/agreement?depth=${depth}`, signal),
+      queryFn: ({ signal }) => getJSON("/api/agreement", { query: { depth } }, signal),
     })),
     combine: combineAgreements,
   });
@@ -139,7 +153,7 @@ export function useAgreements(depths: number[]): Agreements {
 export function useStripes(depth: number) {
   return useQuery({
     queryKey: [...keys.stripes, depth],
-    queryFn: ({ signal }) => getJSON<MonthAnomaly[]>(`/api/stripes?depth=${depth}`, signal),
+    queryFn: ({ signal }) => getJSON("/api/stripes", { query: { depth } }, signal),
   });
 }
 
@@ -158,7 +172,11 @@ function dailyQuery(buoy: string, depth: number, start: string, end: string, var
   return {
     queryKey: [...keys.daily, buoy, depth, start, end, variable],
     queryFn: ({ signal }: { signal: AbortSignal }) =>
-      getJSON<Day[]>(`/api/buoys/${buoy}/${depth}/daily?start=${start}&end=${end}&variable=${variable}`, signal),
+      getJSON(
+        "/api/buoys/{buoy_id}/{depth}/daily",
+        { path: { buoy_id: buoy, depth }, query: { start, end, variable } },
+        signal,
+      ),
     select: withDates<Day>,
     // Keep showing the previous range while a new one loads.
     placeholderData: keepPreviousData,
@@ -192,7 +210,11 @@ export function useDailyValues(buoy: string, depth: number, start: string, end: 
     // key for the same days: the rows aren't the same shape.
     queryKey: [...keys.daily, buoy, depth, start, end, "values"],
     queryFn: ({ signal }) =>
-      getJSON<DayValue[]>(`/api/buoys/${buoy}/${depth}/daily/values?start=${start}&end=${end}`, signal),
+      getJSON(
+        "/api/buoys/{buoy_id}/{depth}/daily/values",
+        { path: { buoy_id: buoy, depth }, query: { start, end } },
+        signal,
+      ),
     select: withDates<DayValue>,
     placeholderData: keepPreviousData,
     retry,
@@ -203,7 +225,8 @@ export function useDailyValues(buoy: string, depth: number, start: string, end: 
 export function useEvent(buoy: string, depth: number, start: string) {
   return useQuery({
     queryKey: [...keys.event, buoy, depth, start],
-    queryFn: ({ signal }) => getJSON<EventDetail>(`/api/events/${buoy}/${depth}/${start}`, signal),
+    queryFn: ({ signal }) =>
+      getJSON("/api/events/{buoy_id}/{depth}/{start}", { path: { buoy_id: buoy, depth, start } }, signal),
   });
 }
 
@@ -211,20 +234,20 @@ export function useEvent(buoy: string, depth: number, start: string) {
 export function useOnsets(year: number, depth: number) {
   return useQuery({
     queryKey: [...keys.onsets, year, depth],
-    queryFn: ({ signal }) => getJSON<Onsets>(`/api/onsets?year=${year}&depth=${depth}`, signal),
+    queryFn: ({ signal }) => getJSON("/api/onsets", { query: { year, depth } }, signal),
     placeholderData: keepPreviousData,
   });
 }
 
 /** The downloadable products and the variables of the daily files. */
 export function useDataCatalog() {
-  return useQuery({ queryKey: ["data"], queryFn: ({ signal }) => getJSON<DataCatalog>("/api/data", signal) });
+  return useQuery({ queryKey: ["data"], queryFn: ({ signal }) => getJSON("/api/data", {}, signal) });
 }
 
 /** The rules that label a heatwave's origin: fixed in the code, so fetched once. */
 export const originRulesQuery = queryOptions({
   queryKey: keys.originRules,
-  queryFn: ({ signal }) => getJSON<OriginRules>("/api/origin/rules", signal),
+  queryFn: ({ signal }) => getJSON("/api/origin/rules", {}, signal),
   staleTime: Infinity,
 });
 
@@ -235,7 +258,7 @@ export function useOriginRules() {
 /** The method's parameters, and the depths the map shows: fixed in the code, so fetched once. */
 export const methodQuery = queryOptions({
   queryKey: keys.method,
-  queryFn: ({ signal }) => getJSON<Method>("/api/method", signal),
+  queryFn: ({ signal }) => getJSON("/api/method", {}, signal),
   staleTime: Infinity,
 });
 
