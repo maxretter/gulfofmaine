@@ -20,6 +20,7 @@ const DAY = 86_400_000;
 const ROW = 44;
 const STRIP = [1, 10]; // px from the top of the row
 const BAR = [12, 32];
+const RULE = 38; // px from the top of the row: a hairline between it and the next, midway through the air
 const AXIS = 30;
 const NAMED = 640; // px: from this wide, rows are labeled with the buoy's name too
 
@@ -159,6 +160,17 @@ function Rows({ data, rows, names, events, width }: RowsProps) {
           fill: (e: HeatwaveEvent) => origins[e.origin ?? "unclear"].color,
           insetTop: BAR[0],
           insetBottom: ROW - BAR[1],
+        }),
+        // Under each row but the last, in the air below its bar, so a row's strip and bar read together, apart from the
+        // next row's. Only a divider, so left out of what a screen reader reads.
+        Plot.rect(rows.slice(0, -1), {
+          x1: () => parseDay(first),
+          x2: () => new Date(parseDay(last).getTime() + DAY),
+          y: (buoy: string) => buoy,
+          fill: colors.grid,
+          insetTop: RULE,
+          insetBottom: ROW - RULE - 1,
+          ariaHidden: "true",
         }),
         Plot.text(unrecorded, {
           x: () => parseDay(data.dates[Math.floor(data.dates.length / 2)]),
