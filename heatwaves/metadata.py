@@ -194,8 +194,8 @@ EVENT_VARIABLES: dict[str, dict] = {
         "long_name": "Marine heatwave category",
         **_flags(CATEGORY_FLAGS, first=1),
         "coverage_content_type": "thematicClassification",
-        "comment": "From the day furthest above normal in multiples of the threshold's distance above it "
-        "(Hobday et al. 2018).",
+        "comment": "The most multiples of the threshold's distance above normal the heatwave reached on any "
+        "day, which needn't be its peak day (Hobday et al. 2018).",
     },
     "origin": DAILY_VARIABLES["heatwave_origin"] | _flags(ORIGIN_FLAGS, first=1),
 }
