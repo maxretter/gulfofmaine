@@ -716,12 +716,14 @@ def annual(
     many depths were in a heatwave, and is observed if any depth had data.
     """
     ids = [each.id for each in queries.buoy_temperatures(session, depth)]
-    year = extract("year", DailyMean.date)
+    # Each buoy's days with data, counted by year. At one depth a buoy has one series, so each day
+    # once; at every depth, made distinct first: counting distinct days within each buoy and year
+    # instead had Postgres sort every row, which took about four times as long.
+    days = select(Series.buoy_id, DailyMean.date).join(Series).where(Series.id.in_(ids))
+    days = (days.distinct() if depth is None else days).subquery()
+    year = extract("year", days.c.date)
     observed = session.execute(
-        select(Series.buoy_id, year, func.count(DailyMean.date.distinct()))
-        .join(Series)
-        .where(Series.id.in_(ids))
-        .group_by(Series.buoy_id, year)
+        select(days.c.buoy_id, year, func.count()).group_by(days.c.buoy_id, year)
     ).all()
 
     heatwaves = (
