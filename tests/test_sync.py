@@ -1,5 +1,6 @@
 """The sync against recorded ERDDAP responses (see tests/conftest.py)."""
 
+import dataclasses
 import datetime as dt
 import io
 import json
@@ -549,6 +550,18 @@ def test_sync_job_exit_status_reports_failures(monkeypatch, session_factory, fai
     monkeypatch.setattr(sync, "sync_all", lambda *args: failures)
 
     assert sync.main([]) == status
+
+
+def test_a_run_that_cant_write_the_files_fails(monkeypatch, session_factory, series, tmp_path):
+    blocked = tmp_path / "products"
+    blocked.write_text("not a directory")
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    monkeypatch.setattr(sync, "settings", dataclasses.replace(settings, products_dir=blocked))
+    monkeypatch.setattr(sync, "ensure_catalog", lambda *args: True)
+    monkeypatch.setattr(sync, "sync_one", lambda *args: "unchanged")
+
+    # Every fetch went well, but the files, left as they were, may not match the stored record.
+    assert sync.main([]) == 1
 
 
 class Stop(Exception):

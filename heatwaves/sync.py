@@ -514,7 +514,9 @@ def sync_all(
     The products in `products_dir`, if given, are rewritten at the end,
     once a round: the files of each buoy depth the round changed and any
     left unwritten (every one, at a process's first round or after one that
-    failed partway, see `publish`), and the events.
+    failed partway, see `publish`), and the events. A write that fails
+    counts as one failed fetch more, as the files left may not match the
+    stored record.
     """
     failures = 0
     try:
@@ -550,8 +552,9 @@ def sync_all(
             _unwritten.pop(products_dir, None)
         raise
     # Any left unwritten too: every file, at a process's first round.
-    if changed or _unwritten.get(products_dir) != set() or not products.listing(products_dir):
-        publish(session_factory, products_dir, changed)
+    due = bool(changed) or _unwritten.get(products_dir) != set() or not products.listing(products_dir)
+    if due and not publish(session_factory, products_dir, changed):
+        failures += 1
     return failures + outcomes.count("failed")
 
 
