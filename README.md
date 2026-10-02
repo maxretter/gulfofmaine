@@ -82,16 +82,19 @@ CoastWatch ERDDAP ─────┘       ▼                               ▲
   before those two days, and late rows from a buoy that then stamps nothing
   new, since a round stops after one request while the newest stamp is
   unchanged.
-- **Live updates** ([`heatwaves/live.py`](heatwaves/live.py)). The sync
-  sends a Postgres `NOTIFY` with each new reading, each change of heatwave
-  state, and the heatwaves whose origin label or its evidence changed, in the
-  transaction that stores them, so nothing is announced before it's
-  committed. The API holds one `LISTEN` connection and relays each message to
-  browsers over a WebSocket at `/api/live`; no Redis or message queue. Every
-  API response carries an ETag and `Cache-Control: no-cache`, so a refetch
-  prompted by a message is never answered from a stale cache, and an
-  unchanged one costs a 304. A Postgres advisory lock keeps a one-off sync
-  from storing at the same time as the scheduled job.
+- **Live updates** ([`heatwaves/live.py`](heatwaves/live.py)). The sync sends
+  a Postgres `NOTIFY` with each new reading, each change of heatwave state,
+  the days of each buoy depth's record that changed (new, revised or deleted
+  days, the satellite's too, or every day when its normal was computed or
+  dropped) and whether its heatwaves did, the heatwaves whose origin label or its
+  evidence changed, and after `--recompute`, that everything may have, in the
+  transaction that stores them, so nothing is announced before it's committed.
+  The API holds one `LISTEN` connection and relays each message to browsers
+  over a WebSocket at `/api/live`; no Redis or message queue. Every API
+  response carries an ETag and `Cache-Control: no-cache`, so a refetch
+  prompted by a message is never answered from a stale cache, and an unchanged
+  one costs a 304. A Postgres advisory lock keeps a one-off sync from storing
+  at the same time as the scheduled job.
 - **Satellite sea surface temperature** (`GriddapSource` in the same file).
   NOAA OISST v2.1 from CoastWatch's ERDDAP, in the nearest quarter-degree cell
   with data to each buoy (a buoy's own cell can be empty near the coast). One
@@ -215,19 +218,23 @@ works:
   buoys. At 20 and 50 m, its origin, with each of the five signals as a small
   chart over the onset window, its vote and a sentence on what it measured,
   and a temperature–salinity diagram of the water before and after the onset.
-- **Live.** The page keeps a WebSocket open to `/api/live` and writes each
-  new reading into TanStack Query's cache, so the tiles show the latest
-  reading and the map marker pulses as it arrives. A reading refetches what
-  the day's mean feeds (the conditions, that buoy depth's days, and the
-  stripes, the year's anomalies and the days observed at its depth), a status
-  change what depends on heatwaves as well, and a changed origin what shows
-  that heatwave's origin. The refetches are gathered for three seconds, so
-  that a sync round's messages refetch each query once. A buoy depth entering
-  a heatwave gets a notice, but not one whose paused heatwave goes on. The
-  header says whether the feed is connected. The connection reconnects with
-  backoff, drops itself if the server's 30-second pings stop, and refetches
-  everything on screen each time it connects, the first time too, to cover
-  what it missed.
+- **Live.** The page keeps a WebSocket open to `/api/live` and writes each new
+  reading into TanStack Query's cache, so the tiles show the latest reading
+  and the map marker pulses as it arrives. A reading refetches what the day's
+  mean feeds (the conditions, that buoy depth's days, and the stripes, the
+  year's anomalies and the days observed at its depth), a status change what
+  depends on heatwaves as well, and a changed origin what shows that
+  heatwave's origin. Changed days refetch what's built from them at their buoy
+  depth (the conditions, and its days, stripes, onsets, yearly counts and
+  agreement with the satellite), and the heatwaves and their pages if those
+  changed too; the satellite's refetch the conditions, its days and every
+  depth's agreement with it. A recompute refetches everything built from the record. The
+  refetches are gathered for three seconds, so that a sync round's messages
+  refetch each query once. A buoy depth entering a heatwave gets a notice, but
+  not one whose paused heatwave goes on. The header says whether the feed is
+  connected. The connection reconnects with backoff, drops itself if the
+  server's 30-second pings stop, and refetches everything on screen each time
+  it connects, the first time too, to cover what it missed.
 - **About** (`/about`). How heatwaves are found, the origin rules signal by
   signal, the data and the satellite comparison, and the API and files, with
   every file listed. The old `/methods` and `/data` pages redirect to their
@@ -270,7 +277,7 @@ every page as the site's mark.
 | `GET /api/annual?depth=&min_category=&origin=` | Heatwave days and observed days per buoy and year, in the heatwaves `/api/events` lists for the same filters; without `depth`, at any depth, a day counting once |
 | `GET /api/stripes?depth=` | Each month's temperature against normal, averaged over the buoys: the stripes |
 | `GET /api/agreement?depth=` | Days per buoy and year with a heatwave at depth, at the surface by satellite, both or neither |
-| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering, pausing or leaving a heatwave, or the dates, category or intensity of its heatwave in progress or paused changing), `origins` (heatwaves at 20 or 50 m whose origin label or its evidence came out different when judged again) and `ping` every 30 s |
+| `WS /api/live` | JSON messages: `reading` (a buoy depth's newest temperature reading that passed quality control), `status` (a series changing state, such as entering, pausing or leaving a heatwave, or the dates, category or intensity of its heatwave in progress or paused changing), `origins` (heatwaves at 20 or 50 m whose origin label or its evidence came out different when judged again), `days` (the first and last of a buoy depth's days, depth 0 being the satellite, whose daily means, normal or heatwaves changed, and whether its heatwaves did), `recomputed` (every series' heatwaves computed again, after `python -m heatwaves.sync --recompute`) and `ping` every 30 s |
 | `GET /api/data` | The files below, with their sizes and times, and the variables of the daily files |
 | `GET /api/data/{id}/{depth}.nc` or `.csv` | A buoy depth's daily series as a CF time series, or CSV |
 | `GET /api/data/events.nc` or `.csv` | Every heatwave at the buoys: CF points, or CSV with the fields of `/api/events` but `status` |

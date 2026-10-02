@@ -283,12 +283,38 @@ export interface OriginsMessage {
   heatwaves: JudgedHeatwave[];
 }
 
+/**
+ * Days of a buoy depth's record, `first` to `last`, whose daily means, normal or heatwaves changed: new days, days
+ * revised or deleted upstream, or every day when the normal was computed or dropped. `heatwaves` says whether its
+ * heatwaves may have changed too, past ones as well as one in progress. Depth 0 is the satellite, whose new days come
+ * this way alone.
+ */
+export interface DaysMessage {
+  type: "days";
+  buoy: string;
+  depth: number;
+  first: string;
+  last: string;
+  heatwaves: boolean;
+}
+
+/** Every series' normal, heatwaves and origins were computed again from the stored record. */
+export interface RecomputedMessage {
+  type: "recomputed";
+}
+
 export interface PingMessage {
   type: "ping";
   time: string;
 }
 
-export type LiveMessage = ReadingMessage | StatusMessage | OriginsMessage | PingMessage;
+export type LiveMessage =
+  | ReadingMessage
+  | StatusMessage
+  | OriginsMessage
+  | DaysMessage
+  | RecomputedMessage
+  | PingMessage;
 
 /** A product file the sync job writes, from GET /api/data. */
 export interface DataFile {

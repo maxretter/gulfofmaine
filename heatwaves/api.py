@@ -827,7 +827,7 @@ def agreement(depth: Depth, session: SessionDep) -> list[Agreement]:
 
 @router.websocket("/live")
 async def live_feed(websocket: WebSocket) -> None:
-    """New readings and heatwave changes as they are stored (heatwaves.live), as JSON messages."""
+    """New readings, changed days and heatwave changes as they are stored (heatwaves.live), in JSON."""
     await live.serve(websocket, live.hub)
 
 

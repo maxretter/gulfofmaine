@@ -89,6 +89,15 @@ export interface DayValue {
   value: number | null;
 }
 
+export interface DaysMessage {
+  type: "days";
+  buoy: string;
+  depth: number;
+  first: string;
+  last: string;
+  heatwaves: boolean;
+}
+
 export interface EventDetail {
   buoy_id: string;
   depth: number;
@@ -225,6 +234,10 @@ export interface Reasons {
   offshore_buoys: string[];
   western_buoys: string[];
   left_out: string | null;
+}
+
+export interface RecomputedMessage {
+  type: "recomputed";
 }
 
 export interface SatelliteCondition {

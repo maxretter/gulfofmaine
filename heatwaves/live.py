@@ -1,4 +1,4 @@
-"""The live feed: new readings and heatwave changes, pushed to browsers over a WebSocket.
+"""The live feed: new readings, changed days and heatwave changes, pushed to browsers over a WebSocket.
 
     sync (any process) --NOTIFY--> Postgres --LISTEN--> API --WebSocket--> browsers
 
@@ -90,12 +90,42 @@ class OriginsMessage(BaseModel):
     heatwaves: list[JudgedHeatwave]
 
 
+class DaysMessage(BaseModel):
+    """Days of a buoy depth's record, `first` to `last`, whose daily means, normal or heatwaves changed.
+
+    A store sends one for each buoy depth it changed, in any variable: new
+    days, days revised or deleted upstream, and every day when the normal
+    they're measured against was computed or dropped. `heatwaves` says
+    whether the temperature's heatwaves may have changed too: found, dropped,
+    or changed in their dates, category or intensity, past ones as well as
+    one in progress, or measured against another normal. Depth 0 is the
+    satellite, which has no readings: its new days go out this way alone.
+    """
+
+    type: Literal["days"] = "days"
+    buoy: str
+    depth: int
+    first: dt.date
+    last: dt.date
+    heatwaves: bool
+
+
+class RecomputedMessage(BaseModel):
+    """Every series' normal, heatwaves and origins were computed again from the stored record.
+
+    By `python -m heatwaves.sync --recompute`: anything built from them may
+    have changed, at every buoy and depth.
+    """
+
+    type: Literal["recomputed"] = "recomputed"
+
+
 class PingMessage(BaseModel):
     type: Literal["ping"] = "ping"
     time: dt.datetime
 
 
-Message = ReadingMessage | StatusMessage | OriginsMessage | PingMessage
+Message = ReadingMessage | StatusMessage | OriginsMessage | DaysMessage | RecomputedMessage | PingMessage
 
 
 def reading_message(series: Series) -> ReadingMessage:
@@ -126,6 +156,24 @@ def origins_messages(heatwaves: Sequence[JudgedHeatwave]) -> list[OriginsMessage
     return [
         OriginsMessage(heatwaves=list(heatwaves[start : start + ORIGINS_PER_MESSAGE]))
         for start in range(0, len(heatwaves), ORIGINS_PER_MESSAGE)
+    ]
+
+
+def days_messages(
+    changed: Iterable[tuple[str, int, dt.date, dt.date]], heatwaves: Collection[tuple[str, int]]
+) -> list[DaysMessage]:
+    """One message for each buoy depth with changed days, spanning all of them there.
+
+    `changed` are spans of days, (buoy, depth, first, last); `heatwaves`,
+    the buoy depths whose heatwaves changed.
+    """
+    spans: dict[tuple[str, int], tuple[dt.date, dt.date]] = {}
+    for buoy, depth, first, last in changed:
+        before = spans.get((buoy, depth), (first, last))
+        spans[buoy, depth] = (min(first, before[0]), max(last, before[1]))
+    return [
+        DaysMessage(buoy=buoy, depth=depth, first=first, last=last, heatwaves=(buoy, depth) in heatwaves)
+        for (buoy, depth), (first, last) in spans.items()
     ]
 
 

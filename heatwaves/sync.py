@@ -154,13 +154,19 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
     the evidence for one comes from other series too, is then judged again.
     Returns the live feed's messages: each newer temperature reading, each
     temperature series whose state changed or whose heatwave in progress
-    grew or changed, and the heatwaves whose origin or its evidence did.
+    grew or changed, the days each buoy depth's daily means, normal or
+    heatwaves changed, and the heatwaves whose origin or its evidence did.
     """
     messages: list[live.Message] = []
     changed: list[Change] = []
+    # For the live feed: the days whose daily means, or anomalies, or heatwaves the store changed,
+    # and the buoy depths whose temperature's heatwaves or normal it did.
+    revised: list[Change] = []
+    heatwaves: set[tuple[str, int]] = set()
     new_normal = download.first_day <= NORMAL_DAYS[1] and download.last_day >= NORMAL_DAYS[0]
     for each in series:
         daily = download.daily[each.id]
+        means = _revised_means(session, each, download)
         session.execute(
             delete(DailyMean).where(
                 DailyMean.series_id == each.id,
@@ -201,6 +207,9 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             (each.buoy_id, each.depth, first, last)
             for first, last in [(download.first_day, download.last_day), *updated.changed]
         ]
+        revised += [(each.buoy_id, each.depth, first, last) for first, last in [*means, *updated.changed]]
+        if each.variable == "temperature" and updated.changed:
+            heatwaves.add((each.buoy_id, each.depth))
         log.info(
             "%s: re-read %s to %s (%d days)",
             each.label,
@@ -208,8 +217,29 @@ def store(session: Session, series: Sequence[Series], download: Download) -> lis
             download.last_day,
             len(daily),
         )
+    messages += live.days_messages(revised, heatwaves)
     messages += live.origins_messages(update_origins(session, changed))
     return messages
+
+
+def _revised_means(session: Session, series: Series, download: Download) -> list[tuple[dt.date, dt.date]]:
+    """The first and last of the downloaded days whose daily mean the download adds, changes or drops.
+
+    Empty if it leaves each as it was, as a re-read of rows stamped anew does.
+    """
+    stored = {
+        day: value
+        for day, value in session.execute(
+            select(DailyMean.date, DailyMean.value).where(
+                DailyMean.series_id == series.id,
+                DailyMean.date.between(download.first_day, download.last_day),
+            )
+        )
+    }
+    daily = download.daily[series.id]
+    fetched = dict(zip(pd.DatetimeIndex(daily.index).date, daily["value"].astype(float), strict=True))
+    differ = [day for day in stored.keys() | fetched.keys() if stored.get(day) != fetched.get(day)]
+    return [(min(differ), max(differ))] if differ else []
 
 
 # Why each series this process has tried couldn't get a normal, by series ID. Each store tries
@@ -610,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
                 update_heatwaves(session, series)
                 log.info("%s: recomputed", series.label)
             update_origins(session)
+            live.publish(session, [live.RecomputedMessage()])
             session.commit()
         # Files left as they were don't match what was recomputed, and the sync job doesn't know to
         # rewrite them: failing says so.

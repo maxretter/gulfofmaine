@@ -17,9 +17,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from heatwaves import live, main
+from heatwaves import live, main, sync
 from heatwaves.config import Settings
-from heatwaves.live import Hub, JudgedHeatwave, OriginsMessage, ReadingMessage, StatusMessage, address_key
+from heatwaves.live import (
+    DaysMessage,
+    Hub,
+    JudgedHeatwave,
+    OriginsMessage,
+    ReadingMessage,
+    RecomputedMessage,
+    StatusMessage,
+    address_key,
+)
 from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
 from heatwaves.state import SeriesState, state_of
@@ -79,7 +88,7 @@ def test_a_sync_announces_a_new_reading_and_a_heatwave_starting(session, normal_
 
     messages = store(session, [series], download(series, warm, Reading(NOW, 17.3)))
 
-    reading, status = messages
+    reading, status, days = messages
     assert reading == ReadingMessage(buoy="A01", depth=1, time=NOW, temperature=17.3)
     assert isinstance(status, StatusMessage)
     assert (status.previous_state, status.state) == ("normal", "heatwave")
@@ -87,6 +96,8 @@ def test_a_sync_announces_a_new_reading_and_a_heatwave_starting(session, normal_
     assert status.days_above == 8
     assert status.category is not None
     assert (series.latest_reading_at, series.latest_reading) == (NOW, 17.3)
+    # The week re-read, with the heatwave in it.
+    assert days == DaysMessage(buoy="A01", depth=1, first=warm.index[0].date(), last=TODAY, heatwaves=True)
 
 
 def test_a_sync_announces_a_heatwave_in_progress_that_grows_or_changes(session, normal_until_yesterday):
@@ -95,15 +106,16 @@ def test_a_sync_announces_a_heatwave_in_progress_that_grows_or_changes(session, 
     store(session, [series], download(series, warm[:-1]))
 
     # A day longer, in the same category: pages showing it would otherwise say it ended yesterday.
-    [longer] = store(session, [series], download(series, warm[-1:]))
+    longer, days = store(session, [series], download(series, warm[-1:]))
 
     assert isinstance(longer, StatusMessage)
+    assert isinstance(days, DaysMessage) and days.heatwaves
     assert (longer.previous_state, longer.state) == ("heatwave", "heatwave")
     assert longer.previous_category == longer.category is not None
     assert (longer.date, longer.days_above) == (TODAY, 8)
 
     # Today's mean again, from more hours: the heatwave's intensity changes.
-    [warmer] = store(session, [series], download(series, warm[-1:] + 0.5))
+    warmer, _ = store(session, [series], download(series, warm[-1:] + 0.5))
 
     assert isinstance(warmer, StatusMessage)
     assert (warmer.previous_state, warmer.state, warmer.date) == ("heatwave", "heatwave", TODAY)
@@ -119,14 +131,14 @@ def test_a_sync_announces_a_heatwave_pausing_and_resuming_as_the_same_heatwave(
     [start] = session.scalars(select(Event.start_date).where(Event.end_date == TODAY - dt.timedelta(days=1)))
 
     # Today's mean so far is below the threshold: the heatwave is paused, not over.
-    [paused] = store(session, [series], download(series, days[-1:] - 2.0))
+    paused, _ = store(session, [series], download(series, days[-1:] - 2.0))
 
     assert isinstance(paused, StatusMessage)
     assert (paused.previous_state, paused.state, paused.date) == ("heatwave", "paused", TODAY)
     assert paused.category == paused.previous_category is not None
 
     # Today again, from more hours, above the threshold: the same heatwave goes on.
-    [resumed] = store(session, [series], download(series, days[-1:] + 2.5))
+    resumed, _ = store(session, [series], download(series, days[-1:] + 2.5))
 
     assert isinstance(resumed, StatusMessage)
     assert (resumed.previous_state, resumed.state) == ("paused", "heatwave")
@@ -143,22 +155,23 @@ def test_a_sync_announces_a_paused_heatwave_ending_once_nothing_can_be_joined_to
     session.commit()
     cool = seasonal_temperatures(str(TODAY - dt.timedelta(days=2)), TODAY) - 2.0
 
-    [paused], still, [over] = (
+    (paused, _), still, (over, _) = (
         store(session, [series], download(series, cool[day : day + 1])) for day in range(3)
     )
 
     assert isinstance(paused, StatusMessage)
     assert (paused.previous_state, paused.state) == ("heatwave", "paused")
     assert paused.category is not None
-    # A second day below changes nothing on the feed: a spell from tomorrow could still be joined on.
-    assert still == []
+    # A second day below changes only that day on the feed: a spell from tomorrow could still be joined on.
+    second = cool.index[1].date()
+    assert still == [DaysMessage(buoy="A01", depth=1, first=second, last=second, heatwaves=False)]
     # After a third, one would start too late.
     assert isinstance(over, StatusMessage)
     assert (over.previous_state, over.state) == ("paused", "normal")
     assert (over.previous_category, over.category) == (paused.category, None)
 
 
-def test_a_sync_that_changes_neither_reading_nor_heatwave_announces_nothing(session, normal_until_yesterday):
+def test_a_sync_that_changes_no_day_announces_nothing(session, normal_until_yesterday):
     series = normal_until_yesterday
     warm = seasonal_temperatures(str(TODAY - dt.timedelta(days=7)), TODAY) + 2.5
     store(session, [series], download(series, warm, Reading(NOW, 17.3)))
@@ -168,19 +181,24 @@ def test_a_sync_that_changes_neither_reading_nor_heatwave_announces_nothing(sess
     assert store(session, [series], download(series, warm[:-1], Reading(yesterday, 17.0))) == []
     assert series.latest_reading == 17.3
 
-    # A day before the heatwave revised, still well below the threshold.
-    cool = seasonal_temperatures(str(TODAY - dt.timedelta(days=8)), TODAY - dt.timedelta(days=8)) - 2.1
-    assert store(session, [series], download(series, cool)) == []
+    # A day before the heatwave revised, still well below the threshold: that day alone.
+    eighth = TODAY - dt.timedelta(days=8)
+    cool = seasonal_temperatures(str(eighth), eighth) - 2.1
+    assert store(session, [series], download(series, cool)) == [
+        DaysMessage(buoy="A01", depth=1, first=eighth, last=eighth, heatwaves=False)
+    ]
 
 
-def test_only_temperature_goes_on_the_feed(session):
+def test_only_temperature_readings_and_states_go_on_the_feed(session):
     history = pd.Series(31.0, index=pd.date_range("2003-01-01", TODAY - dt.timedelta(days=1)))
     salinity = add_series(session, history, variable="salinity")
+    update_heatwaves(session, salinity)
     today = pd.Series([31.2], index=[pd.Timestamp(TODAY)])
 
     messages = store(session, [salinity], download(salinity, today, Reading(NOW, 31.2)))
 
-    assert messages == []
+    # Its new day, which the heatwave's temperature-salinity diagram shows.
+    assert messages == [DaysMessage(buoy="A01", depth=1, first=TODAY, last=TODAY, heatwaves=False)]
     assert salinity.latest_reading == 31.2
 
 
@@ -221,10 +239,62 @@ def test_a_sync_announces_each_heatwave_whose_origin_or_evidence_changes(session
 
     # 1 m three degrees cooler in the weeks before the onset: less stratified before it.
     cooler = surface["2025-03-20":"2025-04-10"] - 3
-    assert store(session, [at_1], download(at_1, cooler)) == [OriginsMessage(heatwaves=[april])]
+    days, origins = store(session, [at_1], download(at_1, cooler))
+    assert isinstance(days, DaysMessage)
+    assert (days.buoy, days.depth) == ("A01", 1)
+    assert (days.first, days.last) == (dt.date(2025, 3, 20), dt.date(2025, 4, 10))
+    assert origins == OriginsMessage(heatwaves=[april])
 
     # The same days again: judged again, and found as they were.
     assert store(session, [at_1], download(at_1, cooler)) == []
+
+
+def test_a_new_satellite_day_goes_out_at_each_buoy(session):
+    # The satellite has no readings, and its states stay as they were.
+    history = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=1))
+    history.iloc[-12:] -= 2.0
+    cells = [add_series(session, history, buoy, source="satellite") for buoy in ("A01", "B01")]
+    for cell in cells:
+        update_heatwaves(session, cell)
+    today = pd.DataFrame({"value": [11.0], "hours": [None]}, index=pd.DatetimeIndex([TODAY], name="date"))
+
+    messages = store(session, cells, Download(TODAY, TODAY, {cell.id: today for cell in cells}, NOW))
+
+    assert messages == [
+        DaysMessage(buoy=buoy, depth=0, first=TODAY, last=TODAY, heatwaves=False) for buoy in ("A01", "B01")
+    ]
+
+
+def test_a_heatwave_revised_in_the_past_goes_out_at_a_depth_without_origins(session):
+    temperatures = seasonal_temperatures("2003-01-01", TODAY - dt.timedelta(days=1))
+    temperatures.iloc[-12:] -= 2.0
+    july = slice("2025-07-01", "2025-07-10")
+    warm = temperatures.copy()
+    warm[july] += 3.0
+    series = add_series(session, warm)  # at 1 m
+    update_heatwaves(session, series)
+    session.commit()
+    [(start, end)] = session.execute(
+        select(Event.start_date, Event.end_date).where(Event.end_date >= dt.date(2025, 7, 1)).limit(1)
+    ).all()
+    assert start <= dt.date(2025, 7, 10)
+
+    # Reprocessed upstream, the warm spell is gone: no state changes, and no origin rests on 1 m alone.
+    messages = store(session, [series], download(series, temperatures[july]))
+
+    first, last = min(start, dt.date(2025, 7, 1)), max(end, dt.date(2025, 7, 10))
+    assert messages == [DaysMessage(buoy="A01", depth=1, first=first, last=last, heatwaves=True)]
+
+
+def test_a_recompute_tells_the_feed_that_anything_may_have_changed(monkeypatch, session_factory, tmp_path):
+    published: list[live.Message] = []
+    monkeypatch.setattr(live, "publish", lambda session, messages: published.extend(messages))
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    monkeypatch.setattr(sync, "settings", dataclasses.replace(sync.settings, products_dir=tmp_path))
+
+    assert sync.main(["--recompute"]) == 0
+
+    assert published == [RecomputedMessage()]
 
 
 def test_a_message_lists_as_many_heatwaves_as_a_notify_carries():
@@ -544,6 +614,19 @@ def test_a_full_origins_message_goes_out(session, libpq_url):
 
         [notice] = listener.notifies(timeout=5, stop_after=1)
     assert OriginsMessage.model_validate_json(notice.payload) == message
+
+
+@postgres_only
+def test_a_recompute_goes_out_once_it_commits(monkeypatch, session_factory, libpq_url, tmp_path):
+    monkeypatch.setattr("heatwaves.db.SessionLocal", session_factory)
+    monkeypatch.setattr(sync, "settings", dataclasses.replace(sync.settings, products_dir=tmp_path))
+    with psycopg.connect(libpq_url, autocommit=True) as listener:
+        listener.execute(f"LISTEN {live.CHANNEL}")
+
+        assert sync.main(["--recompute"]) == 0
+
+        [notice] = listener.notifies(timeout=5, stop_after=1)
+    assert json.loads(notice.payload) == {"type": "recomputed"}
 
 
 @postgres_only

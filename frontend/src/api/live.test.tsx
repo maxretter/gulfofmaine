@@ -7,7 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HeatwaveToasts } from "../components/HeatwaveToasts";
 import { enteredHeatwave, GATHER_MS, SILENCE_MS, useLiveFeed, withReading } from "./live";
 import { keys } from "./queries";
-import type { Buoy, Condition, LiveMessage, OriginsMessage, ReadingMessage, StatusMessage } from "./types";
+import type {
+  Buoy,
+  Condition,
+  DaysMessage,
+  LiveMessage,
+  OriginsMessage,
+  ReadingMessage,
+  StatusMessage,
+} from "./types";
 
 /** Stands in for the browser's WebSocket; the test plays the server. */
 class MockSocket {
@@ -195,6 +203,72 @@ describe("useLiveFeed", () => {
 
     // The heatwaves, B01's heatwave's page, the counts at any depth, and the onsets at 50 m in 2026 and 2025.
     expect(invalidated(queryClient)).toEqual([cached[4], cached[5], cached[6], cached[8], cached[9]]);
+  });
+
+  it("refetches what's built from a buoy depth's changed days, and from its heatwaves if they changed", () => {
+    const { queryClient } = setup();
+    openFeed(queryClient);
+    const days: DaysMessage = {
+      type: "days",
+      buoy: "B01",
+      depth: 50,
+      first: "2025-12-30",
+      last: "2026-01-02",
+      heatwaves: false,
+    };
+
+    act(() => latestSocket().deliver(days));
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    // The conditions, B01's days at 50 m, the stripes, the counts at any depth, the agreement and the onsets at 50 m
+    // in both years: not the heatwaves.
+    expect(invalidated(queryClient)).toEqual([
+      keys.buoys,
+      cached[1],
+      cached[2],
+      cached[3],
+      cached[6],
+      cached[7],
+      cached[8],
+      cached[9],
+    ]);
+
+    openFeed(queryClient);
+    act(() => latestSocket().deliver({ ...days, heatwaves: true }));
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    // The heatwaves too, and every heatwave's page.
+    expect(invalidated(queryClient)).toEqual([keys.buoys, ...cached.slice(1, 10), cached[12]]);
+  });
+
+  it("refetches the conditions and every depth's agreement for the satellite's new days", () => {
+    const { queryClient } = setup();
+    openFeed(queryClient);
+    const days: DaysMessage = {
+      type: "days",
+      buoy: "B01",
+      depth: 0,
+      first: "2026-09-28",
+      last: "2026-09-28",
+      heatwaves: true,
+    };
+
+    act(() => latestSocket().deliver(days));
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    expect(invalidated(queryClient)).toEqual([keys.buoys, cached[7]]);
+  });
+
+  it("refetches everything built from the record after a recompute, but not what's fixed in the code", () => {
+    const { queryClient } = setup();
+    queryClient.setQueryData(keys.method, {});
+    queryClient.setQueryData(keys.originRules, {});
+    openFeed(queryClient);
+
+    act(() => latestSocket().deliver({ type: "recomputed" }));
+    act(() => vi.advanceTimersByTime(GATHER_MS));
+
+    expect(invalidated(queryClient)).toEqual([keys.buoys, ...cached]);
   });
 
   it("refetches each query a sync round's messages make stale once, together", async () => {

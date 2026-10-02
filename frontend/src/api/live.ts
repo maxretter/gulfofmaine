@@ -2,7 +2,7 @@ import { partialMatchKey, useQueryClient, type QueryClient, type QueryKey } from
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { keys } from "./queries";
-import type { Buoy, LiveMessage, ReadingMessage, StatusMessage } from "./types";
+import type { Buoy, DaysMessage, LiveMessage, ReadingMessage, StatusMessage } from "./types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting";
 
@@ -21,8 +21,9 @@ export function useLive(): Live {
 /** The server pings every 30 seconds; a connection silent for longer than this is taken as dead. */
 export const SILENCE_MS = 75_000;
 /**
- * How long the feed gathers what its messages make stale before refetching it. A sync round sends its messages, about
- * 15, within a second or two, so the refetches they prompt go out together, each query's once.
+ * How long the feed gathers what its messages make stale before refetching it. A sync round sends its messages, a
+ * reading and the days it changed for each buoy depth with new data, within a second or two, so the refetches they
+ * prompt go out together, each query's once.
  */
 export const GATHER_MS = 3_000;
 const MAX_BACKOFF_MS = 60_000;
@@ -81,12 +82,19 @@ export function alertId(alert: StatusMessage): string {
  * which average the means by month, and the year's anomalies and the days observed, which the onsets and the yearly
  * counts give. A status message can mean a heatwave started, ended, grew a day or changed, so everything built from
  * heatwaves is stale as well. An origins message makes stale what shows the origins of the heatwaves it lists: each
- * one's page, the list of heatwaves, the onsets of the years each spans, and the counts by origin at its depth.
+ * one's page, the list of heatwaves, the onsets of the years each spans, and the counts by origin at its depth. A days
+ * message makes stale what's built from the days it spans (changedDays), and a recompute everything built from the
+ * record.
  */
 export function applyMessage(queryClient: QueryClient, message: LiveMessage): QueryKey[] {
   switch (message.type) {
     case "ping":
       return [];
+    case "days":
+      return changedDays(message);
+    case "recomputed":
+      // All but the method and the origin rules, which are fixed in the code.
+      return [keys.buoys, keys.events, keys.event, keys.annual, keys.agreement, keys.daily, keys.onsets, keys.stripes];
     case "origins":
       return [
         keys.events,
@@ -110,6 +118,26 @@ export function applyMessage(queryClient: QueryClient, message: LiveMessage): Qu
   } else {
     stale.push(keys.events, keys.event, keys.annual, keys.agreement, keys.onsets);
   }
+  return stale;
+}
+
+/**
+ * What a buoy depth's changed days make stale: the conditions, which show each series' newest day, and the days at
+ * that buoy and depth. At the satellite, every depth's agreement with it as well. At a buoy depth, its stripes, the
+ * onsets of each year the days span, the yearly counts there and at any depth, and its agreement with the satellite;
+ * and if its heatwaves changed, the list of heatwaves and every heatwave's page, which shows the heatwaves around it.
+ */
+function changedDays({ buoy, depth, first, last, heatwaves }: DaysMessage): QueryKey[] {
+  const stale: QueryKey[] = [keys.buoys, [...keys.daily, buoy, depth]];
+  if (depth === 0) return [...stale, keys.agreement];
+  stale.push(
+    [...keys.stripes, depth],
+    ...years(first, last).map((year) => [...keys.onsets, year, depth]),
+    [...keys.annual, depth],
+    [...keys.annual, null],
+    [...keys.agreement, depth],
+  );
+  if (heatwaves) stale.push(keys.events, keys.event);
   return stale;
 }
 
