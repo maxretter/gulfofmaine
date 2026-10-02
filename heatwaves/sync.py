@@ -21,6 +21,7 @@ it changed are rewritten.
 import argparse
 import datetime as dt
 import logging
+import signal
 import sys
 import time
 from collections.abc import Collection, Mapping, Sequence
@@ -605,5 +606,17 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(args.every)
 
 
+def _stop(signum: int, frame: object) -> None:
+    """A SIGTERM handler: stop as an error would, unwinding.
+
+    Python's own response to SIGTERM, which is how Docker stops a container,
+    ends the process on the spot, so a file being written was left behind
+    as a .partial one. Unwinding, each write cleans up after itself, and
+    each session closes.
+    """
+    raise SystemExit(128 + signum)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _stop)
     sys.exit(main())

@@ -5,9 +5,13 @@ import json
 import operator
 import os
 import re
+import signal
+import subprocess
+import sys
 import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from time import monotonic, sleep
 
 import httpx
@@ -420,6 +424,43 @@ def test_a_failed_write_leaves_the_sync_alone(session_factory, series, tmp_path,
     assert not publish(session_factory, blocked)
 
     assert "Writing the products" in caplog.text
+
+
+# The sync job, run as Docker runs it (python -m heatwaves.sync), with a write of the products
+# that never finishes.
+WRITING_FOREVER = """
+import runpy, sys, time
+from heatwaves import db, products
+from heatwaves.models import Base
+
+def forever(path):
+    path.write_bytes(b"started")
+    time.sleep(60)
+
+products.write = lambda session, directory, depths=None: products._replace(directory / "A01.nc", forever)
+Base.metadata.create_all(db.engine)
+sys.argv = ["heatwaves.sync", "--recompute"]
+runpy.run_module("heatwaves.sync", run_name="__main__")
+"""
+
+
+def test_a_stop_while_writing_the_products_leaves_no_partial_file(tmp_path):
+    environment = os.environ | {"DATABASE_URL": "sqlite://", "PRODUCTS_DIR": str(tmp_path)}
+    job = subprocess.Popen(
+        [sys.executable, "-c", WRITING_FOREVER], cwd=Path(__file__).parents[1], env=environment
+    )
+    try:
+        deadline = monotonic() + 60
+        while not list(tmp_path.glob("*.partial")) and job.poll() is None and monotonic() < deadline:
+            sleep(0.05)
+        assert list(tmp_path.glob("*.partial")), "the job never started writing"
+
+        job.send_signal(signal.SIGTERM)  # as docker stop does, through Docker's init
+
+        assert job.wait(timeout=30) == 128 + signal.SIGTERM
+    finally:
+        job.kill()
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize(("failures", "status"), [(0, 0), (2, 1)])
