@@ -8,7 +8,7 @@ from collections.abc import Collection, Iterable
 import numpy as np
 import pandas as pd
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from heatwaves import origin
 from heatwaves.hobday import day_of_year
@@ -143,13 +143,24 @@ def heatwave_days(
         query = query.where(Event.end_date >= start)
     if end is not None:
         query = query.where(Event.start_date <= end)
-    spans: dict[int, list[pd.Series]] = defaultdict(list)
+    spans: dict[int, list[tuple[dt.date, dt.date, int]]] = defaultdict(list)
     for series_id, first, last, category in session.execute(query):
-        spans[series_id].append(pd.Series(category, index=pd.date_range(first, last, name="date")))
-    return {
-        series_id: pd.concat(spans[series_id]).sort_index() if spans[series_id] else _NO_DAYS
-        for series_id in series_ids
-    }
+        spans[series_id].append((first, last, category))
+    return {series_id: _every_day(spans[series_id]) for series_id in series_ids}
+
+
+def _every_day(spans: list[tuple[dt.date, dt.date, int]]) -> pd.Series:
+    """Each span's category on every day of it, first and last included, indexed by day.
+
+    Spelled out in numpy: a pandas series of each span's days, put together,
+    took over ten times as long.
+    """
+    if not spans:
+        return _NO_DAYS
+    day = np.timedelta64(1, "D")
+    days = [np.arange(np.datetime64(first, "D"), np.datetime64(last, "D") + day) for first, last, _ in spans]
+    categories = np.repeat([category for _, _, category in spans], [len(each) for each in days])
+    return pd.Series(categories, index=pd.DatetimeIndex(np.concatenate(days), name="date")).sort_index()
 
 
 def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.DataFrame:
@@ -177,14 +188,32 @@ def monthly_anomaly(anomalies: Iterable[pd.Series], min_days: int = 15) -> pd.Da
     return frame[frame["series"] > 0].sort_index()
 
 
-def observed_days(session: Session, series_ids: Collection[int]) -> dict[int, pd.DatetimeIndex]:
-    """The days each series has a daily value for."""
-    days: dict[int, list] = defaultdict(list)
-    for series_id, date in session.execute(
-        select(DailyMean.series_id, DailyMean.date).where(DailyMean.series_id.in_(series_ids))
-    ):
-        days[series_id].append(date)
-    return {series_id: pd.DatetimeIndex(sorted(days[series_id]), name="date") for series_id in series_ids}
+def common_days(
+    session: Session, pairs: Collection[tuple[int, int]]
+) -> dict[tuple[int, int], pd.DatetimeIndex]:
+    """The days both series of each pair have a daily value for, by pair of series IDs.
+
+    Joined in the database, so only those days are read, and read through
+    the session's connection, as in `anomalies`.
+    """
+    one, other = aliased(DailyMean), aliased(DailyMean)
+    execute = session.connection().execute
+    return {
+        (first, second): pd.DatetimeIndex(
+            list(
+                execute(
+                    select(one.date)
+                    .join(other, other.date == one.date)
+                    .where(one.series_id == first, other.series_id == second)
+                    .order_by(one.date)
+                )
+                .scalars()
+                .all()
+            ),
+            name="date",
+        )
+        for first, second in pairs
+    }
 
 
 def extents(session: Session, series_ids: Collection[int]) -> dict[int, tuple[dt.date, dt.date]]:

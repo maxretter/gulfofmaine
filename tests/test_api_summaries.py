@@ -1,18 +1,22 @@
 """The summaries every page refetches as readings come in, over a varied record built once for the module.
 
 Each is held to the series-by-series reading of the same record: each
-series' days whole, from queries.daily, its months by resampling.
+series' days whole, from queries.daily, its months by resampling, and each
+heatwave's days spelled out by pandas.
 """
 
 import datetime as dt
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
 import pytest
 from sqlalchemy import event, insert, select
+from sqlalchemy.orm import Session
 
-from heatwaves import queries
-from heatwaves.models import Buoy, ClimatologyDay, Series
+from heatwaves import compare, queries
+from heatwaves.compare import OUTCOMES
+from heatwaves.models import Buoy, ClimatologyDay, DailyMean, Event, Series
 from heatwaves.stations import SourceName, buoy_series
 from heatwaves.sync import update_heatwaves
 from tests.conftest import TODAY, add_series, api_client, fresh_database
@@ -165,3 +169,86 @@ def test_monthly_anomaly_groups_as_resampling_by_month():
         old, new = resampled(anomalies, min_days), queries.monthly_anomaly(anomalies, min_days)
         pd.testing.assert_frame_equal(new, old, check_freq=False)
         assert new["anomaly"].to_numpy().tobytes() == old["anomaly"].to_numpy().tobytes()
+
+
+def observed(session: Session, series_id: int) -> pd.DatetimeIndex:
+    """Every day a series has a daily value for."""
+    days = session.scalars(select(DailyMean.date).where(DailyMean.series_id == series_id))
+    return pd.DatetimeIndex(sorted(days), name="date")
+
+
+def spelled_out(
+    session: Session, series_ids: list[int], start: dt.date | None = None, end: dt.date | None = None
+) -> dict[int, pd.Series]:
+    """queries.heatwave_days as it was written first: each heatwave's days spelled out by pandas."""
+    query = select(Event.series_id, Event.start_date, Event.end_date, Event.category).where(
+        Event.series_id.in_(series_ids)
+    )
+    if start is not None:
+        query = query.where(Event.end_date >= start)
+    if end is not None:
+        query = query.where(Event.start_date <= end)
+    spans: dict[int, list[pd.Series]] = defaultdict(list)
+    for series_id, first, last, category in session.execute(query):
+        spans[series_id].append(pd.Series(category, index=pd.date_range(first, last, name="date")))
+    none = pd.Series([], index=pd.DatetimeIndex([], name="date"), dtype=int)
+    return {each: pd.concat(spans[each]).sort_index() if spans[each] else none for each in series_ids}
+
+
+@pytest.mark.parametrize("depth", [1, 20])
+def test_agreement_compares_each_series_days_with_the_satellite_above(client, database, depth):
+    with database() as session:
+        satellites = queries.satellite_temperatures(session)
+        pairs = [
+            (each, satellites[each.buoy_id])
+            for each in queries.buoy_temperatures(session, depth)
+            if each.buoy_id in satellites
+        ]
+        heatwaves = spelled_out(session, [each.id for pair in pairs for each in pair])
+        expected = []
+        for at_depth, above in pairs:
+            table = compare.agreement(
+                compare.in_heatwave(observed(session, at_depth.id), heatwaves[at_depth.id]),
+                compare.in_heatwave(observed(session, above.id), heatwaves[above.id]),
+            )
+            expected += [
+                {"buoy_id": at_depth.buoy_id, "depth": depth, "year": row.Index}
+                | {outcome: getattr(row, outcome) for outcome in OUTCOMES}
+                for row in table.itertuples()
+            ]
+
+    assert client.get(f"/api/agreement?depth={depth}").json() == expected
+    # Every outcome comes up; E01, without a normal at 1 m, has no heatwaves there to agree with.
+    assert all(sum(row[outcome] for row in expected) > 0 for outcome in OUTCOMES)
+    assert {row["buoy_id"] for row in expected} == ({"A01", "B01", "E01"} if depth == 1 else {"A01"})
+
+
+def test_common_days_are_the_days_both_series_have_a_value_for(database):
+    with database() as session:
+        ids = {(each.buoy_id, each.depth, each.source): each.id for each in session.scalars(select(Series))}
+        pairs = [
+            (ids["A01", 1, SourceName.BUOY], ids["A01", 0, SourceName.SATELLITE]),
+            (ids["B01", 1, SourceName.BUOY], ids["A01", 1, SourceName.BUOY]),  # without A01's spring of 2015
+            (ids["E01", 1, SourceName.BUOY], ids["F01", 1, SourceName.BUOY]),  # F01 has no data
+        ]
+        found = queries.common_days(session, pairs)
+
+        assert list(found) == pairs
+        for first, second in pairs:
+            both = observed(session, first).intersection(observed(session, second))
+            assert list(found[first, second]) == list(both)
+        assert found[pairs[2]].empty
+
+
+@pytest.mark.parametrize(
+    "start, end", [(None, None), (dt.date(2012, 1, 1), dt.date(2012, 12, 31)), (dt.date(2021, 7, 1), None)]
+)
+def test_heatwave_days_are_every_day_of_each_heatwave(database, start, end):
+    with database() as session:
+        ids = list(session.scalars(select(Series.id)))
+        found = queries.heatwave_days(session, ids, start, end)
+        expected = spelled_out(session, ids, start, end)
+
+    assert found.keys() == expected.keys()
+    for series_id in ids:
+        pd.testing.assert_series_equal(found[series_id], expected[series_id], check_freq=False)

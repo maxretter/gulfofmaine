@@ -803,16 +803,16 @@ def agreement(depth: Depth, session: SessionDep) -> list[Agreement]:
         for each in queries.buoy_temperatures(session, depth)
         if each.buoy_id in satellites
     ]
-    ids = [each.id for pair in pairs for each in pair]
-    observed = queries.observed_days(session, ids)
-    heatwaves = queries.heatwave_days(session, ids)
-
-    def flags(series: Series) -> pd.Series:
-        return compare.in_heatwave(observed[series.id], heatwaves[series.id])
+    # Only the days both have data for count, so only those are read.
+    observed = queries.common_days(session, [(at_depth.id, above.id) for at_depth, above in pairs])
+    heatwaves = queries.heatwave_days(session, [each.id for pair in pairs for each in pair])
 
     rows = []
     for at_depth, above in pairs:
-        table = compare.agreement(flags(at_depth), flags(above))
+        days = observed[at_depth.id, above.id]
+        table = compare.agreement(
+            compare.in_heatwave(days, heatwaves[at_depth.id]), compare.in_heatwave(days, heatwaves[above.id])
+        )
         rows += [
             Agreement(
                 buoy_id=at_depth.buoy_id,
