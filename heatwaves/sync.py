@@ -65,6 +65,11 @@ NORMAL_DAYS = (
 Change = tuple[str, int, dt.date, dt.date]
 
 
+def now() -> dt.datetime:
+    """The time the sync goes by, as api.now is the API's; tests stop it."""
+    return dt.datetime.now(dt.UTC)
+
+
 def ensure_catalog(session: Session, erddap: Erddap) -> bool:
     """Create rows for every buoy and series in `stations`, with positions from ERDDAP.
 
@@ -123,7 +128,7 @@ def sync_series(session: Session, sources: Mapping[str, Source], series: Series)
         .execution_options(populate_existing=True)
     ).all()
     download = sources[series.source].fetch(together)
-    synced_at = dt.datetime.now(dt.UTC)
+    synced_at = now()
     for each in together:
         each.synced_at = synced_at
     if download is not None:
@@ -230,7 +235,7 @@ def update_heatwaves(session: Session, series: Series, new_normal: bool = True) 
     these. Heatwaves found again as they were keep their rows, and with them
     their origin.
     """
-    today = dt.datetime.now(dt.UTC).date()
+    today = now().date()
     before = state.current(session, series, today)
     rows = session.execute(
         select(DailyMean.date, DailyMean.value)
@@ -501,7 +506,7 @@ def sync_all(
                 .order_by(Series.source, Series.dataset_id)
             )
             if not everything:
-                reporting_since = dt.datetime.now(dt.UTC).date() - state.OFFLINE_AFTER
+                reporting_since = now().date() - state.OFFLINE_AFTER
                 query = query.where(Series.source == "buoy", Series.latest_date >= reporting_since)
             series_ids = session.scalars(query).all()
         outcomes = [sync_one(session_factory, sources, series_id) for series_id in series_ids]

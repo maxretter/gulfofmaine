@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from heatwaves import api, db
+from heatwaves import api, db, sync
 from heatwaves.erddap import Erddap
 from heatwaves.main import app
 from heatwaves.models import Base, Buoy, DailyMean, Series
@@ -28,8 +28,9 @@ from heatwaves.stations import buoy_series, satellite_series
 
 DATA = Path(__file__).parent / "data"
 
-# "Now" for the tests whose data runs up to today: fixed, with the API's clock
-# stopped at it (stopped_clock), so none depends on when, or how slowly, it runs.
+# "Now" for the tests whose data runs up to today: fixed, with the API's and the
+# sync's clocks stopped at it (stopped_clock), so none depends on when, or how
+# slowly, it runs.
 NOW = dt.datetime(2026, 9, 28, 18, tzinfo=dt.UTC)
 TODAY = NOW.date()
 
@@ -105,15 +106,16 @@ def api_client(session_factory: sessionmaker) -> Iterator[TestClient]:
 
 @contextmanager
 def clock_stopped_at(now: dt.datetime = NOW) -> Iterator[dt.datetime]:
-    """The API's clock (api.now, and so api.today) stopped at `now`."""
+    """The API's clock (api.now, and so api.today) and the sync's (sync.now) stopped at `now`."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(api, "now", lambda: now)
+        patch.setattr(sync, "now", lambda: now)
         yield now
 
 
 @pytest.fixture
 def stopped_clock() -> Iterator[dt.datetime]:
-    """NOW, where the API's clock stays for the test."""
+    """NOW, where the API's and the sync's clocks stay for the test."""
     with clock_stopped_at() as now:
         yield now
 

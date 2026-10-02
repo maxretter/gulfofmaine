@@ -576,8 +576,8 @@ def test_kept_running_the_job_checks_everything_about_hourly(monkeypatch, sessio
     assert rounds == [True, False, False, False, False, False, True, False]
 
 
-def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_factory):
-    today = dt.datetime.now(dt.UTC).date()
+def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_factory, stopped_clock):
+    today = stopped_clock.date()
     with session_factory() as session:
         reporting = add_series(session, pd.Series([15.0], index=[pd.Timestamp(today)]))
         salinity = add_series(session, pd.Series([31.0], index=[pd.Timestamp(today)]), variable="salinity")
@@ -613,8 +613,8 @@ def test_a_round_checks_everything_while_the_database_has_no_series(session_fact
     assert len(requests) == 1 + len({spec.dataset_id for spec in SERIES if spec.source == "buoy"})
 
 
-def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_factory):
-    today = dt.datetime.now(dt.UTC).date()
+def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_factory, stopped_clock):
+    today = stopped_clock.date()
     with session_factory() as session:
         # A month of readings: far too few for a normal.
         recent = seasonal_temperatures((today - dt.timedelta(days=30)).isoformat(), today)

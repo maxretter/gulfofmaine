@@ -24,12 +24,10 @@ from heatwaves.models import Event, Series
 from heatwaves.sources import Download, Reading, TabledapSource
 from heatwaves.state import SeriesState, state_of
 from heatwaves.sync import store, sync_series, update_heatwaves
-from tests.conftest import A01_SYNC, add_series, recorded_erddap, seasonal_temperatures
+from tests.conftest import A01_SYNC, NOW, TODAY, add_series, recorded_erddap, seasonal_temperatures
 
-# The sync judges each series' state on the wall clock's day (sync.update_heatwaves), so these
-# follow it. A series whose newest day is TODAY stays reporting for state.OFFLINE_AFTER after.
-TODAY = dt.datetime.now(dt.UTC).date()
-NOW = dt.datetime.now(dt.UTC).replace(minute=0, second=0, microsecond=0)
+# The sync judges each series' state on its clock's day (sync.update_heatwaves), stopped at NOW.
+pytestmark = pytest.mark.usefixtures("stopped_clock")
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 postgres_only = pytest.mark.skipif(
