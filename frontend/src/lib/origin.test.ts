@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Buoy, Evidence, HeatwaveEvent, OriginRules, Reason, Reasons, Signal } from "../api/types";
 import { anomalyColor } from "./colors";
 import { countVotes, eastToWest, originsByYear, reading, verdict } from "./origin";
-import { typeErrors } from "./typeErrors";
+import { typeErrors, withValue } from "./typeErrors";
 
 const rules: OriginRules = {
   depths: [20, 50],
@@ -241,7 +241,7 @@ describe("a signal added to the API", () => {
     expect(typeErrors(files)).toEqual({ "components/OriginCard.tsx": [], "lib/origin.ts": [] });
     // Whether it has data, and its reading, return from every case; its chart ended in a default, which drew it empty.
     const noReturn = "Function lacks ending return statement and return type does not include 'undefined'.";
-    expect(typeErrors(files, { type: "Signal", value: "wind" })).toEqual({
+    expect(typeErrors(files, withValue("Signal", "wind"))).toEqual({
       "components/OriginCard.tsx": [noReturn, `Type '"wind"' is not assignable to type 'never'.`],
       "lib/origin.ts": [noReturn],
     });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Condition, State } from "../api/types";
 import { categories } from "./colors";
 import { buoyStatus, heatwaveSummary, stateLook } from "./state";
-import { typeErrors } from "./typeErrors";
+import { typeErrors, withValue } from "./typeErrors";
 
 const states = (...list: State[]) => list.map((state) => ({ state }));
 
@@ -135,7 +135,7 @@ describe("a state added to the API", () => {
     expect(typeErrors(switches)).toEqual({ "lib/state.ts": [], "components/StateBadge.tsx": [] });
     // Rather than being drawn and labeled as no data, as it was when "paused" was added.
     const error = `Type '"cooling"' is not assignable to type 'never'.`;
-    expect(typeErrors(switches, { type: "State", value: "cooling" })).toEqual({
+    expect(typeErrors(switches, withValue("State", "cooling"))).toEqual({
       "lib/state.ts": [error],
       "components/StateBadge.tsx": [error],
     });
