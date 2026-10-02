@@ -54,7 +54,9 @@ button { font: inherit; color: inherit; }
 .site-header { background: var(--page); border-bottom: 1px solid var(--rule); }
 .stripes-band { height: 10px; background: var(--neutral); }
 .stripes-band svg { display: block; width: 100%; height: 100%; }
-.site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; min-height: 64px; }
+/* The padding counts toward the 64px, so a single row is as before; wrapped onto several on a narrow screen, the
+   wordmark clears the stripes above and the last links the rule below. */
+.site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; min-height: 64px; padding-block: 0.75rem 0.5rem; }
 .wordmark {
   color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 0.6rem;
   font: 600 1.35rem/1.1 var(--serif); letter-spacing: -0.015em;
