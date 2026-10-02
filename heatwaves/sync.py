@@ -4,8 +4,9 @@
     python -m heatwaves.sync --every 600  # every 10 minutes, until stopped
 
 Kept running, most rounds check only the buoy datasets still reporting,
-the only ones that get new readings within the hour; about once an hour, a
-round checks everything (sync_all).
+the only ones that get new readings within the hour; about once an hour,
+and whenever the database holds no series, a round checks everything
+(sync_all).
 
 Each fetch covers every series in one dataset: all the variables of a
 buoy's dataset, or every buoy's cell of the satellite grid. heatwaves.sources
@@ -474,7 +475,8 @@ def sync_all(
     Without `everything`, only the buoy datasets still reporting (not
     offline): all that gets new readings within the hour. The satellite adds
     a day once a day, and a retired buoy's data changes only when it's
-    reprocessed. `erddap` is the NERACOOS server, which lists the buoys'
+    reprocessed. While the database holds no series, every round checks
+    everything. `erddap` is the NERACOOS server, which lists the buoys'
     positions; when it can't, that counts as a failed fetch and the round
     goes on.
 
@@ -487,6 +489,8 @@ def sync_all(
     try:
         with session_factory() as session:
             before = products.extras(session) if products_dir is not None else {}
+            # A new database, as after a Postgres upgrade, holds no series for a quick round to check.
+            everything = everything or session.scalar(select(Series.id).limit(1)) is None
             if everything and not ensure_catalog(session, erddap):
                 failures += 1
             # One series from each fetch; sync_one brings the rest along.

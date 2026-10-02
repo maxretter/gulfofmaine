@@ -598,6 +598,21 @@ def test_between_full_rounds_only_the_buoys_still_reporting_are_checked(session_
     assert "/tabledap/A01_ocean_001m.json?time_modified" in request
 
 
+def test_a_round_checks_everything_while_the_database_has_no_series(session_factory):
+    # As after a Postgres upgrade, which starts an empty database under a sync job kept
+    # running: its next round is likely a quick one, which would check only series stored.
+    requests: list[str] = []
+    erddap = recorded_erddap([*CATALOG, ("", NO_MATCH)], requests)
+
+    # No satellite source here: syncing the satellite counts as a failure.
+    assert sync_all(session_factory, erddap, buoy_sources(erddap), everything=False) == 1
+
+    with session_factory() as session:
+        assert len(session.scalars(select(Series)).all()) == len(SERIES)
+    # The catalog, then each buoy dataset.
+    assert len(requests) == 1 + len({spec.dataset_id for spec in SERIES if spec.source == "buoy"})
+
+
 def test_a_series_without_a_normal_is_still_checked_while_it_reports(session_factory):
     today = dt.datetime.now(dt.UTC).date()
     with session_factory() as session:
