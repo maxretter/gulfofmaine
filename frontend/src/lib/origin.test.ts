@@ -120,11 +120,11 @@ describe("reading", () => {
     const alone = { ...offshore, offshore_onset: null };
     expect(
       reading("onset_order", { ...alone, votes: { ...offshore.votes, onset_order: "surface" } }, because({ onset_order: "western_only" }), rules, 50),
-    ).toBe("A heatwave began at A01 or B01 on Mar 29, 2021, and none at N01 or M01 in the 90 days before this one.");
+    ).toBe("A heatwave began at A01 or B01 on Mar 29, 2021, and none at N01 or M01 on this one's onset day or in the 90 days before.");
     expect(
       reading("onset_order", { ...alone, votes: { ...offshore.votes, onset_order: null } }, because({ onset_order: "offshore_unobserved" }), rules, 50),
     ).toBe(
-      "A heatwave began at A01 or B01 on Mar 29, 2021, but N01 and M01 each had data on fewer than half the 90 days before this one, too few to vote.",
+      "A heatwave began at A01 or B01 on Mar 29, 2021, but N01 and M01 each had data on fewer than half the 90 days before this one, counting its onset day, too few to vote.",
     );
     const east = { ...offshore, western_onset: null, votes: { ...offshore.votes, onset_order: null } };
     expect(reading("onset_order", east, because({ onset_order: "western_unobserved" }), rules, 50)).toMatch(
@@ -145,17 +145,17 @@ describe("reading", () => {
     // At A01, an onset offshore alone: B01, the rest of the western side, had too few days to have had one.
     const east = { ...offshore, western_onset: null, votes: { ...offshore.votes, onset_order: null } };
     expect(reading("onset_order", east, because({ onset_order: "western_unobserved" }, atA01), rules, 50)).toBe(
-      "A heatwave began at N01 or M01 on Jan 17, 2021, but B01 had data on fewer than half the 90 days before this one, too few to vote. " +
+      "A heatwave began at N01 or M01 on Jan 17, 2021, but B01 had data on fewer than half the 90 days before this one, counting its onset day, too few to vote. " +
         "Onsets at A01, this heatwave's own buoy, don't count.",
     );
     // A heatwave seen at no other of the four.
     const none = { ...offshore, offshore_onset: null, western_onset: null, votes: { ...offshore.votes, onset_order: null } };
     expect(reading("onset_order", none, because({ onset_order: "no_onsets" }, atM01), rules, 50)).toBe(
-      "No heatwave began at N01, A01 or B01 in the 90 days before this one, so it doesn't vote. " +
+      "No heatwave began at N01, A01 or B01 on this one's onset day or in the 90 days before, so it doesn't vote. " +
         "Onsets at M01, this heatwave's own buoy, don't count.",
     );
     expect(reading("onset_order", none, because({ onset_order: "no_onsets" }), rules, 50)).toBe(
-      "No heatwave began at N01, M01, A01 or B01 in the 90 days before this one, so it doesn't vote.",
+      "No heatwave began at N01, M01, A01 or B01 on this one's onset day or in the 90 days before, so it doesn't vote.",
     );
   });
 

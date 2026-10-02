@@ -157,7 +157,7 @@ describe("EventPage", () => {
     expect(screen.getByText("N01, M01: eastern side")).toBeTruthy();
     expect(
       screen.getByText(
-        "A heatwave began at N01 or M01 on May 30, 2021, and none at A01 in the 90 days before this one. " +
+        "A heatwave began at N01 or M01 on May 30, 2021, and none at A01 on this one's onset day or in the 90 days before. " +
           "Onsets at B01, this heatwave's own buoy, don't count.",
       ),
     ).toBeTruthy();

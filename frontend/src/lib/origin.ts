@@ -108,19 +108,19 @@ export function reading(signal: Signal, evidence: Evidence, reasons: Reasons, ru
       // one too.
       const unseen = (buoys: string[]) => {
         const had = buoys.length === 1 ? `${buoys[0]} had` : `${buoys.join(" and ")} each had`;
-        return `${had} data on fewer than half the ${rules.lookback} days before this one, too few to vote.`;
+        return `${had} data on fewer than half the ${rules.lookback} days before this one, counting its onset day, too few to vote.`;
       };
       if (reason === "offshore_only" || reason === "western_unobserved") {
         const began = `A heatwave began at ${east} on ${formatDate(offshore!)}`;
         if (reason === "western_unobserved") return `${began}, but ${unseen(reasons.western_buoys)}${own}`;
-        return `${began}, and none at ${west} in the ${rules.lookback} days before this one.${own}`;
+        return `${began}, and none at ${west} on this one's onset day or in the ${rules.lookback} days before.${own}`;
       }
       if (reason === "western_only" || reason === "offshore_unobserved") {
         const began = `A heatwave began at ${west} on ${formatDate(western!)}`;
         if (reason === "offshore_unobserved") return `${began}, but ${unseen(reasons.offshore_buoys)}${own}`;
-        return `${began}, and none at ${east} in the ${rules.lookback} days before this one.${own}`;
+        return `${began}, and none at ${east} on this one's onset day or in the ${rules.lookback} days before.${own}`;
       }
-      return `No heatwave began at ${anyOf([...reasons.offshore_buoys, ...reasons.western_buoys])} in the ${rules.lookback} days before this one, so it doesn't vote.${own}`;
+      return `No heatwave began at ${anyOf([...reasons.offshore_buoys, ...reasons.western_buoys])} on this one's onset day or in the ${rules.lookback} days before, so it doesn't vote.${own}`;
     }
   }
 }
