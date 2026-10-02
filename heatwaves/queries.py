@@ -61,6 +61,22 @@ def daily(
     if climatology.empty:
         return None
 
+    values = daily_values(session, series_id, start, end)
+    days = pd.DatetimeIndex(values.index)
+    frame = climatology.reindex(day_of_year(days)).set_index(days)
+    frame.insert(0, "value", values)
+    frame["anomaly"] = frame["value"] - frame["climatology"]
+    return frame
+
+
+def daily_values(
+    session: Session, series_id: int, start: dt.date | None = None, end: dt.date | None = None
+) -> pd.Series:
+    """A series' daily values, as `daily` has them, whether or not the series has a climatology yet.
+
+    Every day from `start` to `end`, indexed by day, NaN where a day has no
+    value; `start` and `end` default to the first and last days with data.
+    """
     query = select(DailyMean.date, DailyMean.value).where(DailyMean.series_id == series_id)
     if start is not None:
         query = query.where(DailyMean.date >= start)
@@ -73,10 +89,7 @@ def daily(
         days = pd.DatetimeIndex([], name="date")
     else:
         days = pd.date_range(start or values.index.min(), end or values.index.max(), freq="D", name="date")
-    frame = climatology.reindex(day_of_year(days)).set_index(days)
-    frame.insert(0, "value", values.reindex(days).astype(float))
-    frame["anomaly"] = frame["value"] - frame["climatology"]
-    return frame
+    return values.reindex(days).astype(float)
 
 
 def heatwave_days(

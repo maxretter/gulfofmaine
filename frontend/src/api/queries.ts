@@ -53,7 +53,10 @@ export class HttpError extends Error {
   }
 }
 
-/** Whether a query failed with a 404. For a series' days, that means the series has no normal yet. */
+/**
+ * Whether a query failed with a 404. For a series' days, that means the series has no normal yet; for their values
+ * alone, which need none, that the API has no such series.
+ */
 export function isNotFound(error: Error | null): boolean {
   return error instanceof HttpError && error.status === 404;
 }

@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { type BrushBehavior, brushX, type D3BrushEvent, select, type Selection, utcDay } from "d3";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { type DayValuePoint, useDailyValues } from "../api/queries";
+import { type DayValuePoint, isNotFound, useDailyValues } from "../api/queries";
 import type { HeatwaveEvent } from "../api/types";
 import { chartDefaults } from "../lib/chart";
 import { categories, colors } from "../lib/colors";
@@ -41,11 +41,14 @@ export function RangeBrush({ buoy, depth, ...brush }: Props) {
   // for the fields a component reads, and that function runs only once the
   // width is known.
   const days = record.data;
+  // A 404 is no series at this depth: said in a note, as DepthCharts says a depth has no normal, not as a failure.
+  const missing = isNotFound(record.error);
   return (
     <Chart
       className="range-brush"
       loading={record.isPlaceholderData}
-      error={record.isError && "Couldn't load the full record."}
+      error={record.isError && !missing && "Couldn't load the full record."}
+      empty={missing && `No record at ${depth} m.`}
       minHeight={HEIGHT}
     >
       {(width) => days && <Brush {...brush} record={days} width={width} />}

@@ -186,6 +186,21 @@ def test_daily_series_rejects_an_unknown_depth(client, heatwave_now):
     assert client.get("/api/buoys/A01/300/daily").status_code == 404
 
 
+def test_daily_values_need_no_normal(client, session, stopped_clock):
+    # None of the record is in the baseline, so it has no normal.
+    recent = seasonal_temperatures("2025-01-01", TODAY)
+    update_heatwaves(session, add_series(session, recent))
+    session.commit()
+
+    assert client.get("/api/buoys/A01/1/daily").status_code == 404
+    values = client.get(f"/api/buoys/A01/1/daily/values?start=2024-12-31&end={TODAY}").json()
+
+    assert len(values) == (TODAY - dt.date(2024, 12, 31)).days + 1
+    assert values[0] == {"date": "2024-12-31", "value": None}
+    assert values[1]["date"] == "2025-01-01"
+    assert [day["value"] for day in values[1:]] == pytest.approx(recent.tolist(), abs=5e-4)
+
+
 def test_health_check_fails_when_sync_stops(client, session, heatwave_now):
     assert client.get("/healthz").status_code == 200
 

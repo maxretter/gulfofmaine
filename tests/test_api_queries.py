@@ -93,11 +93,11 @@ def test_daily_series_defaults_to_the_year_to_the_newest_day(client, endpoint):
 
 
 @pytest.mark.parametrize("endpoint", ["daily", "daily/values"])
-def test_daily_series_rejects_a_reversed_or_early_range_and_a_series_without_a_normal(client, endpoint):
+def test_daily_series_rejects_a_reversed_or_early_range_and_a_series_that_isnt_there(client, endpoint):
     reversed_range = f"start={TODAY}&end={TODAY - dt.timedelta(days=1)}"
     assert client.get(f"/api/buoys/A01/1/{endpoint}?{reversed_range}").status_code == 422
     assert client.get(f"/api/buoys/A01/1/{endpoint}?start=2000-12-31").status_code == 422
-    assert client.get(f"/api/buoys/B01/20/{endpoint}").status_code == 404
+    assert client.get(f"/api/buoys/B01/50/{endpoint}").status_code == 404
 
 
 def test_daily_series_goes_to_the_nearest_thousandth(client):

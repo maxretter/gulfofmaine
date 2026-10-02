@@ -430,7 +430,11 @@ def daily(
     visible. `start` and `end` must fall between 2001-01-01, before which no
     record begins, and a year from today.
     """
-    frame = _daily_frame(session, buoy_id, depth, start, end, variable)
+    series, start, end = _daily_range(session, buoy_id, depth, start, end, variable)
+    frame = queries.daily(session, series.id, start, end)
+    if frame is None:
+        raise HTTPException(404, f"No climatology yet for {series.label}")
+    frame = frame.round(DECIMALS)
     return [
         Day(
             date=date,
@@ -462,24 +466,27 @@ def daily_values(
     """The daily means of /daily alone, without the climatology, threshold and anomaly.
 
     It takes the same parameters and has the same days, in about a third of
-    the bytes, for charting a whole record at a glance.
+    the bytes, for charting a whole record at a glance. It needs no normal,
+    so a series without one yet, for which /daily answers 404, has its means
+    here too.
     """
-    frame = _daily_frame(session, buoy_id, depth, start, end, variable)
+    series, start, end = _daily_range(session, buoy_id, depth, start, end, variable)
+    values = queries.daily_values(session, series.id, start, end).round(DECIMALS)
     return [
         DayValue(date=date, value=_number(value))
-        for date, value in zip(pd.DatetimeIndex(frame.index).date, frame["value"], strict=True)
+        for date, value in zip(pd.DatetimeIndex(values.index).date, values, strict=True)
     ]
 
 
-def _daily_frame(
+def _daily_range(
     session: Session,
     buoy_id: str,
     depth: int,
     start: dt.date | None,
     end: dt.date | None,
     variable: Variable,
-) -> pd.DataFrame:
-    """The days /daily and /daily/values serve, from queries.daily, rounded to DECIMALS."""
+) -> tuple[Series, dt.date, dt.date]:
+    """The series /daily and /daily/values serve, and the first and last days asked for, or their defaults."""
     series = get_series(session, buoy_id, depth, variable)
     end = end or series.latest_date or today()
     start = start or end - dt.timedelta(days=364)
@@ -490,11 +497,7 @@ def _daily_frame(
     last = today() + dt.timedelta(days=365)
     if end > last:
         raise HTTPException(422, f"end must be on or before {last}, a year from today")
-
-    frame = queries.daily(session, series.id, start, end)
-    if frame is None:
-        raise HTTPException(404, f"No climatology yet for {series.label}")
-    return frame.round(DECIMALS)
+    return series, start, end
 
 
 @router.get("/events")
